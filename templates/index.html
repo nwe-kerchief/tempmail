@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Temp Mail Generator</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="login-screen">
+        <div class="login-container">
+            <h1>🔒 Temp Mail Login</h1>
+            <input type="password" id="password" placeholder="Enter password" />
+            <button id="login-btn">Login</button>
+            <p id="login-error" class="error" style="display:none;">❌ Wrong password</p>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="main-app" style="display:none;">
+        <div class="container">
+            <h1>📧 Temporary Email Generator</h1>
+            
+            <!-- Email Generator -->
+            <div class="card">
+                <h2>Create Temp Email</h2>
+                <input type="text" id="custom-name" placeholder="Custom name (optional)" />
+                <button id="create-btn">Generate Email</button>
+                <div id="generated-email" style="display:none;">
+                    <p>Your temporary email:</p>
+                    <div class="email-display">
+                        <span id="email-text"></span>
+                        <button id="copy-btn">Copy</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Email Inbox -->
+            <div class="card">
+                <h2>📬 Inbox</h2>
+                <button id="refresh-btn">Refresh Inbox</button>
+                <div id="email-list"></div>
+            </div>
+
+            <button id="logout-btn" class="logout-btn">Logout</button>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = window.location.origin;
+        let currentEmail = '';
+
+        // Login
+        document.getElementById('login-btn').addEventListener('click', async () => {
+            const password = document.getElementById('password').value;
+            const res = await fetch(`${API_URL}/api/login`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password})
+            });
+            const data = await res.json();
+            if (data.success) {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('main-app').style.display = 'block';
+            } else {
+                document.getElementById('login-error').style.display = 'block';
+            }
+        });
+
+        // Logout
+        document.getElementById('logout-btn').addEventListener('click', async () => {
+            await fetch(`${API_URL}/api/logout`, {method: 'POST'});
+            location.reload();
+        });
+
+        // Create Email
+        document.getElementById('create-btn').addEventListener('click', async () => {
+            const customName = document.getElementById('custom-name').value;
+            const res = await fetch(`${API_URL}/api/create`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: customName})
+            });
+            const data = await res.json();
+            currentEmail = data.email;
+            document.getElementById('email-text').textContent = data.email;
+            document.getElementById('generated-email').style.display = 'block';
+        });
+
+        // Copy Email
+        document.getElementById('copy-btn').addEventListener('click', () => {
+            navigator.clipboard.writeText(currentEmail);
+            alert('✅ Copied to clipboard!');
+        });
+
+        // Refresh Inbox
+        document.getElementById('refresh-btn').addEventListener('click', async () => {
+            if (!currentEmail) {
+                alert('Generate an email first!');
+                return;
+            }
+            const res = await fetch(`${API_URL}/api/emails/${encodeURIComponent(currentEmail)}`);
+            const data = await res.json();
+            const list = document.getElementById('email-list');
+            list.innerHTML = '';
+            
+            if (data.emails.length === 0) {
+                list.innerHTML = '<p class="no-emails">No emails yet</p>';
+                return;
+            }
+            
+            data.emails.forEach(e => {
+                const item = document.createElement('div');
+                item.className = 'email-item';
+                item.innerHTML = `
+                    <div class="email-header">
+                        <strong>From:</strong> ${e.sender}<br>
+                        <strong>Subject:</strong> ${e.subject}<br>
+                        <small>${e.timestamp}</small>
+                    </div>
+                    <div class="email-body">${e.body}</div>
+                `;
+                list.appendChild(item);
+            });
+        });
+
+        // Auto-refresh inbox every 10 seconds
+        setInterval(() => {
+            if (currentEmail && document.getElementById('main-app').style.display !== 'none') {
+                document.getElementById('refresh-btn').click();
+            }
+        }, 10000);
+    </script>
+</body>
+</html>
