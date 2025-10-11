@@ -3,10 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Secure Temp Mail Generator</title>
+<title>TempMail - AMMZ</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📧</text></svg>">
 <style>
 body {
 font-family: 'Inter', sans-serif;
@@ -21,6 +22,7 @@ border: 1px solid rgba(255, 255, 255, 0.2);
 .email-item {
 transition: all 0.2s ease;
 cursor: pointer;
+position: relative;
 }
 .email-item:hover {
 background: rgba(255, 255, 255, 0.2);
@@ -28,6 +30,9 @@ transform: translateY(-1px);
 }
 .email-item.active {
 background: rgba(168, 85, 247, 0.3);
+}
+.email-item.unread {
+border-left: 4px solid #10b981;
 }
 .email-body {
 white-space: pre-wrap;
@@ -60,8 +65,8 @@ transition: all 0.3s ease;
 .mobile-full { width: 100%; }
 .mobile-text-center { text-align: center; }
 .mobile-inbox-container { flex-direction: column; height: auto; }
-.mobile-inbox-list { height: 300px; min-height: 300px; max-height: 300px; }
-.mobile-email-content { height: 400px; min-height: 400px; max-height: 400px; }
+.mobile-inbox-list { height: 350px; min-height: 350px; max-height: 350px; }
+.mobile-email-content { height: 450px; min-height: 450px; max-height: 450px; }
 .mobile-scroll { -webkit-overflow-scrolling: touch; }
 }
 #login-screen {
@@ -108,6 +113,65 @@ cursor: pointer;
 color: #fca5a5;
 margin-top: 10px;
 font-size: 14px;
+}
+
+/* EMAIL HEIGHT FIX */
+#email-content-container {
+height: 550px;
+max-height: 550px;
+overflow: hidden;
+}
+
+#email-body {
+height: 350px;
+max-height: 350px;
+overflow-y: auto;
+overflow-x: hidden;
+}
+
+#email-body * {
+max-width: 100%;
+word-wrap: break-word;
+}
+
+#email-body table {
+max-width: 100%;
+width: 100%;
+}
+
+#email-body img {
+max-width: 100%;
+height: auto;
+}
+
+@media (min-width: 768px) {
+#email-content-container {
+height: 650px;
+max-height: 650px;
+}
+
+#email-body {
+height: 450px;
+max-height: 450px;
+}
+}
+
+.badge {
+display: inline-block;
+padding: 2px 8px;
+border-radius: 12px;
+font-size: 11px;
+font-weight: bold;
+background: #10b981;
+color: white;
+margin-left: 8px;
+}
+
+.copy-btn-float {
+position: absolute;
+right: 10px;
+top: 50%;
+transform: translateY(-50%);
 }
 </style>
 </head>
@@ -168,12 +232,15 @@ class="w-full h-10 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 </button>
 </div>
 </div>
-<div id="email-display" class="hidden text-center p-2 md:p-4 bg-gray-900 rounded-xl mb-2 md:mb-4 border border-gray-700">
+<div id="email-display" class="hidden text-center p-2 md:p-4 bg-gray-900 rounded-xl mb-2 md:mb-4 border border-gray-700 relative">
 <div class="flex flex-col md:flex-row items-center justify-between">
 <div class="flex items-center mb-2 md:mb-0">
 <i class="fas fa-envelope text-blue-400 mr-2 text-sm md:text-xl"></i>
 <span id="current-email" class="text-white font-mono text-xs md:text-lg font-semibold break-all"></span>
 </div>
+<button id="quick-copy-btn" class="text-green-400 hover:text-green-300 text-sm md:text-base copy-btn-float">
+<i class="fas fa-copy"></i> Copy
+</button>
 </div>
 </div>
 </div>
@@ -186,6 +253,7 @@ class="w-full h-10 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 <div class="flex justify-between items-center mb-2 md:mb-4">
 <h2 class="text-base md:text-xl font-semibold text-white">
 <i class="fas fa-inbox mr-1 md:mr-2"></i>Inbox
+<span id="unread-badge" class="badge hidden">0</span>
 </h2>
 <div class="flex items-center gap-2">
 <span id="email-count" class="text-xs text-gray-300 font-medium">0 emails</span>
@@ -244,6 +312,7 @@ class="w-full h-10 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 var API_URL = window.location.origin;
 var currentEmail = '';
 var autoRefreshInterval = null;
+var lastEmailCount = 0;
 
 document.getElementById('login-btn').addEventListener('click', login);
 document.getElementById('password').addEventListener('keypress', function(e) {
@@ -326,12 +395,12 @@ function createEmail(customName) {
         document.getElementById('current-email').textContent = data.email;
         document.getElementById('email-display').classList.remove('hidden');
         
-        showNotification('Email created: ' + parts[0], 'success');
+        showNotification('✅ Email created: ' + parts[0], 'success');
         loadEmails();
         startAutoRefresh();
     })
     .catch(function(error) {
-        showNotification('Error: ' + error.message, 'error');
+        showNotification('❌ Error: ' + error.message, 'error');
     })
     .finally(function() {
         btn.disabled = false;
@@ -339,19 +408,22 @@ function createEmail(customName) {
     });
 }
 
-document.getElementById('copy-btn').addEventListener('click', function() {
+document.getElementById('copy-btn').addEventListener('click', copyEmail);
+document.getElementById('quick-copy-btn').addEventListener('click', copyEmail);
+
+function copyEmail() {
     var username = document.getElementById('username-input').value.trim();
     var domain = document.getElementById('domain-select').value;
     
     if (!username || !domain) {
-        showNotification('Create an email first!', 'error');
+        showNotification('❌ Create an email first!', 'error');
         return;
     }
     
     var email = username + '@' + domain;
     navigator.clipboard.writeText(email);
-    showNotification('Copied: ' + email, 'success');
-});
+    showNotification('📋 Copied: ' + email, 'success');
+}
 
 document.getElementById('refresh-btn').addEventListener('click', loadEmails);
 
@@ -360,7 +432,7 @@ function loadEmails() {
     var domain = document.getElementById('domain-select').value;
     
     if (!username || !domain) {
-        showNotification('Enter a username first!', 'error');
+        showNotification('❌ Enter a username first!', 'error');
         return;
     }
     
@@ -376,16 +448,29 @@ function loadEmails() {
     fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail))
     .then(function(res) { return res.json(); })
     .then(function(data) {
-        document.getElementById('email-count').textContent = data.emails.length + ' email' + (data.emails.length !== 1 ? 's' : '');
+        var newCount = data.emails.length;
+        document.getElementById('email-count').textContent = newCount + ' email' + (newCount !== 1 ? 's' : '');
+        
+        // Update tab title with count
+        document.title = newCount > 0 ? '(' + newCount + ') TempMail - AMMZ' : 'TempMail - AMMZ';
+        
+        // Show notification for new emails
+        if (newCount > lastEmailCount && lastEmailCount > 0) {
+            var newEmails = newCount - lastEmailCount;
+            showNotification('🔔 ' + newEmails + ' new email' + (newEmails > 1 ? 's' : '') + ' received!', 'success');
+            playNotificationSound();
+        }
+        lastEmailCount = newCount;
         
         list.innerHTML = '';
         
-        if (data.emails.length === 0) {
+        if (newCount === 0) {
             list.innerHTML = '<div class="text-center py-6 md:py-10 text-gray-300 flex flex-col items-center justify-center"><i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i><p class="text-sm md:text-lg font-medium">No emails yet</p><p class="text-xs mt-1 font-medium">Your inbox is ready for messages</p></div>';
         } else {
             data.emails.forEach(function(email, idx) {
                 var item = document.createElement('div');
                 item.className = 'email-item bg-gray-800 p-3 rounded-lg mb-2 border border-gray-700';
+                if (idx === 0) item.classList.add('unread');
                 item.innerHTML = '<div class="flex justify-between items-start mb-1"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(email.sender) + '</span><span class="text-xs text-gray-400">' + formatTime(email.timestamp) + '</span></div><div class="text-sm font-medium text-gray-200 mb-1">' + escapeHtml(email.subject) + '</div><div class="text-xs text-gray-400 truncate">' + escapeHtml(email.body).substring(0, 60) + '...</div>';
                 item.addEventListener('click', function() { viewEmail(email, item); });
                 list.appendChild(item);
@@ -393,7 +478,7 @@ function loadEmails() {
         }
     })
     .catch(function(error) {
-        showNotification('Error loading emails', 'error');
+        showNotification('❌ Error loading emails', 'error');
     })
     .finally(function() {
         loader.style.display = 'none';
@@ -402,7 +487,10 @@ function loadEmails() {
 
 function viewEmail(email, itemEl) {
     var items = document.querySelectorAll('.email-item');
-    items.forEach(function(el) { el.classList.remove('active'); });
+    items.forEach(function(el) { 
+        el.classList.remove('active');
+        el.classList.remove('unread');
+    });
     itemEl.classList.add('active');
     
     document.getElementById('email-placeholder').style.display = 'none';
@@ -414,18 +502,15 @@ function viewEmail(email, itemEl) {
     
     var bodyEl = document.getElementById('email-body');
     
-    // Smart detection: Check if email contains HTML
-    var isHTML = email.body.includes('<div') || 
-                 email.body.includes('<p>') || 
-                 email.body.includes('<br') || 
-                 email.body.includes('<html');
+    var isHTML = email.body.includes('<html') || 
+                 email.body.includes('<div') || 
+                 email.body.includes('<table') ||
+                 email.body.includes('<p>');
     
     if (isHTML) {
-        // HTML email - render as HTML
         bodyEl.innerHTML = email.body;
         bodyEl.className = 'text-gray-800 leading-relaxed email-body bg-white p-3 md:p-6 rounded-lg font-medium text-xs md:text-base overflow-auto flex-1';
     } else {
-        // Plain text - display as text
         bodyEl.textContent = email.body;
         bodyEl.className = 'text-gray-200 leading-relaxed email-body bg-gray-900 p-3 md:p-6 rounded-lg font-medium text-xs md:text-base overflow-auto flex-1';
     }
@@ -459,14 +544,30 @@ function formatTime(timestamp) {
     var date = new Date(timestamp);
     var now = new Date();
     var diff = now - date;
-    var minutes = Math.floor(diff / 60000);
+    var seconds = Math.floor(diff / 1000);
+    var minutes = Math.floor(seconds / 60);
+    var hours = Math.floor(minutes / 60);
+    var days = Math.floor(hours / 24);
     
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return minutes + 'm ago';
-    if (minutes < 1440) return Math.floor(minutes / 60) + 'h ago';
-    return date.toLocaleString();
+    if (seconds < 10) return 'Just now';
+    if (seconds < 60) return seconds + ' sec ago';
+    if (minutes < 60) return minutes + ' min' + (minutes > 1 ? 's' : '') + ' ago';
+    if (hours < 24) return hours + ' hour' + (hours > 1 ? 's' : '') + ' ago';
+    if (days < 7) return days + ' day' + (days > 1 ? 's' : '') + ' ago';
+    if (days < 30) return Math.floor(days / 7) + ' week' + (Math.floor(days / 7) > 1 ? 's' : '') + ' ago';
+    
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+}
+
+function playNotificationSound() {
+    try {
+        var audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBCg=');
+        audio.volume = 0.3;
+        audio.play();
+    } catch(e) {
+        // Silent fail if sound doesn't work
+    }
 }
 </script>
 </body>
 </html>
-
