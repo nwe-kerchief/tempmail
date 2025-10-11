@@ -22,7 +22,6 @@ border: 1px solid rgba(255, 255, 255, 0.2);
 .email-item {
 transition: all 0.2s ease;
 cursor: pointer;
-position: relative;
 }
 .email-item:hover {
 background: rgba(255, 255, 255, 0.2);
@@ -30,13 +29,6 @@ transform: translateY(-1px);
 }
 .email-item.active {
 background: rgba(168, 85, 247, 0.3);
-}
-.email-item.unread {
-border-left: 4px solid #10b981;
-}
-.email-body {
-white-space: pre-wrap;
-word-wrap: break-word;
 }
 #loader {
 border: 3px solid rgba(255, 255, 255, 0.3);
@@ -57,149 +49,60 @@ animation: fadeIn 0.5s ease-in;
 from { opacity: 0; transform: translateY(10px); }
 to { opacity: 1; transform: translateY(0); }
 }
-.smooth-transition {
-transition: all 0.3s ease;
-}
 @media (max-width: 768px) {
 .mobile-stack { flex-direction: column; }
 .mobile-full { width: 100%; }
 .mobile-text-center { text-align: center; }
 .mobile-inbox-container { flex-direction: column; height: auto; }
-.mobile-inbox-list { height: 350px; min-height: 350px; max-height: 350px; }
-.mobile-email-content { height: 450px; min-height: 450px; max-height: 450px; }
-.mobile-scroll { -webkit-overflow-scrolling: touch; }
+.mobile-inbox-list { height: 350px; max-height: 350px; }
+.mobile-email-content { height: 450px; max-height: 450px; }
 }
-#login-screen {
-display: flex;
-justify-content: center;
-align-items: center;
-min-height: 100vh;
-}
-.login-box {
-background: rgba(255, 255, 255, 0.15);
-backdrop-filter: blur(12px);
-border: 1px solid rgba(255, 255, 255, 0.2);
-padding: 40px;
-border-radius: 20px;
-text-align: center;
-max-width: 400px;
-width: 100%;
-}
-.login-box input {
-width: 100%;
-padding: 15px;
-margin-bottom: 20px;
-background: rgba(0, 0, 0, 0.3);
-border: 2px solid rgba(255, 255, 255, 0.2);
-border-radius: 10px;
-color: white;
-font-size: 16px;
-}
-.login-box input::placeholder {
-color: rgba(255, 255, 255, 0.5);
-}
-.login-box button {
-width: 100%;
-padding: 15px;
-background: linear-gradient(135deg, #a855f7, #ec4899);
-border: none;
-border-radius: 10px;
-color: white;
-font-size: 16px;
-font-weight: bold;
-cursor: pointer;
-}
-.error {
-color: #fca5a5;
-margin-top: 10px;
-font-size: 14px;
-}
-
-/* EMAIL HEIGHT FIX */
 #email-content-container {
 height: 550px;
 max-height: 550px;
 overflow: hidden;
 }
-
 #email-body {
 height: 350px;
 max-height: 350px;
 overflow-y: auto;
 overflow-x: hidden;
 }
-
 #email-body * {
 max-width: 100%;
 word-wrap: break-word;
 }
-
-#email-body table {
-max-width: 100%;
-width: 100%;
-}
-
-#email-body img {
-max-width: 100%;
-height: auto;
-}
-
 @media (min-width: 768px) {
 #email-content-container {
 height: 650px;
 max-height: 650px;
 }
-
 #email-body {
 height: 450px;
 max-height: 450px;
 }
 }
-
-.badge {
-display: inline-block;
-padding: 2px 8px;
-border-radius: 12px;
-font-size: 11px;
-font-weight: bold;
-background: #10b981;
-color: white;
-margin-left: 8px;
-}
 </style>
 </head>
 <body class="text-gray-100 min-h-screen p-2 md:p-4">
 
-<div id="login-screen">
-<div class="login-box">
-<h1 class="text-3xl font-bold text-white mb-4">🔒 Secure Login</h1>
-<input type="password" id="password" placeholder="Enter password" />
-<button id="login-btn">Login</button>
-<p id="login-error" class="error" style="display:none;">❌ Invalid password</p>
-</div>
-</div>
-
-<div id="main-app" style="display:none;">
 <div class="h-fit mb-2">
 <div class="bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 text-white py-2 px-4 rounded-lg shadow-lg">
 <marquee class="text-sm md:text-base font-medium">
-✨ This website was created by <b class="text-yellow-300">Aung Myo Myat Zaw</b> with the help of DeepSeek AI ✨
+✨ This website was created by <b class="text-yellow-300">Aung Myo Myat Zaw </b>✨
 </marquee>
 </div>
 </div>
+
 <div class="w-full max-w-6xl mx-auto">
 <header class="text-center mb-4 md:mb-8 fade-in">
-<div class="flex items-center justify-between mb-2 md:mb-4">
-<div class="flex items-center">
+<div class="flex items-center justify-center mb-2 md:mb-4">
 <i class="fas fa-envelope text-xl md:text-3xl text-white mr-2 md:mr-3"></i>
 <h1 class="text-xl md:text-4xl lg:text-5xl font-bold text-white">Secure Temp Mail By AMMZ</h1>
 </div>
-<a href="/admin" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm md:text-base">
-<i class="fas fa-shield-alt mr-1"></i>Admin
-</a>
-</div>
-<p class="text-gray-300 text-sm md:text-lg font-medium mobile-text-center">Disposable email addresses that auto-delete in 1 hour</p>
+<p class="text-gray-300 text-sm md:text-lg font-medium">Disposable email addresses that auto-delete in 1 hour</p>
 </header>
+
 <main class="glass-effect rounded-2xl shadow-2xl p-3 md:p-6 lg:p-8 w-full fade-in">
 <div class="mb-4 md:mb-8 text-center">
 <button id="big-random-btn" class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 md:py-4 px-6 md:px-8 rounded-2xl transition-all transform hover:scale-105 shadow-lg text-base md:text-xl w-full max-w-md mx-auto flex items-center justify-center">
@@ -208,55 +111,58 @@ Generate Random Email
 </button>
 <p class="text-gray-300 text-xs md:text-sm mt-2 font-medium">One click to create a random email instantly</p>
 </div>
+
 <div class="mb-4 md:mb-8">
-<div class="flex flex-col md:flex-row items-center gap-2 md:gap-4 mb-3 md:mb-6 mobile-stack">
-<div class="flex-1 flex gap-2 md:gap-3 mobile-stack mobile-full">
-<div class="flex-1 relative mobile-full">
+<div class="flex flex-col md:flex-row items-center gap-2 md:gap-4 mb-3 md:mb-6">
+<div class="flex-1 flex gap-2 md:gap-3 w-full">
+<div class="flex-1">
 <input type="text" id="username-input" placeholder="Enter username"
 class="w-full h-10 md:h-14 bg-gray-900 border-2 border-gray-700 text-white rounded-xl px-3 md:px-4 py-2 md:py-3 text-sm md:text-lg focus:outline-none focus:border-blue-500 transition-colors">
 </div>
-<div class="w-full md:w-48 mobile-full">
+<div class="w-full md:w-48">
 <select id="domain-select" class="w-full h-10 md:h-14 bg-gray-900 border-2 border-gray-700 text-white rounded-xl px-3 md:px-6 py-2 md:py-3 text-sm md:text-lg focus:outline-none focus:border-blue-500 transition-colors">
 <option value="">Select domain</option>
 </select>
 </div>
 </div>
-<div class="flex gap-2 md:gap-3 w-full md:w-auto justify-center mobile-stack mobile-full">
-<button id="create-btn" class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-2 md:py-3 px-3 md:px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 md:flex-none mobile-full text-sm md:text-base">
+<div class="flex gap-2 md:gap-3 w-full md:w-auto">
+<button id="create-btn" class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-2 md:py-3 px-3 md:px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 md:flex-none text-sm md:text-base">
 <i class="fas fa-plus mr-1 md:mr-2"></i>Create
 </button>
-<button id="copy-btn" class="bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-semibold py-2 md:py-3 px-3 md:px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 md:flex-none mobile-full text-sm md:text-base">
+<button id="copy-btn" class="bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-semibold py-2 md:py-3 px-3 md:px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 md:flex-none text-sm md:text-base">
 <i class="fas fa-copy mr-1 md:mr-2"></i>Copy
 </button>
 </div>
 </div>
+
 <div id="email-display" class="hidden text-center p-2 md:p-4 bg-gray-900 rounded-xl mb-2 md:mb-4 border border-gray-700">
-<div class="flex flex-col md:flex-row items-center justify-center">
+<div class="flex items-center justify-center">
 <i class="fas fa-envelope text-blue-400 mr-2 text-sm md:text-xl"></i>
 <span id="current-email" class="text-white font-mono text-xs md:text-lg font-semibold break-all"></span>
 </div>
 </div>
 </div>
+
 <div id="notification" class="hidden text-center mb-2 md:mb-4 p-2 md:p-4 rounded-xl text-white font-medium text-sm md:text-base">
 <i class="fas fa-check-circle mr-2"></i>
 <span id="notification-text"></span>
 </div>
+
 <div class="flex flex-col md:flex-row gap-3 md:gap-6 mobile-inbox-container">
-<div class="w-full md:w-2/5 glass-effect rounded-xl p-2 md:p-4 overflow-y-auto mobile-full mobile-inbox-list mobile-scroll">
+<div class="w-full md:w-2/5 glass-effect rounded-xl p-2 md:p-4 overflow-y-auto mobile-inbox-list">
 <div class="flex justify-between items-center mb-2 md:mb-4">
 <h2 class="text-base md:text-xl font-semibold text-white">
 <i class="fas fa-inbox mr-1 md:mr-2"></i>Inbox
-<span id="unread-badge" class="badge hidden">0</span>
 </h2>
 <div class="flex items-center gap-2">
 <span id="email-count" class="text-xs text-gray-300 font-medium">0 emails</span>
-<button id="refresh-btn" class="p-1 md:p-2 rounded-full hover:bg-gray-700 transition-colors text-white smooth-transition">
+<button id="refresh-btn" class="p-1 md:p-2 rounded-full hover:bg-gray-700 transition-colors text-white">
 <i class="fas fa-sync-alt text-xs md:text-base"></i>
 </button>
 </div>
 </div>
-<div id="email-list-container" class="h-full overflow-y-auto smooth-transition">
-<div id="no-emails-default" class="text-center py-6 md:py-10 text-gray-300 flex flex-col items-center justify-center">
+<div id="email-list-container" class="h-full overflow-y-auto">
+<div id="no-emails-default" class="text-center py-6 md:py-10 text-gray-300">
 <i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i>
 <p class="text-sm md:text-lg font-medium">No emails yet</p>
 <p class="text-xs mt-1 font-medium">Your inbox is ready for messages</p>
@@ -267,37 +173,39 @@ class="w-full h-10 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 <div id="email-list"></div>
 </div>
 </div>
-<div id="email-content-container" class="w-full md:w-3/5 glass-effect rounded-xl p-3 md:p-6 overflow-y-auto mobile-full mobile-email-content mobile-scroll">
-<div id="email-placeholder" class="flex flex-col items-center justify-center h-full text-gray-300 py-6 md:py-0">
+
+<div id="email-content-container" class="w-full md:w-3/5 glass-effect rounded-xl p-3 md:p-6 overflow-y-auto mobile-email-content">
+<div id="email-placeholder" class="flex flex-col items-center justify-center h-full text-gray-300 py-6">
 <i class="fas fa-envelope-open text-3xl md:text-6xl mb-2 md:mb-4 opacity-60"></i>
-<p class="text-base md:text-xl font-medium mobile-text-center">Select an email to read</p>
+<p class="text-base md:text-xl font-medium">Select an email to read</p>
 <p class="text-xs md:text-sm mt-1 text-center font-medium">Choose a message from your inbox</p>
 </div>
-<div id="email-content" class="hidden h-full flex flex-col email-content-wrapper">
+<div id="email-content" class="hidden h-full flex flex-col">
 <div class="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-6">
 <h2 id="email-subject" class="text-lg md:text-2xl font-bold text-white mb-1 md:mb-0 break-words"></h2>
-<span id="email-date" class="text-xs text-gray-300 bg-gray-800 px-2 py-1 rounded-lg font-medium self-start md:self-auto mt-1 md:mt-0"></span>
+<span id="email-date" class="text-xs text-gray-300 bg-gray-800 px-2 py-1 rounded-lg font-medium"></span>
 </div>
 <div class="flex items-center text-xs md:text-sm text-gray-300 mb-3 md:mb-6 border-b border-gray-700 pb-2 md:pb-4">
 <strong class="mr-2 text-white font-semibold"><i class="fas fa-user mr-1"></i>From:</strong>
 <span id="email-from" class="font-mono font-medium break-all"></span>
 </div>
-<div id="email-body" class="text-gray-200 leading-relaxed email-body bg-gray-900 p-3 md:p-6 rounded-lg font-medium text-xs md:text-base overflow-auto flex-1"></div>
+<div id="email-body" class="text-gray-200 leading-relaxed bg-gray-900 p-3 md:p-6 rounded-lg font-medium text-xs md:text-base overflow-auto flex-1"></div>
 </div>
 </div>
 </div>
 </main>
-<footer class="text-center mt-4 md:mt-8 text-gray-300 text-xs md:text-sm font-medium mobile-text-center">
+
+<footer class="text-center mt-4 md:mt-8 text-gray-300 text-xs md:text-sm font-medium">
 <p>Emails automatically delete after 1 hour or when you end the session</p>
 <p class="mt-1">Your privacy is our priority - all data is deleted when session ends</p>
 </footer>
 </div>
+
 <div class="h-fit mt-2 md:mt-4">
 <div class="bg-gradient-to-r from-green-600 via-teal-600 to-blue-600 text-white py-2 px-4 rounded-lg shadow-lg border border-green-400">
 <marquee class="text-xs md:text-base font-medium">
 🔒 Secure & Private • All Rights Reserved by <b class="text-yellow-300">AMMZ</b> • Built with Advanced AI Technology 🚀
 </marquee>
-</div>
 </div>
 </div>
 
@@ -307,48 +215,15 @@ var currentEmail = '';
 var autoRefreshInterval = null;
 var lastEmailCount = 0;
 
-document.getElementById('login-btn').addEventListener('click', login);
-document.getElementById('password').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') login();
-});
-
-function login() {
-    var password = document.getElementById('password').value;
-    var errorEl = document.getElementById('login-error');
-    
-    fetch(API_URL + '/api/login', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({password: password})
-    })
-    .then(function(res) { return res.json(); })
-    .then(function(data) {
-        if (data.success) {
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('main-app').style.display = 'block';
-            loadDomains();
-        } else {
-            errorEl.style.display = 'block';
-            setTimeout(function() { errorEl.style.display = 'none'; }, 3000);
-        }
-    })
-    .catch(function(error) {
-        alert('Connection error. Please try again.');
-    });
-}
-
 function loadDomains() {
     fetch(API_URL + '/api/domains')
-    .then(function(res) { return res.json(); })
-    .then(function(data) {
+    .then(res => res.json())
+    .then(data => {
         var select = document.getElementById('domain-select');
         select.innerHTML = '<option value="">Select domain</option>';
         data.domains.forEach(function(d) {
             select.innerHTML += '<option value="' + d + '">' + d + '</option>';
         });
-    })
-    .catch(function(error) {
-        console.error('Error loading domains');
     });
 }
 
@@ -373,13 +248,8 @@ function createEmail(customName) {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({name: customName})
     })
-    .then(function(res) {
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return res.json();
-    })
-    .then(function(data) {
-        if (!data.email) throw new Error('No email in response');
-        
+    .then(res => res.json())
+    .then(data => {
         currentEmail = data.email;
         var parts = data.email.split('@');
         
@@ -392,18 +262,14 @@ function createEmail(customName) {
         loadEmails();
         startAutoRefresh();
     })
-    .catch(function(error) {
-        showNotification('❌ Error: ' + error.message, 'error');
-    })
+    .catch(err => showNotification('❌ Error: ' + err.message, 'error'))
     .finally(function() {
         btn.disabled = false;
         btn.innerHTML = originalText;
     });
 }
 
-document.getElementById('copy-btn').addEventListener('click', copyEmail);
-
-function copyEmail() {
+document.getElementById('copy-btn').addEventListener('click', function() {
     var username = document.getElementById('username-input').value.trim();
     var domain = document.getElementById('domain-select').value;
     
@@ -415,7 +281,7 @@ function copyEmail() {
     var email = username + '@' + domain;
     navigator.clipboard.writeText(email);
     showNotification('📋 Copied: ' + email, 'success');
-}
+});
 
 document.getElementById('refresh-btn').addEventListener('click', loadEmails);
 
@@ -423,10 +289,7 @@ function loadEmails() {
     var username = document.getElementById('username-input').value.trim();
     var domain = document.getElementById('domain-select').value;
     
-    if (!username || !domain) {
-        showNotification('❌ Enter a username first!', 'error');
-        return;
-    }
+    if (!username || !domain) return;
     
     currentEmail = username + '@' + domain;
     
@@ -438,51 +301,37 @@ function loadEmails() {
     defaultMsg.style.display = 'none';
     
     fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail))
-    .then(function(res) { return res.json(); })
-    .then(function(data) {
+    .then(res => res.json())
+    .then(data => {
         var newCount = data.emails.length;
         document.getElementById('email-count').textContent = newCount + ' email' + (newCount !== 1 ? 's' : '');
-        
         document.title = newCount > 0 ? '(' + newCount + ') TempMail - AMMZ' : 'TempMail - AMMZ';
         
         if (newCount > lastEmailCount && lastEmailCount > 0) {
-            var newEmails = newCount - lastEmailCount;
-            showNotification('🔔 ' + newEmails + ' new email' + (newEmails > 1 ? 's' : '') + ' received!', 'success');
-            playNotificationSound();
+            showNotification('🔔 ' + (newCount - lastEmailCount) + ' new email(s) received!', 'success');
         }
         lastEmailCount = newCount;
         
         list.innerHTML = '';
         
         if (newCount === 0) {
-            list.innerHTML = '<div class="text-center py-6 md:py-10 text-gray-300 flex flex-col items-center justify-center"><i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i><p class="text-sm md:text-lg font-medium">No emails yet</p><p class="text-xs mt-1 font-medium">Your inbox is ready for messages</p></div>';
+            list.innerHTML = '<div class="text-center py-6 md:py-10 text-gray-300"><i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i><p class="text-sm md:text-lg font-medium">No emails yet</p></div>';
         } else {
             data.emails.forEach(function(email, idx) {
                 var displaySender = email.sender;
-                
-                // Clean sender display
                 if (displaySender.includes('bounces+') || displaySender.includes('bounce-md')) {
                     displaySender = 'ChatGPT';
-                } else if (displaySender.includes('<') && displaySender.includes('>')) {
-                    var extracted = displaySender.substring(displaySender.indexOf('<')+1, displaySender.indexOf('>'));
-                    if (displaySender.indexOf('<') > 0) {
-                        displaySender = displaySender.substring(0, displaySender.indexOf('<')).trim();
-                    } else {
-                        displaySender = extracted;
-                    }
+                } else if (displaySender.includes('<')) {
+                    displaySender = displaySender.substring(0, displaySender.indexOf('<')).trim() || displaySender.substring(displaySender.indexOf('<')+1, displaySender.indexOf('>')).trim();
                 }
                 
                 var item = document.createElement('div');
-                item.className = 'email-item bg-gray-800 p-3 rounded-lg mb-2 border border-gray-700';
-                if (idx === 0) item.classList.add('unread');
-                item.innerHTML = '<div class="flex justify-between items-start mb-1"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(displaySender) + '</span><span class="text-xs text-gray-400">' + formatTime(email.timestamp) + '</span></div><div class="text-sm font-medium text-gray-200 mb-1">' + escapeHtml(email.subject) + '</div><div class="text-xs text-gray-400 truncate">' + escapeHtml(email.body).substring(0, 60) + '...</div>';
+                item.className = 'cursor-pointer p-2 md:p-4 rounded-xl mb-1 md:mb-3 border border-gray-700 hover:bg-gray-800 transition-all';
+                item.innerHTML = '<div class="flex justify-between items-start mb-1"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(displaySender) + '</span><span class="text-xs text-gray-400">' + formatTime(email.timestamp) + '</span></div><div class="text-sm font-medium text-gray-200 mb-1">' + escapeHtml(email.subject) + '</div><div class="text-xs text-gray-400 truncate">' + extractTextFromHTML(email.body).substring(0, 60) + '...</div>';
                 item.addEventListener('click', function() { viewEmail(email, item); });
                 list.appendChild(item);
             });
         }
-    })
-    .catch(function(error) {
-        showNotification('❌ Error loading emails', 'error');
     })
     .finally(function() {
         loader.style.display = 'none';
@@ -490,12 +339,8 @@ function loadEmails() {
 }
 
 function viewEmail(email, itemEl) {
-    var items = document.querySelectorAll('.email-item');
-    items.forEach(function(el) { 
-        el.classList.remove('active');
-        el.classList.remove('unread');
-    });
-    itemEl.classList.add('active');
+    document.querySelectorAll('#email-list > div').forEach(el => el.classList.remove('bg-blue-600', 'border-blue-500'));
+    itemEl.classList.add('bg-blue-600', 'border-blue-500');
     
     document.getElementById('email-placeholder').style.display = 'none';
     document.getElementById('email-content').classList.remove('hidden');
@@ -505,19 +350,34 @@ function viewEmail(email, itemEl) {
     document.getElementById('email-date').textContent = formatTime(email.timestamp);
     
     var bodyEl = document.getElementById('email-body');
-    
-    var isHTML = email.body.includes('<html') || 
-                 email.body.includes('<div') || 
-                 email.body.includes('<table') ||
-                 email.body.includes('<p>');
+    var isHTML = email.body.includes('<html') || email.body.includes('<div') || email.body.includes('<table');
     
     if (isHTML) {
         bodyEl.innerHTML = email.body;
-        bodyEl.className = 'text-gray-800 leading-relaxed email-body bg-white p-3 md:p-6 rounded-lg font-medium text-xs md:text-base overflow-auto flex-1';
+        bodyEl.className = 'text-gray-800 leading-relaxed bg-white p-3 md:p-6 rounded-lg font-medium text-xs md:text-base overflow-auto flex-1';
     } else {
-        bodyEl.textContent = email.body;
-        bodyEl.className = 'text-gray-200 leading-relaxed email-body bg-gray-900 p-3 md:p-6 rounded-lg font-medium text-xs md:text-base overflow-auto flex-1';
+        bodyEl.textContent = extractTextFromHTML(email.body);
+        bodyEl.className = 'text-gray-200 leading-relaxed bg-gray-900 p-3 md:p-6 rounded-lg font-medium text-xs md:text-base overflow-auto flex-1';
     }
+}
+
+function extractTextFromHTML(html) {
+    var temp = document.createElement('div');
+    temp.innerHTML = html;
+    var scripts = temp.querySelectorAll('script, style, link, meta');
+    scripts.forEach(el => el.remove());
+    var text = temp.textContent || temp.innerText || '';
+    text = text.replace(/\s+/g, ' ').replace(/\n+/g, '\n').trim();
+    if (text.length < 50) {
+        var paragraphs = temp.querySelectorAll('p, div, td');
+        text = Array.from(paragraphs).map(el => el.textContent).join('\n').replace(/\s+/g, ' ').trim();
+    }
+    var codeMatch = text.match(/\d{4,8}/);
+    if (codeMatch) {
+        var code = codeMatch[0];
+        text = text.replace(code, '\n\n' + code + '\n\n');
+    }
+    return text || 'No readable content found';
 }
 
 function startAutoRefresh() {
@@ -528,14 +388,12 @@ function startAutoRefresh() {
 function showNotification(message, type) {
     var notif = document.getElementById('notification');
     var text = document.getElementById('notification-text');
-    
     text.textContent = message;
     notif.className = type === 'success' ? 
         'text-center mb-2 md:mb-4 p-2 md:p-4 rounded-xl text-white font-medium text-sm md:text-base bg-green-600' :
         'text-center mb-2 md:mb-4 p-2 md:p-4 rounded-xl text-white font-medium text-sm md:text-base bg-red-600';
     notif.classList.remove('hidden');
-    
-    setTimeout(function() { notif.classList.add('hidden'); }, 3000);
+    setTimeout(() => notif.classList.add('hidden'), 3000);
 }
 
 function escapeHtml(text) {
@@ -553,23 +411,15 @@ function formatTime(timestamp) {
     var hours = Math.floor(minutes / 60);
     var days = Math.floor(hours / 24);
     
-    if (seconds < 10) return 'Just now';
+    if (seconds < 10) return 'just now';
     if (seconds < 60) return seconds + ' sec ago';
     if (minutes < 60) return minutes + ' min' + (minutes > 1 ? 's' : '') + ' ago';
     if (hours < 24) return hours + ' hour' + (hours > 1 ? 's' : '') + ' ago';
     if (days < 7) return days + ' day' + (days > 1 ? 's' : '') + ' ago';
-    if (days < 30) return Math.floor(days / 7) + ' week' + (Math.floor(days / 7) > 1 ? 's' : '') + ' ago';
-    
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
 }
 
-function playNotificationSound() {
-    try {
-        var audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBCg=');
-        audio.volume = 0.3;
-        audio.play();
-    } catch(e) {}
-}
+loadDomains();
 </script>
 </body>
 </html>
