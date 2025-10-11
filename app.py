@@ -1,294 +1,259 @@
-import os
-import sqlite3
-import random
-import string
-import smtplib
-from datetime import datetime
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from flask import Flask, request, jsonify, render_template, session
 from flask_cors import CORS
+import sqlite3
+import os
+import random
+import string
+from datetime import datetime
+import email
+from email import policy
+from email.parser import Parser
+import quopri
+import re
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'change-this-in-production')
 CORS(app)
 
 # Configuration
-DOMAIN = os.getenv('DOMAIN', 'yourdomain.com')
-DB_PATH = os.getenv('DB_PATH', 'tempmail.db')
 APP_PASSWORD = os.getenv('APP_PASSWORD', 'admin123')
+DOMAIN = os.getenv('DOMAIN', 'aungmyomyatzaw.online')
 
-# Brevo SMTP Configuration
-BREVO_SMTP_HOST = 'smtp-relay.brevo.com'
-BREVO_SMTP_PORT = 587
-BREVO_USERNAME = os.getenv('BREVO_USERNAME', '')
-BREVO_PASSWORD = os.getenv('BREVO_PASSWORD', '')
-
-# Initialize Database
+# Initialize database
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    
-    # Emails table
-    cur.execute('''
+    conn = sqlite3.connect('emails.db')
+    c = conn.cursor()
+    c.execute('''
         CREATE TABLE IF NOT EXISTS emails (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sender TEXT NOT NULL,
             recipient TEXT NOT NULL,
+            sender TEXT NOT NULL,
             subject TEXT,
             body TEXT,
-            html_body TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            timestamp TEXT
         )
     ''')
-    
-    # Temporary addresses table
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS temp_addresses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
     conn.commit()
     conn.close()
 
 init_db()
 
-# Database Helper Functions
-def insert_email(sender, recipient, subject, body, html_body=''):
-    """Insert received email into database"""
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute('''
-        INSERT INTO emails (sender, recipient, subject, body, html_body)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (sender, recipient, subject, body, html_body))
-    conn.commit()
-    conn.close()
-
-def get_emails_for_address(email):
-    """Get all emails for a specific temporary email address"""
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute('''
-        SELECT sender, subject, body, html_body, timestamp
-        FROM emails
-        WHERE recipient = ?
-        ORDER BY timestamp DESC
-        LIMIT 50
-    ''', (email,))
-    rows = cur.fetchall()
-    conn.close()
-    
-    return [
-        {
-            'sender': r[0],
-            'subject': r[1],
-            'body': r[2],
-            'html_body': r[3],
-            'timestamp': r[4]
-        }
-        for r in rows
-    ]
-
-def save_temp_address(email):
-    """Save generated temporary email address"""
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
+# Helper function to parse email body
+def parse_email_body(raw_body):
+    """
+    Parse multipart MIME email and extract HTML or plain text body
+    """
     try:
-        cur.execute('INSERT INTO temp_addresses (email) VALUES (?)', (email,))
-        conn.commit()
-    except sqlite3.IntegrityError:
-        pass  # Email already exists
-    conn.close()
-
-def generate_random_username(length=10):
-    """Generate random username for temp email"""
-    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
+        # Try to parse as email message
+        if 'Content-Type:' in raw_body:
+            msg = email.message_from_string(raw_body, policy=policy.default)
+            
+            html_body = None
+            text_body = None
+            
+            # Walk through email parts
+            if msg.is_multipart():
+                for part in msg.walk():
+                    content_type = part.get_content_type()
+                    content_disposition = str(part.get("Content-Disposition", ""))
+                    
+                    # Skip attachments
+                    if "attachment" in content_disposition:
+                        continue
+                    
+                    try:
+                        # Get the email body
+                        body_content = part.get_payload(decode=True)
+                        if body_content:
+                            body_content = body_content.decode('utf-8', errors='ignore')
+                            
+                            if content_type == 'text/html':
+                                html_body = body_content
+                            elif content_type == 'text/plain':
+                                text_body = body_content
+                    except Exception as e:
+                        print(f"Error decoding part: {e}")
+                        continue
+            else:
+                # Single part email
+                body_content = msg.get_payload(decode=True)
+                if body_content:
+                    body_content = body_content.decode('utf-8', errors='ignore')
+                    if msg.get_content_type() == 'text/html':
+                        html_body = body_content
+                    else:
+                        text_body = body_content
+            
+            # Return HTML if available, otherwise plain text
+            return html_body if html_body else text_body
+        
+        # If not a MIME message, return as-is
+        return raw_body
+        
+    except Exception as e:
+        print(f"Email parsing error: {e}")
+        return raw_body
 
 # Routes
 @app.route('/')
 def index():
-    """Serve main page"""
     return render_template('index.html')
 
 @app.route('/api/login', methods=['POST'])
 def login():
-    """Handle login authentication"""
-    data = request.get_json()
+    data = request.get_json() or {}
     password = data.get('password', '')
     
     if password == APP_PASSWORD:
         session['authenticated'] = True
         return jsonify({'success': True})
-    
-    return jsonify({'success': False, 'error': 'Invalid password'}), 401
+    return jsonify({'success': False}), 401
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
-    """Handle logout"""
-    session.pop('authenticated', None)
+    session.clear()
     return jsonify({'success': True})
 
-@app.route('/api/check-auth', methods=['GET'])
-def check_auth():
-    """Check if user is authenticated"""
-    return jsonify({'authenticated': session.get('authenticated', False)})
-
 @app.route('/api/domains', methods=['GET'])
-def domains():
-    """Get available email domains"""
+def get_domains():
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
     return jsonify({'domains': [DOMAIN]})
 
 @app.route('/api/create', methods=['POST'])
 def create_email():
-    """Create new temporary email address"""
     if not session.get('authenticated'):
         return jsonify({'error': 'Unauthorized'}), 401
     
-    data = request.get_json()
+    data = request.get_json() or {}
     custom_name = data.get('name', '').strip()
     
-    # Use custom name or generate random
     if custom_name:
-        username = custom_name.lower().replace(' ', '').replace('@', '')
-        # Remove special characters
-        username = ''.join(c for c in username if c.isalnum() or c in '-_.')
+        username = custom_name.lower()
+        username = ''.join(c for c in username if c.isalnum() or c in '-_')
     else:
-        username = generate_random_username()
+        username = ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
     
-    email_address = f"{username}@{DOMAIN}"
-    save_temp_address(email_address)
-    
-    return jsonify({'email': email_address})
+    email = f"{username}@{DOMAIN}"
+    return jsonify({'email': email})
 
-@app.route('/api/emails/<path:email>', methods=['GET'])
-def fetch_emails(email):
-    """Fetch emails for a specific temporary address"""
+@app.route('/api/emails/<email_address>', methods=['GET'])
+def get_emails(email_address):
     if not session.get('authenticated'):
         return jsonify({'error': 'Unauthorized'}), 401
     
-    emails = get_emails_for_address(email)
+    conn = sqlite3.connect('emails.db')
+    c = conn.cursor()
+    c.execute('''
+        SELECT sender, subject, body, timestamp 
+        FROM emails 
+        WHERE recipient = ? 
+        ORDER BY timestamp DESC
+    ''', (email_address,))
+    
+    emails = []
+    for row in c.fetchall():
+        emails.append({
+            'sender': row[0],
+            'subject': row[1],
+            'body': row[2],
+            'timestamp': row[3]
+        })
+    
+    conn.close()
     return jsonify({'emails': emails})
 
 @app.route('/api/webhook/inbound', methods=['POST'])
-def inbound_email_webhook():
+def webhook_inbound():
     """
     Cloudflare Email Routing webhook endpoint
-    Receives incoming emails and stores them in database
-    
-    Expected payload from Cloudflare:
-    {
-        "from": "sender@example.com",
-        "to": "recipient@yourdomain.com",
-        "subject": "Email subject",
-        "plain_body": "Plain text body",
-        "html_body": "HTML body"
-    }
+    Properly parses MIME multipart emails
     """
     try:
-        data = request.get_json()
+        # Get raw body from Cloudflare
+        raw_body = request.get_data(as_text=True)
         
-        sender = data.get('from', '')
-        recipient = data.get('to', '')
-        subject = data.get('subject', '(no subject)')
-        body = data.get('plain_body', '')
-        html_body = data.get('html_body', '')
+        # Also try JSON format
+        json_data = request.get_json() or {}
         
-        # Store email in database
-        insert_email(sender, recipient, subject, body, html_body)
+        # Initialize variables
+        recipient = None
+        sender = None
+        subject = None
+        body = None
         
-        return ('', 204)  # Success, no content
+        # Method 1: Parse from JSON if available
+        if json_data:
+            recipient = json_data.get('envelope', {}).get('to', [''])[0]
+            sender = json_data.get('envelope', {}).get('from', 'unknown')
+            subject = json_data.get('headers', {}).get('Subject', 'No subject')
+            
+            # Try to get HTML first, then text
+            body = json_data.get('html', None)
+            if not body:
+                body = json_data.get('text', None)
+            if not body:
+                body = json_data.get('raw', None)
+        
+        # Method 2: Parse from raw body if JSON didn't work
+        if not body and raw_body:
+            body = parse_email_body(raw_body)
+            
+            # Try to extract headers if not from JSON
+            if not recipient or not sender:
+                try:
+                    msg = email.message_from_string(raw_body, policy=policy.default)
+                    if not recipient:
+                        recipient = msg.get('To', 'unknown@unknown.com')
+                    if not sender:
+                        sender = msg.get('From', 'unknown')
+                    if not subject:
+                        subject = msg.get('Subject', 'No subject')
+                except:
+                    pass
+        
+        # Fallback defaults
+        if not recipient:
+            recipient = 'unknown@unknown.com'
+        if not sender:
+            sender = 'unknown'
+        if not subject:
+            subject = 'No subject'
+        if not body:
+            body = 'No content'
+        
+        # Clean up body
+        body = body.strip()
+        
+        # Get timestamp
+        timestamp = datetime.utcnow().isoformat()
+        
+        # Store in database
+        conn = sqlite3.connect('emails.db')
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO emails (recipient, sender, subject, body, timestamp)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (recipient, sender, subject, body, timestamp))
+        conn.commit()
+        conn.close()
+        
+        print(f"✅ Email stored: {sender} → {recipient}")
+        return '', 204
+        
     except Exception as e:
-        print(f"Error processing webhook: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/send', methods=['POST'])
-def send_email():
-    """
-    Send email via Brevo SMTP
-    Optional feature - requires Brevo credentials
-    """
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-    
-    if not BREVO_USERNAME or not BREVO_PASSWORD:
-        return jsonify({'error': 'Email sending not configured'}), 500
-    
-    data = request.get_json()
-    to_email = data.get('to')
-    subject = data.get('subject')
-    body = data.get('body')
-    from_email = data.get('from', f'noreply@{DOMAIN}')
-    
-    if not to_email or not subject or not body:
-        return jsonify({'error': 'Missing required fields'}), 400
-    
-    try:
-        # Create email message
-        msg = MIMEMultipart()
-        msg['From'] = from_email
-        msg['To'] = to_email
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'plain'))
-        
-        # Connect to Brevo SMTP server
-        server = smtplib.SMTP(BREVO_SMTP_HOST, BREVO_SMTP_PORT)
-        server.starttls()
-        server.login(BREVO_USERNAME, BREVO_PASSWORD)
-        server.send_message(msg)
-        server.quit()
-        
-        return jsonify({'success': True, 'message': 'Email sent successfully'})
-    except Exception as e:
-        print(f"Error sending email: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f"❌ Webhook error: {e}")
+        print(f"Raw body: {request.get_data(as_text=True)[:500]}")
+        return jsonify({'error': str(e)}), 400
 
 @app.route('/health')
 def health():
-    """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
         'domain': DOMAIN,
-        'timestamp': datetime.now().isoformat()
+        'timestamp': datetime.utcnow().isoformat()
     })
-
-@app.route('/api/stats', methods=['GET'])
-def stats():
-    """Get statistics (optional)"""
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-    
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    
-    # Count total emails
-    cur.execute('SELECT COUNT(*) FROM emails')
-    total_emails = cur.fetchone()[0]
-    
-    # Count total temp addresses
-    cur.execute('SELECT COUNT(*) FROM temp_addresses')
-    total_addresses = cur.fetchone()[0]
-    
-    conn.close()
-    
-    return jsonify({
-        'total_emails': total_emails,
-        'total_addresses': total_addresses
-    })
-
-# Error Handlers
-@app.errorhandler(404)
-def not_found(e):
-    return jsonify({'error': 'Not found'}), 404
-
-@app.errorhandler(500)
-def server_error(e):
-    return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
-    debug = os.getenv('DEBUG', 'False').lower() == 'true'
-    app.run(host='0.0.0.0', port=port, debug=debug)
+    app.run(host='0.0.0.0', port=port, debug=False)
