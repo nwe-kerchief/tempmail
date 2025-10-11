@@ -176,39 +176,56 @@ def webhook_inbound():
         if 'Content-Type:' in body and 'multipart' in body:
             body = parse_email_body(body)
         
-        # AGGRESSIVE header removal
-        if body.startswith('Received:') or 'ARC-Seal:' in body[:500] or 'DKIM-Signature:' in body[:500]:
-            # Split into lines
+        # AGGRESSIVE HEADER REMOVAL
+        header_patterns = [
+            'Received:', 'Received-SPF:', 'ARC-Seal:', 'ARC-Message-Signature:', 
+            'ARC-Authentication-Results:', 'DKIM-Signature:', 'Authentication-Results:',
+            'Return-Path:', 'Delivered-To:', 'X-', 'Message-ID:', 'Date:', 
+            'MIME-Version:', 'Content-Type:', 'Content-Transfer-Encoding:',
+            'Content-ID:', 'Reply-To:', 'List-', 'Precedence:'
+        ]
+        
+        if any(body.startswith(pattern) or ('\n' + pattern in body[:1000]) for pattern in header_patterns):
             lines = body.split('\n')
             clean_lines = []
-            skip_headers = True
+            skip_mode = True
+            empty_line_count = 0
             
             for line in lines:
-                # Check if still in header section
-                if skip_headers:
-                    # Headers end at first empty line or content start
-                    if line.strip() == '':
-                        skip_headers = False
-                        continue
-                    # Skip all header lines
-                    if line.startswith(('Received:', 'ARC-', 'DKIM-', 'Authentication-Results:', 
-                                       'Return-Path:', 'Delivered-To:', 'X-', 'Message-ID:', 
-                                       'Date:', 'MIME-Version:', 'Content-Type:', 'Content-Transfer-Encoding:')):
-                        continue
-                    # If line doesn't start with header pattern and isn't indented (continuation), start content
-                    if not line.startswith(' ') and not line.startswith('\t'):
-                        skip_headers = False
+                stripped = line.strip()
                 
-                if not skip_headers:
+                # Count empty lines
+                if stripped == '':
+                    empty_line_count += 1
+                    if empty_line_count >= 2:  # After 2 empty lines, assume body starts
+                        skip_mode = False
+                    continue
+                else:
+                    empty_line_count = 0
+                
+                # Check if it's a header line
+                is_header = False
+                for pattern in header_patterns:
+                    if stripped.startswith(pattern) or (skip_mode and ':' in stripped[:50]):
+                        is_header = True
+                        break
+                
+                # Check for continuation lines (indented)
+                if skip_mode and (line.startswith(' ') or line.startswith('\t')):
+                    is_header = True
+                
+                if not is_header:
+                    skip_mode = False
+                
+                if not skip_mode and not is_header:
                     clean_lines.append(line)
             
             body = '\n'.join(clean_lines).strip()
         
-        # If body is still mostly base64 or encoded junk, try to extract from JSON fields
-        if len(body) > 1000 and body.count('=') > 50:
-            # Might be badly encoded, try plain_body
+        # If body is still base64 encoded junk, try plain_body
+        if len(body) > 1000 and (body.count('=') > 50 or body.count('+') > 50):
             plain = json_data.get('plain_body', '')
-            if plain and len(plain) < len(body):
+            if plain and len(plain) < len(body) * 0.8:
                 body = plain
         
         print(f"  ✉️  From: {sender}")
@@ -386,4 +403,3 @@ def health():
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
