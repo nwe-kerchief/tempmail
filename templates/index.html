@@ -330,9 +330,15 @@ function loadEmails() {
                     displaySender = displaySender.substring(0, displaySender.indexOf('<')).trim() || displaySender.substring(displaySender.indexOf('<')+1, displaySender.indexOf('>')).trim();
                 }
                 
+                // Extract clean preview text
+                var previewText = extractTextFromHTML(email.body);
+                if (previewText.length > 60) {
+                    previewText = previewText.substring(0, 60);
+                }
+                
                 var item = document.createElement('div');
                 item.className = 'cursor-pointer p-2 md:p-4 rounded-xl mb-1 md:mb-3 border border-gray-700 hover:bg-gray-800 transition-all';
-                item.innerHTML = '<div class="flex justify-between items-start mb-1"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(displaySender) + '</span><span class="text-xs text-gray-400">' + formatTime(email.timestamp) + '</span></div><div class="text-sm font-medium text-gray-200 mb-1">' + escapeHtml(email.subject) + '</div><div class="text-xs text-gray-400 truncate">' + extractTextFromHTML(email.body).substring(0, 60) + '...</div>';
+                item.innerHTML = '<div class="flex justify-between items-start mb-1"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(displaySender) + '</span><span class="text-xs text-gray-400">' + formatTime(email.timestamp) + '</span></div><div class="text-sm font-medium text-gray-200 mb-1">' + escapeHtml(email.subject) + '</div><div class="text-xs text-gray-400 truncate">' + escapeHtml(previewText) + '...</div>';
                 item.addEventListener('click', function() { viewEmail(email, item); });
                 list.appendChild(item);
             });
@@ -342,6 +348,7 @@ function loadEmails() {
         loader.style.display = 'none';
     });
 }
+
 
 function viewEmail(email, itemEl) {
     document.querySelectorAll('#email-list > div').forEach(el => el.classList.remove('bg-blue-600', 'border-blue-500'));
@@ -428,4 +435,5 @@ loadDomains();
 </script>
 </body>
 </html>
+
 
