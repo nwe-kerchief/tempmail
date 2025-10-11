@@ -82,7 +82,7 @@ height: 450px;
 max-height: 450px;
 }
 }
-/* Custom styles for email content */
+/* Improved email content styling */
 .email-content-container {
 background: rgba(255, 255, 255, 0.05);
 border-radius: 12px;
@@ -140,6 +140,24 @@ border-left: 4px solid rgba(255, 255, 255, 0.3);
 padding-left: 1rem;
 margin: 1rem 0;
 font-style: italic;
+}
+.verification-code {
+background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+color: white;
+font-size: 1.5rem;
+font-weight: bold;
+padding: 15px;
+border-radius: 8px;
+text-align: center;
+margin: 20px 0;
+letter-spacing: 5px;
+box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+.email-header {
+background: rgba(0, 0, 0, 0.2);
+padding: 12px;
+border-radius: 8px;
+margin-bottom: 15px;
 }
 </style>
 </head>
@@ -462,17 +480,149 @@ function viewEmail(email, itemEl) {
     document.getElementById('email-date').textContent = formatTime(email.timestamp);
     
     var bodyEl = document.getElementById('email-body');
-    var isHTML = email.body.includes('<html') || email.body.includes('<div') || email.body.includes('<table');
     
-    if (isHTML) {
-        // Sanitize HTML before displaying
-        var sanitizedHTML = sanitizeHTML(email.body);
-        bodyEl.innerHTML = sanitizedHTML;
-    } else {
-        // Format plain text for better readability
-        var formattedText = formatPlainText(email.body);
-        bodyEl.innerHTML = '<div class="whitespace-pre-wrap">' + escapeHtml(formattedText) + '</div>';
+    // Process the email body to extract clean content
+    var cleanBody = extractCleanEmailBody(email.body);
+    bodyEl.innerHTML = cleanBody;
+}
+
+// Extract clean email body from raw email content
+function extractCleanEmailBody(rawBody) {
+    // If it's already HTML, sanitize and return
+    if (rawBody.includes('<html') || rawBody.includes('<div') || rawBody.includes('<p>')) {
+        return sanitizeHTML(rawBody);
     }
+    
+    // For plain text emails with headers, extract the actual message
+    var lines = rawBody.split('\n');
+    var inBody = false;
+    var bodyLines = [];
+    
+    for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim();
+        
+        // Skip empty lines at the beginning
+        if (!inBody && line === '') continue;
+        
+        // Look for the start of the message body
+        if (!inBody && (
+            line.toLowerCase().includes('enter this temporary verification code') ||
+            line.toLowerCase().includes('verification code') ||
+            line.toLowerCase().includes('your chatgpt code is') ||
+            line.toLowerCase().includes('please ignore this email') ||
+            line.toLowerCase().includes('best,') ||
+            line.toLowerCase().includes('regards,') ||
+            (line.length > 0 && !line.includes(':') && !line.includes('='))
+        )) {
+            inBody = true;
+        }
+        
+        // Once we're in the body, collect lines
+        if (inBody) {
+            // Skip technical headers and encoded parts
+            if (line.includes('Content-') || 
+                line.includes('MIME-') || 
+                line.includes('boundary=') ||
+                line.includes('DKIM-') ||
+                line.includes('ARC-') ||
+                line.includes('Received:') ||
+                line.includes('Message-ID:') ||
+                line.includes('X-') ||
+                line.startsWith('--') ||
+                line.includes('quoted-printable') ||
+                line.includes('base64') ||
+                line.includes('charset=') ||
+                line.includes('multipart/') ||
+                line.includes('text/') ||
+                line.includes('=3D"') ||
+                line.includes('=20') ||
+                line.includes('=E2=80=99')) {
+                continue;
+            }
+            
+            // Decode quoted-printable encoded text
+            line = line.replace(/=([0-9A-F]{2})/g, function(match, p1) {
+                return String.fromCharCode(parseInt(p1, 16));
+            });
+            
+            // Remove =3D (equals sign in quoted-printable)
+            line = line.replace(/=3D/g, '=');
+            
+            // Remove =20 (space in quoted-printable)
+            line = line.replace(/=20/g, ' ');
+            
+            // Remove =2E (period in quoted-printable)
+            line = line.replace(/=2E/g, '.');
+            
+            // Remove =E2=80=99 (right single quote in quoted-printable)
+            line = line.replace(/=E2=80=99/g, "'");
+            
+            bodyLines.push(line);
+        }
+    }
+    
+    var cleanText = bodyLines.join('\n').trim();
+    
+    // If we didn't find much content, try a different approach
+    if (cleanText.length < 50) {
+        // Look for verification codes
+        var codeMatch = rawBody.match(/\b\d{4,8}\b/);
+        if (codeMatch) {
+            cleanText = "Your verification code is: \n\n" + 
+                       '<div class="verification-code">' + codeMatch[0] + '</div>' +
+                       "\n\nEnter this code to verify your account.";
+        } else {
+            // Fallback: extract text between known markers
+            var startMarker = rawBody.indexOf('Enter this temporary verification code');
+            if (startMarker === -1) startMarker = rawBody.indexOf('verification code');
+            
+            if (startMarker !== -1) {
+                var endMarker = rawBody.indexOf('Please ignore this email');
+                if (endMarker === -1) endMarker = rawBody.indexOf('Best,');
+                
+                if (endMarker !== -1 && endMarker > startMarker) {
+                    cleanText = rawBody.substring(startMarker, endMarker).trim();
+                } else {
+                    cleanText = rawBody.substring(startMarker).trim();
+                }
+            }
+        }
+    }
+    
+    // Format the clean text as HTML
+    return formatEmailContent(cleanText);
+}
+
+// Format email content with proper HTML structure
+function formatEmailContent(text) {
+    // Split into paragraphs
+    var paragraphs = text.split(/\n\s*\n/);
+    var html = '';
+    
+    for (var i = 0; i < paragraphs.length; i++) {
+        var paragraph = paragraphs[i].trim();
+        if (paragraph.length === 0) continue;
+        
+        // Check if this paragraph contains a verification code
+        var codeMatch = paragraph.match(/\b\d{4,8}\b/);
+        if (codeMatch && paragraph.length < 100) {
+            html += '<div class="verification-code">' + codeMatch[0] + '</div>';
+            continue;
+        }
+        
+        // Check if this is a greeting or signature
+        if (paragraph.toLowerCase().includes('best,') || 
+            paragraph.toLowerCase().includes('regards,') ||
+            paragraph.toLowerCase().includes('sincerely,')) {
+            html += '<div class="email-header">' + escapeHtml(paragraph) + '</div>';
+            continue;
+        }
+        
+        // Regular paragraph
+        html += '<p>' + escapeHtml(paragraph) + '</p>';
+    }
+    
+    return html;
 }
 
 // Sanitize HTML to prevent XSS attacks
@@ -502,24 +652,6 @@ function sanitizeHTML(html) {
     });
     
     return temp.innerHTML;
-}
-
-// Format plain text for better readability
-function formatPlainText(text) {
-    // Extract verification codes
-    var codeMatch = text.match(/\b\d{4,8}\b/);
-    if (codeMatch) {
-        var code = codeMatch[0];
-        text = text.replace(code, '\n\n🔐 Verification Code: ' + code + '\n\n');
-    }
-    
-    // Remove excessive whitespace
-    text = text.replace(/\s+/g, ' ').trim();
-    
-    // Add paragraph breaks
-    text = text.replace(/([.!?])\s+/g, '$1\n\n');
-    
-    return text;
 }
 
 function extractTextFromHTML(html) {
