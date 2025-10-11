@@ -10,6 +10,14 @@ from email import policy
 from functools import wraps
 import re
 
+MALE_NAMES = ['james', 'john', 'robert', 'michael', 'william', 'david', 'richard', 'joseph', 'thomas', 'charles', 
+              'daniel', 'matthew', 'anthony', 'mark', 'paul', 'steven', 'andrew', 'joshua', 'kevin', 'brian',
+              'george', 'kenneth', 'edward', 'ryan', 'jacob', 'nicholas', 'tyler', 'samuel', 'benjamin', 'alexander']
+
+FEMALE_NAMES = ['mary', 'patricia', 'jennifer', 'linda', 'elizabeth', 'barbara', 'susan', 'jessica', 'sarah', 'karen',
+                'nancy', 'lisa', 'betty', 'margaret', 'sandra', 'ashley', 'kimberly', 'emily', 'donna', 'michelle',
+                'dorothy', 'carol', 'amanda', 'melissa', 'deborah', 'stephanie', 'rebecca', 'sharon', 'laura', 'grace']
+
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'change-this-in-production')
 CORS(app)
@@ -106,10 +114,15 @@ def create_email():
         username = custom_name.lower()
         username = ''.join(c for c in username if c.isalnum() or c in '-_')
     else:
-        username = ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
+        # Generate random name: malename + femalename + 3 digits
+        male_name = random.choice(MALE_NAMES)
+        female_name = random.choice(FEMALE_NAMES)
+        three_digits = ''.join(random.choices(string.digits, k=3))
+        username = f"{male_name}{female_name}{three_digits}"
     
     email_address = f"{username}@{DOMAIN}"
     return jsonify({'email': email_address})
+
 
 @app.route('/api/emails/<email_address>', methods=['GET'])
 def get_emails(email_address):
@@ -413,3 +426,4 @@ def health():
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
