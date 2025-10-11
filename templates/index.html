@@ -298,9 +298,11 @@ class="w-full h-10 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 var API_URL = window.location.origin;
 var currentEmail = '';
 var autoRefreshInterval = null;
+var timeUpdateInterval = null;
 var lastEmailCount = 0;
 var sessionId = generateSessionId();
 var emailSecurityKey = generateSecurityKey();
+var sessionStartTime = null;
 
 // Generate a unique session ID for security
 function generateSessionId() {
@@ -310,6 +312,64 @@ function generateSessionId() {
 // Generate a security key for email requests
 function generateSecurityKey() {
     return 'key_' + Math.random().toString(36).substr(2, 16);
+}
+
+// Load session from localStorage
+function loadSession() {
+    const savedSession = localStorage.getItem('tempMailSession');
+    if (savedSession) {
+        const session = JSON.parse(savedSession);
+        const now = Date.now();
+        const sessionAge = now - session.createdAt;
+        
+        // Session expires after 1 hour OR if no emails received for 1 hour
+        const hasRecentEmail = session.lastEmailTime && (now - session.lastEmailTime < 60 * 60 * 1000);
+        const sessionValid = sessionAge < 60 * 60 * 1000 && hasRecentEmail;
+        
+        if (sessionValid && session.email) {
+            currentEmail = session.email;
+            sessionStartTime = session.createdAt;
+            
+            // Restore UI state
+            var parts = currentEmail.split('@');
+            document.getElementById('username-input').value = parts[0];
+            document.getElementById('domain-select').value = parts[1];
+            document.getElementById('current-email').textContent = currentEmail;
+            document.getElementById('email-display').classList.remove('hidden');
+            
+            showNotification('✅ Session restored', 'success');
+            loadEmails();
+            startAutoRefresh();
+            startTimeUpdate();
+            setupSessionExpiration();
+            return true;
+        } else {
+            // Session expired
+            localStorage.removeItem('tempMailSession');
+            showNotification('🕒 Session expired', 'error');
+        }
+    }
+    return false;
+}
+
+// Save session to localStorage
+function saveSession() {
+    const session = {
+        email: currentEmail,
+        createdAt: sessionStartTime || Date.now(),
+        lastEmailTime: Date.now()
+    };
+    localStorage.setItem('tempMailSession', JSON.stringify(session));
+}
+
+// Update last email time in session
+function updateLastEmailTime() {
+    const savedSession = localStorage.getItem('tempMailSession');
+    if (savedSession) {
+        const session = JSON.parse(savedSession);
+        session.lastEmailTime = Date.now();
+        localStorage.setItem('tempMailSession', JSON.stringify(session));
+    }
 }
 
 function loadDomains() {
@@ -361,7 +421,9 @@ function createEmail(customName) {
     })
     .then(data => {
         currentEmail = data.email;
-        var parts = data.email.split('@');
+        sessionStartTime = Date.now();
+        
+        var parts = currentEmail.split('@');
         
         document.getElementById('username-input').value = parts[0];
         document.getElementById('domain-select').value = parts[1];
@@ -373,8 +435,13 @@ function createEmail(customName) {
         document.getElementById('email-content').classList.add('hidden');
         
         showNotification('✅ Email created: ' + parts[0], 'success');
+        
+        // Save session and start timers
+        saveSession();
         loadEmails();
         startAutoRefresh();
+        startTimeUpdate();
+        setupSessionExpiration();
     })
     .catch(err => {
         console.error('Error creating email:', err);
@@ -437,6 +504,8 @@ function loadEmails() {
         
         if (newCount > lastEmailCount && lastEmailCount > 0) {
             showNotification('🔔 ' + (newCount - lastEmailCount) + ' new email(s) received!', 'success');
+            // Update last email time when new emails arrive
+            updateLastEmailTime();
         }
         lastEmailCount = newCount;
         
@@ -460,8 +529,9 @@ function loadEmails() {
                 }
                 
                 var item = document.createElement('div');
-                item.className = 'cursor-pointer p-2 md:p-4 rounded-xl mb-1 md:mb-3 border border-gray-700 hover:bg-gray-800 transition-all';
-                item.innerHTML = '<div class="flex justify-between items-start mb-1"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(displaySender) + '</span><span class="text-xs text-gray-400">' + formatTime(email.timestamp) + '</span></div><div class="text-sm font-medium text-gray-200 mb-1">' + escapeHtml(email.subject) + '</div><div class="text-xs text-gray-400 truncate">' + escapeHtml(previewText) + '...</div>';
+                item.className = 'cursor-pointer p-2 md:p-4 rounded-xl mb-1 md:mb-3 border border-gray-700 hover:bg-gray-800 transition-all email-item';
+                item.setAttribute('data-timestamp', email.timestamp);
+                item.innerHTML = '<div class="flex justify-between items-start mb-1"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(displaySender) + '</span><span class="text-xs text-gray-400 email-time">' + formatTime(email.timestamp) + '</span></div><div class="text-sm font-medium text-gray-200 mb-1">' + escapeHtml(email.subject) + '</div><div class="text-xs text-gray-400 truncate">' + escapeHtml(previewText) + '...</div>';
                 item.addEventListener('click', function() { viewEmail(email, item); });
                 list.appendChild(item);
             });
@@ -476,9 +546,27 @@ function loadEmails() {
     });
 }
 
+// Update email times automatically
+function updateEmailTimes() {
+    const emailItems = document.querySelectorAll('.email-item');
+    emailItems.forEach(item => {
+        const timestamp = item.getAttribute('data-timestamp');
+        const timeElement = item.querySelector('.email-time');
+        if (timeElement && timestamp) {
+            timeElement.textContent = formatTime(timestamp);
+        }
+    });
+    
+    // Also update the time in email content if an email is open
+    const emailDateElement = document.getElementById('email-date');
+    if (emailDateElement && emailDateElement.getAttribute('data-timestamp')) {
+        emailDateElement.textContent = formatTime(emailDateElement.getAttribute('data-timestamp'));
+    }
+}
+
 function viewEmail(email, itemEl) {
-    document.querySelectorAll('#email-list > div').forEach(el => el.classList.remove('bg-blue-600', 'border-blue-500'));
-    itemEl.classList.add('bg-blue-600', 'border-blue-500');
+    document.querySelectorAll('#email-list > div').forEach(el => el.classList.remove('active'));
+    itemEl.classList.add('active');
     
     document.getElementById('email-placeholder').style.display = 'none';
     document.getElementById('email-content').classList.remove('hidden');
@@ -486,6 +574,7 @@ function viewEmail(email, itemEl) {
     document.getElementById('email-subject').textContent = email.subject;
     document.getElementById('email-from').textContent = email.sender;
     document.getElementById('email-date').textContent = formatTime(email.timestamp);
+    document.getElementById('email-date').setAttribute('data-timestamp', email.timestamp);
     
     var bodyEl = document.getElementById('email-body');
     
@@ -740,6 +829,11 @@ function startAutoRefresh() {
     autoRefreshInterval = setInterval(loadEmails, 5000); // Refresh every 5 seconds
 }
 
+function startTimeUpdate() {
+    if (timeUpdateInterval) clearInterval(timeUpdateInterval);
+    timeUpdateInterval = setInterval(updateEmailTimes, 1000); // Update times every second
+}
+
 function showNotification(message, type) {
     var notif = document.getElementById('notification');
     var text = document.getElementById('notification-text');
@@ -791,15 +885,33 @@ function setupSessionExpiration() {
         document.getElementById('email-count').textContent = '0 emails';
         document.title = 'TempMail - AMMZ';
         
+        // Clear localStorage
+        localStorage.removeItem('tempMailSession');
+        
         if (autoRefreshInterval) {
             clearInterval(autoRefreshInterval);
             autoRefreshInterval = null;
         }
+        if (timeUpdateInterval) {
+            clearInterval(timeUpdateInterval);
+            timeUpdateInterval = null;
+        }
     }, sessionTimeout);
 }
 
-loadDomains();
-setupSessionExpiration();
+// Initialize the app
+function initApp() {
+    loadDomains();
+    
+    // Try to load existing session
+    if (!loadSession()) {
+        // No valid session found, show fresh state
+        console.log('No valid session found, starting fresh');
+    }
+}
+
+// Start the app
+initApp();
 </script>
 </body>
 </html>
