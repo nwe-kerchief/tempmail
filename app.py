@@ -166,15 +166,29 @@ def get_emails(email_address):
 @app.route('/api/webhook/inbound', methods=['POST'])
 def webhook_inbound():
     """
-    Cloudflare Email Routing webhook endpoint
-    Properly parses MIME multipart emails
+    Cloudflare Email Routing webhook endpoint with detailed logging
     """
     try:
-        # Get raw body from Cloudflare
+        # Get raw body
         raw_body = request.get_data(as_text=True)
         
-        # Also try JSON format
-        json_data = request.get_json() or {}
+        # Log what we received
+        print("=" * 50)
+        print("📧 INCOMING EMAIL")
+        print("=" * 50)
+        print(f"Content-Type: {request.content_type}")
+        print(f"Headers: {dict(request.headers)}")
+        print(f"Raw body (first 500 chars):\n{raw_body[:500]}")
+        print("=" * 50)
+        
+        # Try to get JSON data
+        json_data = None
+        try:
+            json_data = request.get_json(force=True, silent=True)
+            if json_data:
+                print(f"✅ JSON Data received: {list(json_data.keys())}")
+        except Exception as e:
+            print(f"⚠️ No JSON data: {e}")
         
         # Initialize variables
         recipient = None
@@ -182,48 +196,94 @@ def webhook_inbound():
         subject = None
         body = None
         
-        # Method 1: Parse from JSON if available
+        # Method 1: Try JSON first
         if json_data:
-            recipient = json_data.get('envelope', {}).get('to', [''])[0]
-            sender = json_data.get('envelope', {}).get('from', 'unknown')
-            subject = json_data.get('headers', {}).get('Subject', 'No subject')
+            print("📦 Parsing from JSON...")
+            envelope = json_data.get('envelope', {})
+            headers = json_data.get('headers', {})
             
-            # Try to get HTML first, then text
+            # Get recipient
+            to_list = envelope.get('to', [])
+            recipient = to_list[0] if to_list else None
+            
+            # Get sender
+            sender = envelope.get('from', None)
+            
+            # Get subject
+            subject = headers.get('Subject', None)
+            
+            # Get body - try HTML first, then text
             body = json_data.get('html', None)
             if not body:
                 body = json_data.get('text', None)
-            if not body:
-                body = json_data.get('raw', None)
-        
-        # Method 2: Parse from raw body if JSON didn't work
-        if not body and raw_body:
-            body = parse_email_body(raw_body)
             
-            # Try to extract headers if not from JSON
-            if not recipient or not sender:
-                try:
-                    msg = email.message_from_string(raw_body, policy=policy.default)
-                    if not recipient:
-                        recipient = msg.get('To', 'unknown@unknown.com')
-                    if not sender:
-                        sender = msg.get('From', 'unknown')
-                    if not subject:
-                        subject = msg.get('Subject', 'No subject')
-                except:
-                    pass
+            print(f"  Recipient: {recipient}")
+            print(f"  Sender: {sender}")
+            print(f"  Subject: {subject}")
+            print(f"  Body length: {len(body) if body else 0}")
+        
+        # Method 2: Parse raw email if JSON failed
+        if not body or not recipient:
+            print("📨 Parsing from raw email...")
+            try:
+                msg = email.message_from_string(raw_body, policy=policy.default)
+                
+                if not recipient:
+                    recipient = msg.get('To', None)
+                    # Clean recipient (remove name part if exists)
+                    if recipient and '<' in recipient:
+                        recipient = recipient[recipient.find('<')+1:recipient.find('>')]
+                
+                if not sender:
+                    sender = msg.get('From', None)
+                    # Clean sender
+                    if sender and '<' in sender:
+                        sender = sender[sender.find('<')+1:sender.find('>')]
+                
+                if not subject:
+                    subject = msg.get('Subject', None)
+                
+                if not body:
+                    body = parse_email_body(raw_body)
+                
+                print(f"  Parsed recipient: {recipient}")
+                print(f"  Parsed sender: {sender}")
+                print(f"  Parsed subject: {subject}")
+                
+            except Exception as e:
+                print(f"❌ Error parsing raw email: {e}")
         
         # Fallback defaults
         if not recipient:
-            recipient = 'unknown@unknown.com'
+            # Try to extract from raw body using regex
+            import re
+            to_match = re.search(r'To: ([^\r\n]+)', raw_body)
+            if to_match:
+                recipient = to_match.group(1).strip()
+                if '<' in recipient:
+                    recipient = recipient[recipient.find('<')+1:recipient.find('>')]
+            else:
+                recipient = 'unknown@unknown.com'
+        
         if not sender:
-            sender = 'unknown'
+            from_match = re.search(r'From: ([^\r\n]+)', raw_body)
+            if from_match:
+                sender = from_match.group(1).strip()
+                if '<' in sender:
+                    sender = sender[sender.find('<')+1:sender.find('>')]
+            else:
+                sender = 'unknown'
+        
         if not subject:
             subject = 'No subject'
+        
         if not body:
             body = 'No content'
         
-        # Clean up body
+        # Clean up
         body = body.strip()
+        recipient = recipient.strip()
+        sender = sender.strip()
         
         # Get timestamp
         timestamp = datetime.utcnow().isoformat()
@@ -239,11 +299,13 @@ def webhook_inbound():
         conn.close()
         
         print(f"✅ Email stored: {sender} → {recipient}")
+        print("=" * 50)
         return '', 204
         
     except Exception as e:
         print(f"❌ Webhook error: {e}")
-        print(f"Raw body: {request.get_data(as_text=True)[:500]}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 400
 
 @app.route('/health')
@@ -257,3 +319,4 @@ def health():
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
