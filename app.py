@@ -4,7 +4,7 @@ import sqlite3
 import os
 import random
 import string
-from datetime import datetime
+from datetime import datetime, timezone
 import email
 from email import policy
 from functools import wraps
@@ -27,7 +27,8 @@ def init_db():
             sender TEXT NOT NULL,
             subject TEXT,
             body TEXT,
-            timestamp TEXT
+            timestamp TEXT,
+            received_at TEXT
         )
     ''')
     conn.commit()
@@ -115,19 +116,24 @@ def get_emails(email_address):
     conn = sqlite3.connect('emails.db')
     c = conn.cursor()
     c.execute('''
-        SELECT sender, subject, body, timestamp 
+        SELECT sender, subject, body, received_at, timestamp 
         FROM emails 
         WHERE recipient = ? 
-        ORDER BY timestamp DESC
+        ORDER BY received_at DESC
     ''', (email_address,))
     
     emails = []
     for row in c.fetchall():
+        # Use received_at timestamp for display (when email arrived at our server)
+        # Fallback to original timestamp if received_at is not available
+        display_timestamp = row[3] if row[3] else row[4]
+        
         emails.append({
+            'id': len(emails) + 1,  # Simple ID for frontend tracking
             'sender': row[0],
             'subject': row[1],
             'body': row[2],
-            'timestamp': row[3]
+            'timestamp': display_timestamp  # Use the correct timestamp for display
         })
     
     conn.close()
@@ -234,19 +240,20 @@ def webhook_inbound():
         print(f"  📄 Body: {len(body)} chars")
         print("=" * 50)
         
-        # Store ARRIVAL time, not email send time
-        timestamp = datetime.now().isoformat()
-
+        # Store BOTH timestamps
+        received_at = datetime.now(timezone.utc).isoformat()  # When email arrived at our server
+        original_timestamp = json_data.get('timestamp', received_at)  # Email's original timestamp
+        
         conn = sqlite3.connect('emails.db')
         c = conn.cursor()
         c.execute('''
-            INSERT INTO emails (recipient, sender, subject, body, timestamp)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (recipient, sender, subject, body, timestamp))
+            INSERT INTO emails (recipient, sender, subject, body, timestamp, received_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (recipient, sender, subject, body, original_timestamp, received_at))
         conn.commit()
         conn.close()
         
-        print(f"✅ Email stored: {sender} → {recipient}")
+        print(f"✅ Email stored: {sender} → {recipient} at {received_at}")
         return '', 204
         
     except Exception as e:
@@ -291,7 +298,7 @@ def admin_stats():
         
         c.execute('''
             SELECT COUNT(*) FROM emails 
-            WHERE datetime(timestamp) > datetime('now', '-1 day')
+            WHERE datetime(received_at) > datetime('now', '-1 day')
         ''')
         recent_emails = c.fetchone()[0]
         
@@ -314,7 +321,7 @@ def admin_addresses():
         c = conn.cursor()
         
         c.execute('''
-            SELECT recipient, COUNT(*) as count, MAX(timestamp) as last_email
+            SELECT recipient, COUNT(*) as count, MAX(received_at) as last_email
             FROM emails
             GROUP BY recipient
             ORDER BY last_email DESC
@@ -342,10 +349,10 @@ def admin_get_emails(email_address):
         c = conn.cursor()
         
         c.execute('''
-            SELECT id, sender, subject, body, timestamp 
+            SELECT id, sender, subject, body, received_at, timestamp 
             FROM emails 
             WHERE recipient = ? 
-            ORDER BY timestamp DESC
+            ORDER BY received_at DESC
         ''', (email_address,))
         
         emails = []
@@ -355,7 +362,8 @@ def admin_get_emails(email_address):
                 'sender': row[1],
                 'subject': row[2],
                 'body': row[3],
-                'timestamp': row[4]
+                'received_at': row[4],
+                'timestamp': row[5]
             })
         
         conn.close()
@@ -405,4 +413,3 @@ def health():
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
