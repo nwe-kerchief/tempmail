@@ -7,8 +7,6 @@ import string
 from datetime import datetime
 import email
 from email import policy
-from email.parser import Parser
-import quopri
 import re
 
 app = Flask(__name__)
@@ -40,29 +38,23 @@ init_db()
 
 # Helper function to parse email body
 def parse_email_body(raw_body):
-    """
-    Parse multipart MIME email and extract HTML or plain text body
-    """
+    """Parse multipart MIME email and extract HTML or plain text body"""
     try:
-        # Try to parse as email message
         if 'Content-Type:' in raw_body:
             msg = email.message_from_string(raw_body, policy=policy.default)
             
             html_body = None
             text_body = None
             
-            # Walk through email parts
             if msg.is_multipart():
                 for part in msg.walk():
                     content_type = part.get_content_type()
                     content_disposition = str(part.get("Content-Disposition", ""))
                     
-                    # Skip attachments
                     if "attachment" in content_disposition:
                         continue
                     
                     try:
-                        # Get the email body
                         body_content = part.get_payload(decode=True)
                         if body_content:
                             body_content = body_content.decode('utf-8', errors='ignore')
@@ -71,11 +63,9 @@ def parse_email_body(raw_body):
                                 html_body = body_content
                             elif content_type == 'text/plain':
                                 text_body = body_content
-                    except Exception as e:
-                        print(f"Error decoding part: {e}")
+                    except:
                         continue
             else:
-                # Single part email
                 body_content = msg.get_payload(decode=True)
                 if body_content:
                     body_content = body_content.decode('utf-8', errors='ignore')
@@ -84,10 +74,8 @@ def parse_email_body(raw_body):
                     else:
                         text_body = body_content
             
-            # Return HTML if available, otherwise plain text
             return html_body if html_body else text_body
         
-        # If not a MIME message, return as-is
         return raw_body
         
     except Exception as e:
@@ -134,8 +122,8 @@ def create_email():
     else:
         username = ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
     
-    email = f"{username}@{DOMAIN}"
-    return jsonify({'email': email})
+    email_address = f"{username}@{DOMAIN}"
+    return jsonify({'email': email_address})
 
 @app.route('/api/emails/<email_address>', methods=['GET'])
 def get_emails(email_address):
@@ -165,130 +153,45 @@ def get_emails(email_address):
 
 @app.route('/api/webhook/inbound', methods=['POST'])
 def webhook_inbound():
-    """
-    Cloudflare Email Routing webhook endpoint with detailed logging
-    """
+    """Cloudflare Email Routing webhook - Fixed for actual Cloudflare format"""
     try:
-        # Get raw body
-        raw_body = request.get_data(as_text=True)
+        json_data = request.get_json(force=True, silent=True)
         
-        # Log what we received
+        if not json_data:
+            return jsonify({'error': 'No JSON data'}), 400
+        
         print("=" * 50)
         print("📧 INCOMING EMAIL")
         print("=" * 50)
-        print(f"Content-Type: {request.content_type}")
-        print(f"Headers: {dict(request.headers)}")
-        print(f"Raw body (first 500 chars):\n{raw_body[:500]}")
-        print("=" * 50)
         
-        # Try to get JSON data
-        json_data = None
-        try:
-            json_data = request.get_json(force=True, silent=True)
-            if json_data:
-                print(f"✅ JSON Data received: {list(json_data.keys())}")
-        except Exception as e:
-            print(f"⚠️ No JSON data: {e}")
+        # Cloudflare format: from, to, subject, plain_body, html_body
+        recipient = json_data.get('to', 'unknown@unknown.com')
+        sender = json_data.get('from', 'unknown')
+        subject = json_data.get('subject', 'No subject')
         
-        # Initialize variables
-        recipient = None
-        sender = None
-        subject = None
-        body = None
-        
-        # Method 1: Try JSON first
-        if json_data:
-            print("📦 Parsing from JSON...")
-            envelope = json_data.get('envelope', {})
-            headers = json_data.get('headers', {})
-            
-            # Get recipient
-            to_list = envelope.get('to', [])
-            recipient = to_list[0] if to_list else None
-            
-            # Get sender
-            sender = envelope.get('from', None)
-            
-            # Get subject
-            subject = headers.get('Subject', None)
-            
-            # Get body - try HTML first, then text
-            body = json_data.get('html', None)
-            if not body:
-                body = json_data.get('text', None)
-            
-            print(f"  Recipient: {recipient}")
-            print(f"  Sender: {sender}")
-            print(f"  Subject: {subject}")
-            print(f"  Body length: {len(body) if body else 0}")
-        
-        # Method 2: Parse raw email if JSON failed
-        if not body or not recipient:
-            print("📨 Parsing from raw email...")
-            try:
-                msg = email.message_from_string(raw_body, policy=policy.default)
-                
-                if not recipient:
-                    recipient = msg.get('To', None)
-                    # Clean recipient (remove name part if exists)
-                    if recipient and '<' in recipient:
-                        recipient = recipient[recipient.find('<')+1:recipient.find('>')]
-                
-                if not sender:
-                    sender = msg.get('From', None)
-                    # Clean sender
-                    if sender and '<' in sender:
-                        sender = sender[sender.find('<')+1:sender.find('>')]
-                
-                if not subject:
-                    subject = msg.get('Subject', None)
-                
-                if not body:
-                    body = parse_email_body(raw_body)
-                
-                print(f"  Parsed recipient: {recipient}")
-                print(f"  Parsed sender: {sender}")
-                print(f"  Parsed subject: {subject}")
-                
-            except Exception as e:
-                print(f"❌ Error parsing raw email: {e}")
-        
-        # Fallback defaults
-        if not recipient:
-            # Try to extract from raw body using regex
-            import re
-            to_match = re.search(r'To: ([^\r\n]+)', raw_body)
-            if to_match:
-                recipient = to_match.group(1).strip()
-                if '<' in recipient:
-                    recipient = recipient[recipient.find('<')+1:recipient.find('>')]
-            else:
-                recipient = 'unknown@unknown.com'
-        
-        if not sender:
-            from_match = re.search(r'From: ([^\r\n]+)', raw_body)
-            if from_match:
-                sender = from_match.group(1).strip()
-                if '<' in sender:
-                    sender = sender[sender.find('<')+1:sender.find('>')]
-            else:
-                sender = 'unknown'
-        
-        if not subject:
-            subject = 'No subject'
-        
-        if not body:
-            body = 'No content'
+        # Get HTML body first, fallback to plain text
+        body = json_data.get('html_body', None)
+        if not body or body.strip() == '':
+            body = json_data.get('plain_body', 'No content')
         
         # Clean up
-        body = body.strip()
         recipient = recipient.strip()
         sender = sender.strip()
+        subject = subject.strip()
+        body = body.strip()
         
-        # Get timestamp
-        timestamp = datetime.utcnow().isoformat()
+        # Parse if still raw MIME
+        if 'Content-Type:' in body and 'multipart' in body:
+            body = parse_email_body(body)
+        
+        print(f"  ✉️  From: {sender}")
+        print(f"  📬 To: {recipient}")
+        print(f"  📝 Subject: {subject}")
+        print(f"  📄 Body: {len(body)} chars")
+        print("=" * 50)
         
         # Store in database
+        timestamp = datetime.utcnow().isoformat()
         conn = sqlite3.connect('emails.db')
         c = conn.cursor()
         c.execute('''
@@ -299,7 +202,6 @@ def webhook_inbound():
         conn.close()
         
         print(f"✅ Email stored: {sender} → {recipient}")
-        print("=" * 50)
         return '', 204
         
     except Exception as e:
@@ -319,4 +221,3 @@ def health():
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
