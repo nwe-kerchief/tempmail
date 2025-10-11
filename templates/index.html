@@ -250,10 +250,10 @@ class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 </div>
 </div>
 <div id="email-list-container" class="h-full overflow-y-auto">
-<div id="no-emails-default" class="text-center py-6 md:py-10 text-gray-300">
-<i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i>
-<p class="text-sm md:text-lg font-medium">No emails yet</p>
-<p class="text-xs mt-1 font-medium">Your inbox is ready for messages</p>
+<div id="no-emails-default" class="text-center py-4 text-gray-300">
+<i class="fas fa-envelope-open text-xl mb-2 opacity-60"></i>
+<p class="text-sm font-medium">No emails yet</p>
+<p class="text-xs mt-1">Waiting for messages...</p>
 </div>
 <div id="inbox-loader" style="display:none;" class="flex justify-center items-center py-6 md:py-10">
 <div id="loader"></div>
@@ -628,7 +628,7 @@ function loadEmails() {
         list.innerHTML = '';
         
         if (newCount === 0) {
-            list.innerHTML = '<div class="text-center py-6 md:py-10 text-gray-300"><i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i><p class="text-sm md:text-lg font-medium">No emails yet</p><p class="text-xs mt-1">Waiting for new messages...</p></div>';
+            list.innerHTML = '<div class="text-center py-4 text-gray-300"><i class="fas fa-envelope-open text-xl mb-2 opacity-60"></i><p class="text-sm font-medium">No emails yet</p><p class="text-xs mt-1">Waiting for messages...</p></div>';
         } else {
             data.emails.forEach(function(email, idx) {
                 var displaySender = email.sender;
@@ -660,8 +660,7 @@ function loadEmails() {
         if (!err.message.includes('404')) {
             showNotification('⚠️ Could not load emails: ' + err.message, 'error');
         }
-        
-        list.innerHTML = '<div class="text-center py-6 md:py-10 text-gray-300"><i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i><p class="text-sm md:text-lg font-medium">No emails yet</p><p class="text-xs mt-1">Waiting for new messages...</p></div>';
+       list.innerHTML = '<div class="text-center py-4 text-gray-300"><i class="fas fa-envelope-open text-xl mb-2 opacity-60"></i><p class="text-sm font-medium">No emails yet</p><p class="text-xs mt-1">Waiting for messages...</p></div>';
     })
     .finally(function() {
         loader.style.display = 'none';
@@ -869,5 +868,6 @@ initApp();
 </script>
 </body>
 </html>
+
 
 
