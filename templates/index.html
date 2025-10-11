@@ -128,7 +128,6 @@ overflow: hidden;
 -webkit-overflow-scrolling: touch;
 }
 }
-/* Login Screen Styles */
 #login-screen {
 display: flex;
 justify-content: center;
@@ -178,7 +177,6 @@ font-size: 14px;
 </head>
 <body class="text-gray-100 min-h-screen p-2 md:p-4">
 
-<!-- Login Screen -->
 <div id="login-screen">
 <div class="login-box">
 <h1 class="text-3xl font-bold text-white mb-4">🔒 Secure Login</h1>
@@ -188,7 +186,6 @@ font-size: 14px;
 </div>
 </div>
 
-<!-- Main App -->
 <div id="main-app" style="display:none;">
 <div class="h-fit mb-2">
 <div class="bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 text-white py-2 px-4 rounded-lg shadow-lg">
@@ -307,23 +304,12 @@ class="w-full h-10 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 </div>
 
 <script>
-<script>
 const API_URL = window.location.origin;
 let currentEmail = '';
 let autoRefreshInterval;
 
-// Debug logging
-console.log('API URL:', API_URL);
-
-// Rest of your code...
-
-const API_URL = window.location.origin;
-let currentEmail = '';
-let autoRefreshInterval;
-
-// Login
 document.getElementById('login-btn').addEventListener('click', login);
-document.getElementById('password').addEventListener('keypress', (e) => {
+document.getElementById('password').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') login();
 });
 
@@ -332,10 +318,10 @@ async function login() {
     const errorEl = document.getElementById('login-error');
     
     try {
-        const res = await fetch(`${API_URL}/api/login`, {
+        const res = await fetch(API_URL + '/api/login', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({password})
+            body: JSON.stringify({password: password})
         });
         const data = await res.json();
         
@@ -345,36 +331,35 @@ async function login() {
             loadDomains();
         } else {
             errorEl.style.display = 'block';
-            setTimeout(() => errorEl.style.display = 'none', 3000);
+            setTimeout(function() { errorEl.style.display = 'none'; }, 3000);
         }
     } catch (error) {
         alert('Connection error. Please try again.');
     }
 }
 
-// Load domains - FIXED: Don't add .online, backend already has it
 async function loadDomains() {
     try {
-        const res = await fetch(`${API_URL}/api/domains`);
+        const res = await fetch(API_URL + '/api/domains');
         const data = await res.json();
         const select = document.getElementById('domain-select');
-        select.innerHTML = '<option value="">Select domain</option>' + 
-            data.domains.map(d => `<option value="${d}">${d}</option>`).join('');
+        select.innerHTML = '<option value="">Select domain</option>';
+        data.domains.forEach(function(d) {
+            select.innerHTML += '<option value="' + d + '">' + d + '</option>';
+        });
     } catch (error) {
         console.error('Error loading domains');
     }
 }
 
-// Generate random
-document.getElementById('big-random-btn').addEventListener('click', async () => {
+document.getElementById('big-random-btn').addEventListener('click', function() {
     document.getElementById('username-input').value = '';
-    await createEmail('');
+    createEmail('');
 });
 
-// Create
-document.getElementById('create-btn').addEventListener('click', async () => {
+document.getElementById('create-btn').addEventListener('click', function() {
     const username = document.getElementById('username-input').value.trim();
-    await createEmail(username);
+    createEmail(username);
 });
 
 async function createEmail(customName) {
@@ -384,20 +369,18 @@ async function createEmail(customName) {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
     
     try {
-        const res = await fetch(`${API_URL}/api/create`, {
+        const res = await fetch(API_URL + '/api/create', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({name: customName})
         });
         
-        // Check if response is ok
         if (!res.ok) {
-            throw new Error(`HTTP error! status: ${res.status}`);
+            throw new Error('HTTP ' + res.status);
         }
         
         const data = await res.json();
         
-        // Check if email exists in response
         if (!data.email) {
             throw new Error('No email in response');
         }
@@ -405,35 +388,25 @@ async function createEmail(customName) {
         currentEmail = data.email;
         const parts = data.email.split('@');
         
-        // FIXED: Populate username and domain
         document.getElementById('username-input').value = parts[0];
-        
-        // FIXED: Set domain dropdown to match
-        const domainSelect = document.getElementById('domain-select');
-        domainSelect.value = parts[1];
-        
-        // Display email
+        document.getElementById('domain-select').value = parts[1];
         document.getElementById('current-email').textContent = data.email;
         document.getElementById('email-display').classList.remove('hidden');
         
-        showNotification('✅ Email created: ' + data.email, 'success');
+        showNotification('Email created: ' + parts[0], 'success');
         
-        // Auto-load emails
         await loadEmails();
         startAutoRefresh();
         
     } catch (error) {
-        console.error('Create email error:', error);
-        showNotification('❌ Error: ' + error.message, 'error');
+        showNotification('Error: ' + error.message, 'error');
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;
     }
 }
 
-
-// Copy - FIXED: Check for empty domain differently
-document.getElementById('copy-btn').addEventListener('click', () => {
+document.getElementById('copy-btn').addEventListener('click', function() {
     const username = document.getElementById('username-input').value.trim();
     const domain = document.getElementById('domain-select').value;
     
@@ -447,15 +420,13 @@ document.getElementById('copy-btn').addEventListener('click', () => {
         return;
     }
     
-    const email = `${username}@${domain}`;
+    const email = username + '@' + domain;
     navigator.clipboard.writeText(email);
-    showNotification('Email copied to clipboard!', 'success');
+    showNotification('Copied: ' + email, 'success');
 });
 
-// Refresh
 document.getElementById('refresh-btn').addEventListener('click', loadEmails);
 
-// Load emails - FIXED: Better validation
 async function loadEmails() {
     const username = document.getElementById('username-input').value.trim();
     const domain = document.getElementById('domain-select').value;
@@ -470,7 +441,7 @@ async function loadEmails() {
         return;
     }
     
-    currentEmail = `${username}@${domain}`;
+    currentEmail = username + '@' + domain;
     
     const loader = document.getElementById('inbox-loader');
     const list = document.getElementById('email-list');
@@ -478,34 +449,21 @@ async function loadEmails() {
     loader.classList.add('flex');
     
     try {
-        const res = await fetch(`${API_URL}/api/emails/${encodeURIComponent(currentEmail)}`);
+        const res = await fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail));
         const data = await res.json();
         
-        document.getElementById('email-count').textContent = `${data.emails.length} email${data.emails.length !== 1 ? 's' : ''}`;
+        document.getElementById('email-count').textContent = data.emails.length + ' email' + (data.emails.length !== 1 ? 's' : '');
         
         list.innerHTML = '';
         
         if (data.emails.length === 0) {
-            list.innerHTML = `
-                <div id="no-emails" class="text-center py-6 md:py-10 text-gray-300 flex flex-col items-center justify-center">
-                    <i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i>
-                    <p class="text-sm md:text-lg font-medium">No emails yet</p>
-                    <p class="text-xs mt-1 font-medium">Your inbox is ready for messages</p>
-                </div>
-            `;
+            list.innerHTML = '<div id="no-emails" class="text-center py-6 md:py-10 text-gray-300 flex flex-col items-center justify-center"><i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i><p class="text-sm md:text-lg font-medium">No emails yet</p><p class="text-xs mt-1 font-medium">Your inbox is ready for messages</p></div>';
         } else {
-            data.emails.forEach((email, idx) => {
+            data.emails.forEach(function(email, idx) {
                 const item = document.createElement('div');
                 item.className = 'email-item bg-gray-800 p-3 rounded-lg mb-2 border border-gray-700';
-                item.innerHTML = `
-                    <div class="flex justify-between items-start mb-1">
-                        <span class="text-sm font-semibold text-white truncate">${escapeHtml(email.sender)}</span>
-                        <span class="text-xs text-gray-400">${formatTime(email.timestamp)}</span>
-                    </div>
-                    <div class="text-sm font-medium text-gray-200 mb-1">${escapeHtml(email.subject)}</div>
-                    <div class="text-xs text-gray-400 truncate">${escapeHtml(email.body).substring(0, 60)}...</div>
-                `;
-                item.addEventListener('click', () => viewEmail(email, item));
+                item.innerHTML = '<div class="flex justify-between items-start mb-1"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(email.sender) + '</span><span class="text-xs text-gray-400">' + formatTime(email.timestamp) + '</span></div><div class="text-sm font-medium text-gray-200 mb-1">' + escapeHtml(email.subject) + '</div><div class="text-xs text-gray-400 truncate">' + escapeHtml(email.body).substring(0, 60) + '...</div>';
+                item.addEventListener('click', function() { viewEmail(email, item); });
                 list.appendChild(item);
             });
         }
@@ -517,9 +475,9 @@ async function loadEmails() {
     }
 }
 
-// View email
 function viewEmail(email, itemEl) {
-    document.querySelectorAll('.email-item').forEach(el => el.classList.remove('active'));
+    const items = document.querySelectorAll('.email-item');
+    items.forEach(function(el) { el.classList.remove('active'); });
     itemEl.classList.add('active');
     
     document.getElementById('email-placeholder').style.display = 'none';
@@ -531,13 +489,11 @@ function viewEmail(email, itemEl) {
     document.getElementById('email-body').textContent = email.body;
 }
 
-// Auto-refresh
 function startAutoRefresh() {
     if (autoRefreshInterval) clearInterval(autoRefreshInterval);
     autoRefreshInterval = setInterval(loadEmails, 15000);
 }
 
-// Notification
 function showNotification(message, type) {
     const notif = document.getElementById('notification');
     const text = document.getElementById('notification-text');
@@ -548,10 +504,9 @@ function showNotification(message, type) {
         'text-center mb-2 md:mb-4 p-2 md:p-4 rounded-xl text-white font-medium text-sm md:text-base bg-red-600';
     notif.classList.remove('hidden');
     
-    setTimeout(() => notif.classList.add('hidden'), 3000);
+    setTimeout(function() { notif.classList.add('hidden'); }, 3000);
 }
 
-// Utilities
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -565,12 +520,10 @@ function formatTime(timestamp) {
     const minutes = Math.floor(diff / 60000);
     
     if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
+    if (minutes < 60) return minutes + 'm ago';
+    if (minutes < 1440) return Math.floor(minutes / 60) + 'h ago';
     return date.toLocaleString();
 }
 </script>
 </body>
 </html>
-
-
