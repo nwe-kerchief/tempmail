@@ -757,6 +757,7 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Fixed time formatting function
 function formatTime(timestamp) {
     var date = new Date(timestamp);
     var now = new Date();
@@ -768,9 +769,9 @@ function formatTime(timestamp) {
     
     if (seconds < 10) return 'just now';
     if (seconds < 60) return seconds + ' sec ago';
-    if (minutes < 60) return minutes + ' min' + (minutes > 1 ? 's' : '') + ' ago';
-    if (hours < 24) return hours + ' hour' + (hours > 1 ? 's' : '') + ' ago';
-    if (days < 7) return days + ' day' + (days > 1 ? 's' : '') + ' ago';
+    if (minutes < 60) return minutes + ' min ago';
+    if (hours < 24) return hours + ' hour ago';
+    if (days < 7) return days + ' day ago';
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
 }
 
