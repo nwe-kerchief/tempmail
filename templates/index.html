@@ -299,103 +299,21 @@ var API_URL = window.location.origin;
 var currentEmail = '';
 var autoRefreshInterval = null;
 var lastEmailCount = 0;
-var lastActivityTime = Date.now();
-var sessionTimeout = 60 * 60 * 1000; // 1 hour in milliseconds
-var inactivityCheckInterval = null;
+var sessionId = generateSessionId();
+var emailSecurityKey = generateSecurityKey();
+var emailReceivedTimes = {}; // Track when emails were first received
 
-// Load saved email on page load
-window.addEventListener('load', function() {
-    loadSavedEmail();
-    startInactivityCheck();
-});
-
-// Save email to localStorage
-function saveEmailToStorage(email) {
-    localStorage.setItem('tempmail_current_email', email);
-    localStorage.setItem('tempmail_last_activity', Date.now().toString());
+// Generate a unique session ID for security
+function generateSessionId() {
+    return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
 }
 
-// Load email from localStorage
-function loadSavedEmail() {
-    var savedEmail = localStorage.getItem('tempmail_current_email');
-    var lastActivity = parseInt(localStorage.getItem('tempmail_last_activity') || '0');
-    var now = Date.now();
-    
-    // Check if session expired (1 hour of inactivity)
-    if (savedEmail && (now - lastActivity) < sessionTimeout) {
-        // Restore email
-        var parts = savedEmail.split('@');
-        if (parts.length === 2) {
-            currentEmail = savedEmail;
-            document.getElementById('username-input').value = parts[0];
-            
-            // Load domains first, then set the domain
-            loadDomains(function() {
-                document.getElementById('domain-select').value = parts[1];
-                document.getElementById('current-email').textContent = savedEmail;
-                document.getElementById('email-display').classList.remove('hidden');
-                
-                loadEmails();
-                startAutoRefresh();
-            });
-        }
-    } else if (savedEmail) {
-        // Session expired
-        clearSession();
-        showNotification('🕒 Session expired due to inactivity', 'error');
-    }
+// Generate a security key for email requests
+function generateSecurityKey() {
+    return 'key_' + Math.random().toString(36).substr(2, 16);
 }
 
-// Clear session
-function clearSession() {
-    localStorage.removeItem('tempmail_current_email');
-    localStorage.removeItem('tempmail_last_activity');
-    currentEmail = '';
-    document.getElementById('email-display').classList.add('hidden');
-    document.getElementById('username-input').value = '';
-    document.getElementById('email-placeholder').style.display = 'flex';
-    document.getElementById('email-content').classList.add('hidden');
-    document.getElementById('email-list').innerHTML = '';
-    document.getElementById('email-count').textContent = '0 emails';
-    document.title = 'TempMail - AMMZ';
-    
-    if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-        autoRefreshInterval = null;
-    }
-}
-
-// Update last activity time
-function updateActivity() {
-    lastActivityTime = Date.now();
-    localStorage.setItem('tempmail_last_activity', lastActivityTime.toString());
-}
-
-// Check for inactivity
-function startInactivityCheck() {
-    // Update activity on user interactions
-    document.addEventListener('click', updateActivity);
-    document.addEventListener('keypress', updateActivity);
-    document.addEventListener('scroll', updateActivity);
-    document.addEventListener('mousemove', updateActivity);
-    
-    // Check every minute for inactivity
-    inactivityCheckInterval = setInterval(function() {
-        var now = Date.now();
-        var timeSinceActivity = now - lastActivityTime;
-        
-        if (currentEmail && timeSinceActivity >= sessionTimeout) {
-            clearSession();
-            showNotification('🕒 Session expired due to 1 hour of inactivity', 'error');
-            if (inactivityCheckInterval) {
-                clearInterval(inactivityCheckInterval);
-                inactivityCheckInterval = null;
-            }
-        }
-    }, 60000); // Check every minute
-}
-
-function loadDomains(callback) {
+function loadDomains() {
     fetch(API_URL + '/api/domains')
     .then(res => res.json())
     .then(data => {
@@ -404,7 +322,6 @@ function loadDomains(callback) {
         data.domains.forEach(function(d) {
             select.innerHTML += '<option value="' + d + '">' + d + '</option>';
         });
-        if (callback) callback();
     });
 }
 
@@ -424,12 +341,25 @@ function createEmail(customName) {
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
     
+    // Security: Include session ID and security key in request
     fetch(API_URL + '/api/create', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({name: customName})
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Session-ID': sessionId,
+            'X-Security-Key': emailSecurityKey
+        },
+        body: JSON.stringify({
+            name: customName,
+            sessionId: sessionId
+        })
     })
-    .then(res => res.json())
+    .then(res => {
+        if (!res.ok) {
+            throw new Error('Server error: ' + res.status);
+        }
+        return res.json();
+    })
     .then(data => {
         currentEmail = data.email;
         var parts = data.email.split('@');
@@ -439,10 +369,6 @@ function createEmail(customName) {
         document.getElementById('current-email').textContent = data.email;
         document.getElementById('email-display').classList.remove('hidden');
         
-        // Save to localStorage
-        saveEmailToStorage(data.email);
-        updateActivity();
-        
         // Reset email view to placeholder
         document.getElementById('email-placeholder').style.display = 'flex';
         document.getElementById('email-content').classList.add('hidden');
@@ -451,7 +377,10 @@ function createEmail(customName) {
         loadEmails();
         startAutoRefresh();
     })
-    .catch(err => showNotification('❌ Error: ' + err.message, 'error'))
+    .catch(err => {
+        console.error('Error creating email:', err);
+        showNotification('❌ Error creating email: ' + err.message, 'error');
+    })
     .finally(function() {
         btn.disabled = false;
         btn.innerHTML = originalText;
@@ -470,13 +399,9 @@ document.getElementById('copy-btn').addEventListener('click', function() {
     var email = username + '@' + domain;
     navigator.clipboard.writeText(email);
     showNotification('📋 Copied: ' + email, 'success');
-    updateActivity();
 });
 
-document.getElementById('refresh-btn').addEventListener('click', function() {
-    loadEmails();
-    updateActivity();
-});
+document.getElementById('refresh-btn').addEventListener('click', loadEmails);
 
 function loadEmails() {
     var username = document.getElementById('username-input').value.trim();
@@ -485,7 +410,6 @@ function loadEmails() {
     if (!username || !domain) return;
     
     currentEmail = username + '@' + domain;
-    updateActivity();
     
     var loader = document.getElementById('inbox-loader');
     var list = document.getElementById('email-list');
@@ -494,12 +418,30 @@ function loadEmails() {
     loader.style.display = 'flex';
     defaultMsg.style.display = 'none';
     
-    fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail))
-    .then(res => res.json())
+    // Security: Include session ID and security key in request
+    fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail), {
+        headers: {
+            'X-Session-ID': sessionId,
+            'X-Security-Key': emailSecurityKey
+        }
+    })
+    .then(res => {
+        if (!res.ok) {
+            throw new Error('Failed to fetch emails');
+        }
+        return res.json();
+    })
     .then(data => {
         var newCount = data.emails.length;
         document.getElementById('email-count').textContent = newCount + ' email' + (newCount !== 1 ? 's' : '');
         document.title = newCount > 0 ? '(' + newCount + ') TempMail - AMMZ' : 'TempMail - AMMZ';
+        
+        // Track when emails are first received
+        data.emails.forEach(function(email) {
+            if (!emailReceivedTimes[email.id]) {
+                emailReceivedTimes[email.id] = Date.now(); // Store current time when email is first seen
+            }
+        });
         
         if (newCount > lastEmailCount && lastEmailCount > 0) {
             showNotification('🔔 ' + (newCount - lastEmailCount) + ' new email(s) received!', 'success');
@@ -519,6 +461,7 @@ function loadEmails() {
                     displaySender = displaySender.substring(0, displaySender.indexOf('<')).trim() || displaySender.substring(displaySender.indexOf('<')+1, displaySender.indexOf('>')).trim();
                 }
                 
+                // Extract clean preview text
                 var previewText = extractTextFromHTML(email.body);
                 if (previewText.length > 60) {
                     previewText = previewText.substring(0, 60);
@@ -526,11 +469,15 @@ function loadEmails() {
                 
                 var item = document.createElement('div');
                 item.className = 'cursor-pointer p-2 md:p-4 rounded-xl mb-1 md:mb-3 border border-gray-700 hover:bg-gray-800 transition-all';
-                item.innerHTML = '<div class="flex justify-between items-start mb-1"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(displaySender) + '</span><span class="text-xs text-gray-400">' + formatTime(email.timestamp) + '</span></div><div class="text-sm font-medium text-gray-200 mb-1">' + escapeHtml(email.subject) + '</div><div class="text-xs text-gray-400 truncate">' + escapeHtml(previewText) + '...</div>';
+                item.innerHTML = '<div class="flex justify-between items-start mb-1"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(displaySender) + '</span><span class="text-xs text-gray-400">' + formatTime(email.timestamp, email.id) + '</span></div><div class="text-sm font-medium text-gray-200 mb-1">' + escapeHtml(email.subject) + '</div><div class="text-xs text-gray-400 truncate">' + escapeHtml(previewText) + '...</div>';
                 item.addEventListener('click', function() { viewEmail(email, item); });
                 list.appendChild(item);
             });
         }
+    })
+    .catch(err => {
+        console.error('Error loading emails:', err);
+        showNotification('❌ Error loading emails', 'error');
     })
     .finally(function() {
         loader.style.display = 'none';
@@ -546,41 +493,59 @@ function viewEmail(email, itemEl) {
     
     document.getElementById('email-subject').textContent = email.subject;
     document.getElementById('email-from').textContent = email.sender;
-    document.getElementById('email-date').textContent = formatTime(email.timestamp);
+    document.getElementById('email-date').textContent = formatTime(email.timestamp, email.id);
     
     var bodyEl = document.getElementById('email-body');
+    
+    // Process the email body to extract clean content
     var cleanBody = extractCleanEmailBody(email.body);
     bodyEl.innerHTML = cleanBody;
-    
-    updateActivity();
 }
 
-// [Keep all the email processing functions from your code]
+// Improved function to extract clean email body from raw email content
 function extractCleanEmailBody(rawBody) {
+    // First, try to decode quoted-printable encoding
     var decodedBody = decodeQuotedPrintable(rawBody);
+    
+    // Try to extract HTML content if present
     var htmlContent = extractHTMLContent(decodedBody);
-    if (htmlContent) return sanitizeHTML(htmlContent);
+    if (htmlContent) {
+        return sanitizeHTML(htmlContent);
+    }
     
+    // Try to extract plain text content
     var textContent = extractTextContent(decodedBody);
-    if (textContent) return formatTextContent(textContent);
+    if (textContent) {
+        return formatTextContent(textContent);
+    }
     
+    // Fallback: return a cleaned version of the raw body
     return formatTextContent(cleanRawBody(decodedBody));
 }
 
+// Decode quoted-printable encoding
 function decodeQuotedPrintable(str) {
+    // Remove soft line breaks
     str = str.replace(/=\r?\n/g, '');
+    
+    // Decode quoted-printable sequences
     str = str.replace(/=([0-9A-F]{2})/g, function(match, p1) {
         return String.fromCharCode(parseInt(p1, 16));
     });
+    
+    // Handle specific encoded characters
     str = str.replace(/=3D/g, '=');
     str = str.replace(/=20/g, ' ');
     str = str.replace(/=2E/g, '.');
     str = str.replace(/=E2=80=99/g, "'");
     str = str.replace(/=C2=A0/g, ' ');
+    
     return str;
 }
 
+// Extract HTML content from email body
 function extractHTMLContent(body) {
+    // Look for HTML content
     var htmlMatch = body.match(/<html[\s\S]*?<\/html>/i);
     if (htmlMatch) return htmlMatch[0];
     
@@ -590,6 +555,7 @@ function extractHTMLContent(body) {
     htmlMatch = body.match(/<div[\s\S]*?<\/div>/i);
     if (htmlMatch) return htmlMatch[0];
     
+    // Look for content after the headers
     var headerEnd = body.indexOf('Content-Type: text/html');
     if (headerEnd !== -1) {
         var contentStart = body.indexOf('>', headerEnd);
@@ -601,31 +567,46 @@ function extractHTMLContent(body) {
     return null;
 }
 
+// Extract plain text content from email body
 function extractTextContent(body) {
+    // Remove email headers
     var lines = body.split('\n');
     var inBody = false;
     var bodyLines = [];
     
     for (var i = 0; i < lines.length; i++) {
         var line = lines[i].trim();
+        
+        // Skip empty lines at the beginning
         if (!inBody && line === '') continue;
         
-        if (line.startsWith('Received:') || line.startsWith('DKIM-Signature:') ||
-            line.startsWith('ARC-') || line.startsWith('Content-') ||
-            line.startsWith('MIME-') || line.startsWith('Message-ID:') ||
-            line.startsWith('X-') || line.includes('boundary=') ||
-            line.includes('quoted-printable') || line.includes('base64') ||
-            line.includes('charset=') || line.includes('multipart/') ||
+        // Skip technical headers
+        if (line.startsWith('Received:') || 
+            line.startsWith('DKIM-Signature:') ||
+            line.startsWith('ARC-') ||
+            line.startsWith('Content-') ||
+            line.startsWith('MIME-') ||
+            line.startsWith('Message-ID:') ||
+            line.startsWith('X-') ||
+            line.includes('boundary=') ||
+            line.includes('quoted-printable') ||
+            line.includes('base64') ||
+            line.includes('charset=') ||
+            line.includes('multipart/') ||
             line.startsWith('--') && line.endsWith('--')) {
             continue;
         }
         
-        if (!inBody && (line.toLowerCase().includes('enter this temporary verification code') ||
+        // Look for the start of the actual message
+        if (!inBody && (
+            line.toLowerCase().includes('enter this temporary verification code') ||
             line.toLowerCase().includes('verification code') ||
             line.toLowerCase().includes('your chatgpt code is') ||
             line.toLowerCase().includes('please ignore this email') ||
-            line.toLowerCase().includes('best,') || line.toLowerCase().includes('regards,') ||
-            (line.length > 0 && !line.includes(':') && !line.includes('=')))) {
+            line.toLowerCase().includes('best,') ||
+            line.toLowerCase().includes('regards,') ||
+            (line.length > 0 && !line.includes(':') && !line.includes('='))
+        )) {
             inBody = true;
         }
         
@@ -638,6 +619,7 @@ function extractTextContent(body) {
     return text.length > 0 ? text : null;
 }
 
+// Clean raw body when no structured content found
 function cleanRawBody(body) {
     var lines = body.split('\n');
     var cleanLines = [];
@@ -645,29 +627,43 @@ function cleanRawBody(body) {
     for (var i = 0; i < lines.length; i++) {
         var line = lines[i].trim();
         
-        if (line.startsWith('Received:') || line.startsWith('DKIM-Signature:') ||
-            line.startsWith('ARC-') || line.startsWith('Content-') ||
-            line.startsWith('MIME-') || line.startsWith('Message-ID:') ||
-            line.startsWith('X-') || line.includes('boundary=') ||
-            line.includes('quoted-printable') || line.includes('base64') ||
-            line.includes('charset=') || line.includes('multipart/') ||
+        // Skip technical lines
+        if (line.startsWith('Received:') || 
+            line.startsWith('DKIM-Signature:') ||
+            line.startsWith('ARC-') ||
+            line.startsWith('Content-') ||
+            line.startsWith('MIME-') ||
+            line.startsWith('Message-ID:') ||
+            line.startsWith('X-') ||
+            line.includes('boundary=') ||
+            line.includes('quoted-printable') ||
+            line.includes('base64') ||
+            line.includes('charset=') ||
+            line.includes('multipart/') ||
             line.startsWith('--') && line.endsWith('--')) {
             continue;
         }
         
+        // Skip very long lines (likely encoded data)
         if (line.length > 200) continue;
+        
         cleanLines.push(line);
     }
     
     return cleanLines.join('\n');
 }
 
+// Format plain text content with proper HTML structure
 function formatTextContent(text) {
+    // Extract verification code
     var codeMatch = text.match(/\b\d{4,8}\b/);
     var verificationCode = codeMatch ? codeMatch[0] : null;
+    
+    // Split into paragraphs
     var paragraphs = text.split(/\n\s*\n/);
     var html = '';
     
+    // Add verification code prominently if found
     if (verificationCode) {
         html += '<div class="verification-code">' + verificationCode + '</div>';
     }
@@ -676,8 +672,10 @@ function formatTextContent(text) {
         var paragraph = paragraphs[i].trim();
         if (paragraph.length === 0) continue;
         
+        // Skip the line that contains the verification code (already displayed)
         if (verificationCode && paragraph.includes(verificationCode)) continue;
         
+        // Skip technical lines
         if (paragraph.includes('by cloudflare-email.net') ||
             paragraph.includes('ARC-Seal:') ||
             paragraph.includes('DKIM-Signature:') ||
@@ -685,6 +683,7 @@ function formatTextContent(text) {
             continue;
         }
         
+        // Format specific message parts
         if (paragraph.toLowerCase().includes('enter this temporary verification code')) {
             html += '<div class="email-header"><p>' + escapeHtml(paragraph) + '</p></div>';
         } else if (paragraph.toLowerCase().includes('please ignore this email')) {
@@ -701,16 +700,19 @@ function formatTextContent(text) {
     return html || '<p>No readable content found in this email.</p>';
 }
 
+// Sanitize HTML to prevent XSS attacks
 function sanitizeHTML(html) {
     var temp = document.createElement('div');
     temp.innerHTML = html;
     
+    // Remove potentially dangerous tags
     var dangerousTags = ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'form', 'input', 'button'];
     dangerousTags.forEach(tag => {
         var elements = temp.querySelectorAll(tag);
         elements.forEach(el => el.remove());
     });
     
+    // Remove dangerous attributes
     var allElements = temp.querySelectorAll('*');
     allElements.forEach(el => {
         var attributes = el.attributes;
@@ -762,31 +764,52 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
-function formatTime(timestamp) {
-    var date = new Date(timestamp);
-    var now = new Date();
-    var diff = now - date;
+
+// Fixed time formatting function - uses the time email was first received
+function formatTime(timestamp, emailId) {
+    // Use the time when we first received the email, not the email's timestamp
+    var receivedTime = emailReceivedTimes[emailId] || Date.now();
+    var now = Date.now();
+    var diff = now - receivedTime;
     var seconds = Math.floor(diff / 1000);
     var minutes = Math.floor(seconds / 60);
     var hours = Math.floor(minutes / 60);
     var days = Math.floor(hours / 24);
-    var weeks = Math.floor(days / 7);
-    var months = Math.floor(days / 30);
-    var years = Math.floor(days / 365);
     
     if (seconds < 10) return 'just now';
     if (seconds < 60) return seconds + ' sec ago';
     if (minutes < 60) return minutes + ' min ago';
-    if (hours < 24) return hours + ' hour' + (hours > 1 ? 's' : '') + ' ago';
-    if (days < 7) return days + ' day' + (days > 1 ? 's' : '') + ' ago';
-    if (weeks < 4) return weeks + ' week' + (weeks > 1 ? 's' : '') + ' ago';
-    if (months < 12) return months + ' month' + (months > 1 ? 's' : '') + ' ago';
-    return years + ' year' + (years > 1 ? 's' : '') + ' ago';
+    if (hours < 24) return hours + ' hour ago';
+    if (days < 7) return days + ' day ago';
+    
+    // Fallback to original timestamp if needed
+    var date = new Date(timestamp);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+}
+
+// Add session expiration
+function setupSessionExpiration() {
+    var sessionTimeout = 60 * 60 * 1000; // 1 hour in milliseconds
+    
+    setTimeout(function() {
+        showNotification('🕒 Session expired. Please create a new email address.', 'error');
+        currentEmail = '';
+        document.getElementById('email-display').classList.add('hidden');
+        document.getElementById('email-placeholder').style.display = 'flex';
+        document.getElementById('email-content').classList.add('hidden');
+        document.getElementById('email-list').innerHTML = '';
+        document.getElementById('email-count').textContent = '0 emails';
+        document.title = 'TempMail - AMMZ';
+        
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+    }, sessionTimeout);
 }
 
 loadDomains();
+setupSessionExpiration();
 </script>
 </body>
 </html>
-
-
