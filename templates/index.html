@@ -585,7 +585,7 @@
                 return;
             }
             
-            const email = `${username}@${domain}.online`;
+            const email = `${username}@${domain}`;
             navigator.clipboard.writeText(email);
             const btn = document.getElementById('copy-btn');
             btn.textContent = '✅ Copied!';
@@ -605,7 +605,7 @@
                 return;
             }
             
-            currentEmail = `${username}@${domain}.online`;
+            currentEmail = `${username}@${domain}`;
             
             const btn = document.getElementById('refresh-btn');
             btn.style.transform = 'rotate(360deg)';
