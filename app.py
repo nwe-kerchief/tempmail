@@ -176,16 +176,40 @@ def webhook_inbound():
         if 'Content-Type:' in body and 'multipart' in body:
             body = parse_email_body(body)
         
-        # Remove "Received:" headers from body if present
-        if body.startswith('Received:'):
+        # AGGRESSIVE header removal
+        if body.startswith('Received:') or 'ARC-Seal:' in body[:500] or 'DKIM-Signature:' in body[:500]:
+            # Split into lines
             lines = body.split('\n')
-            content_start = 0
-            for i, line in enumerate(lines):
-                if line.strip() == '' or not line.startswith(('Received:', 'ARC-', 'DKIM-', 'Authentication-Results:', 'From:', 'To:', 'Subject:', 'Date:', 'Message-ID:', 'MIME-Version:', 'Content-Type:')):
-                    content_start = i
-                    break
-            if content_start > 0:
-                body = '\n'.join(lines[content_start:]).strip()
+            clean_lines = []
+            skip_headers = True
+            
+            for line in lines:
+                # Check if still in header section
+                if skip_headers:
+                    # Headers end at first empty line or content start
+                    if line.strip() == '':
+                        skip_headers = False
+                        continue
+                    # Skip all header lines
+                    if line.startswith(('Received:', 'ARC-', 'DKIM-', 'Authentication-Results:', 
+                                       'Return-Path:', 'Delivered-To:', 'X-', 'Message-ID:', 
+                                       'Date:', 'MIME-Version:', 'Content-Type:', 'Content-Transfer-Encoding:')):
+                        continue
+                    # If line doesn't start with header pattern and isn't indented (continuation), start content
+                    if not line.startswith(' ') and not line.startswith('\t'):
+                        skip_headers = False
+                
+                if not skip_headers:
+                    clean_lines.append(line)
+            
+            body = '\n'.join(clean_lines).strip()
+        
+        # If body is still mostly base64 or encoded junk, try to extract from JSON fields
+        if len(body) > 1000 and body.count('=') > 50:
+            # Might be badly encoded, try plain_body
+            plain = json_data.get('plain_body', '')
+            if plain and len(plain) < len(body):
+                body = plain
         
         print(f"  ✉️  From: {sender}")
         print(f"  📬 To: {recipient}")
@@ -362,3 +386,4 @@ def health():
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
