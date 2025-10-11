@@ -49,22 +49,46 @@ animation: fadeIn 0.5s ease-in;
 from { opacity: 0; transform: translateY(10px); }
 to { opacity: 1; transform: translateY(0); }
 }
-@media (max-width: 768px) {
-.mobile-stack { flex-direction: column; }
-.mobile-full { width: 100%; }
-.mobile-text-center { text-align: center; }
-.mobile-inbox-container { flex-direction: column; height: auto; }
-.mobile-inbox-list { height: 300px; max-height: 300px; }
-.mobile-email-content { height: 400px; max-height: 400px; }
+
+/* Improved responsive inbox styles */
+.mobile-inbox-container {
+flex-direction: column;
+height: auto;
 }
-#email-content-container {
+.mobile-inbox-list {
+height: 400px;
+max-height: 400px;
+min-height: 300px;
+}
+.mobile-email-content {
 height: 500px;
 max-height: 500px;
+min-height: 400px;
+}
+
+@media (min-width: 768px) {
+.mobile-inbox-container {
+flex-direction: row;
+height: 600px;
+}
+.mobile-inbox-list {
+height: 100%;
+max-height: none;
+min-height: auto;
+}
+.mobile-email-content {
+height: 100%;
+max-height: none;
+min-height: auto;
+}
+}
+
+#email-content-container {
+height: 100%;
 overflow: hidden;
 }
 #email-body {
-height: 300px;
-max-height: 300px;
+height: calc(100% - 120px);
 overflow-y: auto;
 overflow-x: hidden;
 }
@@ -72,22 +96,14 @@ overflow-x: hidden;
 max-width: 100%;
 word-wrap: break-word;
 }
-@media (min-width: 768px) {
-#email-content-container {
-height: 550px;
-max-height: 550px;
-}
-#email-body {
-height: 350px;
-max-height: 350px;
-}
-}
+
 /* Improved email content styling */
 .email-content-container {
 background: rgba(255, 255, 255, 0.05);
 border-radius: 12px;
-padding: 20px;
+padding: 16px;
 overflow-y: auto;
+height: 100%;
 }
 .email-content-text {
 line-height: 1.6;
@@ -167,6 +183,30 @@ margin-bottom: 15px;
 font-size: 12px;
 color: #9ca3af;
 }
+
+/* Improved inbox list styling */
+#email-list-container {
+height: calc(100% - 60px);
+overflow-y: auto;
+}
+.email-list-item {
+padding: 12px;
+border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+transition: all 0.2s ease;
+cursor: pointer;
+}
+.email-list-item:hover {
+background: rgba(255, 255, 255, 0.1);
+}
+.email-list-item.active {
+background: rgba(168, 85, 247, 0.3);
+}
+.email-preview {
+display: -webkit-box;
+-webkit-line-clamp: 2;
+-webkit-box-orient: vertical;
+overflow: hidden;
+}
 </style>
 </head>
 <body class="text-gray-100 min-h-screen p-2 md:p-4">
@@ -222,7 +262,6 @@ class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 </div>
 </div>
 
-
 <div id="email-display" class="hidden text-center p-2 md:p-4 bg-gray-900 rounded-xl mb-2 md:mb-4 border border-gray-700">
 <div class="flex items-center justify-center">
 <i class="fas fa-envelope text-blue-400 mr-2 text-sm md:text-xl"></i>
@@ -236,48 +275,53 @@ class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 <span id="notification-text"></span>
 </div>
 
-<div class="flex flex-col md:flex-row gap-3 md:gap-6 mobile-inbox-container">
-<div class="w-full md:w-2/5 glass-effect rounded-xl p-2 md:p-4 overflow-y-auto mobile-inbox-list">
-<div class="flex justify-between items-center mb-2 md:mb-4">
-<h2 class="text-base md:text-xl font-semibold text-white">
-<i class="fas fa-inbox mr-1 md:mr-2"></i>Inbox
+<!-- Improved Inbox Section -->
+<div class="flex flex-col md:flex-row gap-4 mobile-inbox-container">
+<!-- Inbox List - Improved -->
+<div class="w-full md:w-2/5 glass-effect rounded-xl p-3 md:p-4 mobile-inbox-list">
+<div class="flex justify-between items-center mb-3">
+<h2 class="text-lg md:text-xl font-semibold text-white flex items-center">
+<i class="fas fa-inbox mr-2"></i>Inbox
 </h2>
 <div class="flex items-center gap-2">
-<span id="email-count" class="text-xs text-gray-300 font-medium">0 emails</span>
-<button id="refresh-btn" class="p-1 md:p-2 rounded-full hover:bg-gray-700 transition-colors text-white">
-<i class="fas fa-sync-alt text-xs md:text-base"></i>
+<span id="email-count" class="text-xs text-gray-300 font-medium bg-gray-800 px-2 py-1 rounded">0 emails</span>
+<button id="refresh-btn" class="p-2 rounded-lg hover:bg-gray-700 transition-colors text-white">
+<i class="fas fa-sync-alt text-sm"></i>
 </button>
 </div>
 </div>
-<div id="email-list-container" class="h-full overflow-y-auto">
-<div id="no-emails-default" class="text-center py-4 text-gray-300">
-<i class="fas fa-envelope-open text-xl mb-2 opacity-60"></i>
-<p class="text-sm font-medium">No emails yet</p>
-<p class="text-xs mt-1">Waiting for messages...</p>
+<div id="email-list-container" class="h-full overflow-y-auto rounded-lg">
+<div id="no-emails-default" class="text-center py-8 text-gray-300">
+<i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i>
+<p class="text-base font-medium">No emails yet</p>
+<p class="text-sm mt-1 text-gray-400">Waiting for messages...</p>
 </div>
-<div id="inbox-loader" style="display:none;" class="flex justify-center items-center py-6 md:py-10">
+<div id="inbox-loader" style="display:none;" class="flex justify-center items-center py-8">
 <div id="loader"></div>
 </div>
-<div id="email-list"></div>
+<div id="email-list" class="space-y-2"></div>
 </div>
 </div>
 
-<div id="email-content-container" class="w-full md:w-3/5 glass-effect rounded-xl p-3 md:p-6 overflow-y-auto mobile-email-content">
-<div id="email-placeholder" class="flex flex-col items-center justify-center h-full text-gray-300 py-6">
-<i class="fas fa-envelope-open text-3xl md:text-6xl mb-2 md:mb-4 opacity-60"></i>
-<p class="text-base md:text-xl font-medium">Select an email to read</p>
-<p class="text-xs md:text-sm mt-1 text-center font-medium">Choose a message from your inbox</p>
+<!-- Email Content - Improved -->
+<div class="w-full md:w-3/5 glass-effect rounded-xl p-4 mobile-email-content">
+<div id="email-placeholder" class="flex flex-col items-center justify-center h-full text-gray-300 py-8">
+<i class="fas fa-envelope-open text-4xl md:text-5xl mb-4 opacity-60"></i>
+<p class="text-lg md:text-xl font-medium text-center">Select an email to read</p>
+<p class="text-sm mt-2 text-gray-400 text-center">Choose a message from your inbox to view its contents</p>
 </div>
 <div id="email-content" class="hidden h-full flex flex-col">
-<div class="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-6">
-<h2 id="email-subject" class="text-lg md:text-2xl font-bold text-white mb-1 md:mb-0 break-words"></h2>
-<span id="email-date" class="text-xs text-gray-300 bg-gray-800 px-2 py-1 rounded-lg font-medium"></span>
+<div class="flex flex-col md:flex-row justify-between items-start mb-4 gap-2">
+<h2 id="email-subject" class="text-xl md:text-2xl font-bold text-white break-words flex-1"></h2>
+<span id="email-date" class="text-xs text-gray-300 bg-gray-800 px-3 py-1 rounded-lg font-medium whitespace-nowrap"></span>
 </div>
-<div class="flex items-center text-xs md:text-sm text-gray-300 mb-3 md:mb-6 border-b border-gray-700 pb-2 md:pb-4">
-<strong class="mr-2 text-white font-semibold"><i class="fas fa-user mr-1"></i>From:</strong>
+<div class="flex items-center text-sm text-gray-300 mb-4 border-b border-gray-700 pb-3">
+<strong class="mr-2 text-white font-semibold flex items-center">
+<i class="fas fa-user mr-2"></i>From:
+</strong>
 <span id="email-from" class="font-mono font-medium break-all"></span>
 </div>
-<div id="email-body" class="email-content-container email-content-text"></div>
+<div id="email-body" class="email-content-container email-content-text flex-1"></div>
 </div>
 </div>
 </div>
@@ -628,7 +672,7 @@ function loadEmails() {
         list.innerHTML = '';
         
         if (newCount === 0) {
-            list.innerHTML = '<div class="text-center py-4 text-gray-300"><i class="fas fa-envelope-open text-xl mb-2 opacity-60"></i><p class="text-sm font-medium">No emails yet</p><p class="text-xs mt-1">Waiting for messages...</p></div>';
+            list.innerHTML = '<div class="text-center py-8 text-gray-300"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>';
         } else {
             data.emails.forEach(function(email, idx) {
                 var displaySender = email.sender;
@@ -640,14 +684,21 @@ function loadEmails() {
                 
                 // Extract clean preview text
                 var previewText = extractTextFromHTML(email.body);
-                if (previewText.length > 60) {
-                    previewText = previewText.substring(0, 60) + '...';
+                if (previewText.length > 80) {
+                    previewText = previewText.substring(0, 80) + '...';
                 }
                 
                 var item = document.createElement('div');
-                item.className = 'cursor-pointer p-2 md:p-4 rounded-xl mb-1 md:mb-3 border border-gray-700 hover:bg-gray-800 transition-all email-item';
+                item.className = 'email-list-item rounded-lg border border-gray-700 hover:border-gray-600 transition-all';
                 item.setAttribute('data-timestamp', email.timestamp);
-                item.innerHTML = '<div class="flex justify-between items-start mb-1"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(displaySender) + '</span><span class="text-xs text-gray-400 email-time">' + formatTime(email.timestamp) + '</span></div><div class="text-sm font-medium text-gray-200 mb-1">' + escapeHtml(email.subject) + '</div><div class="text-xs text-gray-400 truncate">' + escapeHtml(previewText) + '</div>';
+                item.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-sm font-semibold text-white truncate flex-1 mr-2">${escapeHtml(displaySender)}</span>
+                        <span class="text-xs text-gray-400 email-time whitespace-nowrap">${formatTime(email.timestamp)}</span>
+                    </div>
+                    <div class="text-sm font-medium text-gray-200 mb-2 truncate">${escapeHtml(email.subject)}</div>
+                    <div class="text-xs text-gray-400 email-preview">${escapeHtml(previewText)}</div>
+                `;
                 item.addEventListener('click', function() { viewEmail(email, item); });
                 list.appendChild(item);
             });
@@ -660,7 +711,8 @@ function loadEmails() {
         if (!err.message.includes('404')) {
             showNotification('⚠️ Could not load emails: ' + err.message, 'error');
         }
-       list.innerHTML = '<div class="text-center py-4 text-gray-300"><i class="fas fa-envelope-open text-xl mb-2 opacity-60"></i><p class="text-sm font-medium">No emails yet</p><p class="text-xs mt-1">Waiting for messages...</p></div>';
+        
+        list.innerHTML = '<div class="text-center py-8 text-gray-300"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>';
     })
     .finally(function() {
         loader.style.display = 'none';
@@ -669,7 +721,7 @@ function loadEmails() {
 
 // Update email times automatically
 function updateEmailTimes() {
-    const emailItems = document.querySelectorAll('.email-item');
+    const emailItems = document.querySelectorAll('.email-list-item');
     emailItems.forEach(item => {
         const timestamp = item.getAttribute('data-timestamp');
         const timeElement = item.querySelector('.email-time');
@@ -686,7 +738,7 @@ function updateEmailTimes() {
 }
 
 function viewEmail(email, itemEl) {
-    document.querySelectorAll('#email-list > div').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.email-list-item').forEach(el => el.classList.remove('active'));
     itemEl.classList.add('active');
     
     document.getElementById('email-placeholder').style.display = 'none';
@@ -868,8 +920,3 @@ initApp();
 </script>
 </body>
 </html>
-
-
-
-
-
