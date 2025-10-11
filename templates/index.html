@@ -52,81 +52,17 @@ animation: fadeIn 0.5s ease-in;
 from { opacity: 0; transform: translateY(10px); }
 to { opacity: 1; transform: translateY(0); }
 }
-.countdown {
-font-feature-settings: 'tnum';
-font-variant-numeric: tabular-nums;
-letter-spacing: 0.05em;
-}
-.modal-overlay {
-background: rgba(0, 0, 0, 0.7);
-}
 .smooth-transition {
 transition: all 0.3s ease;
 }
 @media (max-width: 768px) {
-.mobile-stack {
-flex-direction: column;
-}
-.mobile-full {
-width: 100%;
-}
-.mobile-text-center {
-text-align: center;
-}
-.mobile-p-4 {
-padding: 1rem;
-}
-.mobile-mb-4 {
-margin-bottom: 1rem;
-}
-.mobile-h-auto {
-height: auto;
-}
-.mobile-inbox-container {
-flex-direction: column;
-height: auto;
-}
-.mobile-inbox-list {
-height: 300px;
-min-height: 300px;
-max-height: 300px;
-}
-.mobile-email-content {
-height: 400px;
-min-height: 400px;
-max-height: 400px;
-}
-}
-.email-html-content {
-all: initial !important;
-font-family: 'Inter', sans-serif !important;
-font-size: 14px !important;
-line-height: 1.4 !important;
-color: #e5e7eb !important;
-max-width: 100% !important;
-overflow-wrap: break-word !important;
-word-break: break-word !important;
-}
-.email-html-content * {
-all: revert !important;
-font-family: 'Inter', sans-serif !important;
-font-size: 14px !important;
-line-height: 1.4 !important;
-margin: 2px 0 !important;
-padding: 1px 0 !important;
-color: #e5e7eb !important;
-background: transparent !important;
-border: none !important;
-box-shadow: none !important;
-}
-.email-content-wrapper {
-max-width: 100%;
-overflow: hidden;
-}
-@media (max-width: 768px) {
-.mobile-scroll {
--webkit-overflow-scrolling: touch;
-}
+.mobile-stack { flex-direction: column; }
+.mobile-full { width: 100%; }
+.mobile-text-center { text-align: center; }
+.mobile-inbox-container { flex-direction: column; height: auto; }
+.mobile-inbox-list { height: 300px; min-height: 300px; max-height: 300px; }
+.mobile-email-content { height: 400px; min-height: 400px; max-height: 400px; }
+.mobile-scroll { -webkit-overflow-scrolling: touch; }
 }
 #login-screen {
 display: flex;
@@ -258,15 +194,16 @@ class="w-full h-10 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 </button>
 </div>
 </div>
-<div id="email-list" class="h-full overflow-y-auto smooth-transition">
-<div id="no-emails" class="text-center py-6 md:py-10 text-gray-300 flex flex-col items-center justify-center">
+<div id="email-list-container" class="h-full overflow-y-auto smooth-transition">
+<div id="no-emails-default" class="text-center py-6 md:py-10 text-gray-300 flex flex-col items-center justify-center">
 <i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i>
 <p class="text-sm md:text-lg font-medium">No emails yet</p>
 <p class="text-xs mt-1 font-medium">Your inbox is ready for messages</p>
 </div>
-<div id="inbox-loader" class="hidden justify-center items-center py-6 md:py-10">
+<div id="inbox-loader" style="display:none;" class="flex justify-center items-center py-6 md:py-10">
 <div id="loader"></div>
 </div>
+<div id="email-list"></div>
 </div>
 </div>
 <div id="email-content-container" class="w-full md:w-3/5 glass-effect rounded-xl p-3 md:p-6 overflow-y-auto mobile-full mobile-email-content mobile-scroll">
@@ -284,7 +221,7 @@ class="w-full h-10 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 <strong class="mr-2 text-white font-semibold"><i class="fas fa-user mr-1"></i>From:</strong>
 <span id="email-from" class="font-mono font-medium break-all"></span>
 </div>
-<div id="email-body" class="text-gray-200 leading-relaxed email-body bg-gray-900 p-3 md:p-6 rounded-lg font-medium text-xs md:text-base overflow-auto flex-1 email-html-content"></div>
+<div id="email-body" class="text-gray-200 leading-relaxed email-body bg-gray-900 p-3 md:p-6 rounded-lg font-medium text-xs md:text-base overflow-auto flex-1"></div>
 </div>
 </div>
 </div>
@@ -304,27 +241,26 @@ class="w-full h-10 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 </div>
 
 <script>
-const API_URL = window.location.origin;
-let currentEmail = '';
-let autoRefreshInterval;
+var API_URL = window.location.origin;
+var currentEmail = '';
+var autoRefreshInterval = null;
 
 document.getElementById('login-btn').addEventListener('click', login);
 document.getElementById('password').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') login();
 });
 
-async function login() {
-    const password = document.getElementById('password').value;
-    const errorEl = document.getElementById('login-error');
+function login() {
+    var password = document.getElementById('password').value;
+    var errorEl = document.getElementById('login-error');
     
-    try {
-        const res = await fetch(API_URL + '/api/login', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({password: password})
-        });
-        const data = await res.json();
-        
+    fetch(API_URL + '/api/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({password: password})
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
         if (data.success) {
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('main-app').style.display = 'block';
@@ -333,23 +269,25 @@ async function login() {
             errorEl.style.display = 'block';
             setTimeout(function() { errorEl.style.display = 'none'; }, 3000);
         }
-    } catch (error) {
+    })
+    .catch(function(error) {
         alert('Connection error. Please try again.');
-    }
+    });
 }
 
-async function loadDomains() {
-    try {
-        const res = await fetch(API_URL + '/api/domains');
-        const data = await res.json();
-        const select = document.getElementById('domain-select');
+function loadDomains() {
+    fetch(API_URL + '/api/domains')
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+        var select = document.getElementById('domain-select');
         select.innerHTML = '<option value="">Select domain</option>';
         data.domains.forEach(function(d) {
             select.innerHTML += '<option value="' + d + '">' + d + '</option>';
         });
-    } catch (error) {
+    })
+    .catch(function(error) {
         console.error('Error loading domains');
-    }
+    });
 }
 
 document.getElementById('big-random-btn').addEventListener('click', function() {
@@ -358,35 +296,30 @@ document.getElementById('big-random-btn').addEventListener('click', function() {
 });
 
 document.getElementById('create-btn').addEventListener('click', function() {
-    const username = document.getElementById('username-input').value.trim();
+    var username = document.getElementById('username-input').value.trim();
     createEmail(username);
 });
 
-async function createEmail(customName) {
-    const btn = customName ? document.getElementById('create-btn') : document.getElementById('big-random-btn');
-    const originalText = btn.innerHTML;
+function createEmail(customName) {
+    var btn = customName ? document.getElementById('create-btn') : document.getElementById('big-random-btn');
+    var originalText = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
     
-    try {
-        const res = await fetch(API_URL + '/api/create', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name: customName})
-        });
-        
-        if (!res.ok) {
-            throw new Error('HTTP ' + res.status);
-        }
-        
-        const data = await res.json();
-        
-        if (!data.email) {
-            throw new Error('No email in response');
-        }
+    fetch(API_URL + '/api/create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: customName})
+    })
+    .then(function(res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+    })
+    .then(function(data) {
+        if (!data.email) throw new Error('No email in response');
         
         currentEmail = data.email;
-        const parts = data.email.split('@');
+        var parts = data.email.split('@');
         
         document.getElementById('username-input').value = parts[0];
         document.getElementById('domain-select').value = parts[1];
@@ -394,89 +327,81 @@ async function createEmail(customName) {
         document.getElementById('email-display').classList.remove('hidden');
         
         showNotification('Email created: ' + parts[0], 'success');
-        
-        await loadEmails();
+        loadEmails();
         startAutoRefresh();
-        
-    } catch (error) {
+    })
+    .catch(function(error) {
         showNotification('Error: ' + error.message, 'error');
-    } finally {
+    })
+    .finally(function() {
         btn.disabled = false;
         btn.innerHTML = originalText;
-    }
+    });
 }
 
 document.getElementById('copy-btn').addEventListener('click', function() {
-    const username = document.getElementById('username-input').value.trim();
-    const domain = document.getElementById('domain-select').value;
+    var username = document.getElementById('username-input').value.trim();
+    var domain = document.getElementById('domain-select').value;
     
-    if (!username) {
+    if (!username || !domain) {
         showNotification('Create an email first!', 'error');
         return;
     }
     
-    if (!domain || domain === '') {
-        showNotification('Select a domain first!', 'error');
-        return;
-    }
-    
-    const email = username + '@' + domain;
+    var email = username + '@' + domain;
     navigator.clipboard.writeText(email);
     showNotification('Copied: ' + email, 'success');
 });
 
 document.getElementById('refresh-btn').addEventListener('click', loadEmails);
 
-async function loadEmails() {
-    const username = document.getElementById('username-input').value.trim();
-    const domain = document.getElementById('domain-select').value;
+function loadEmails() {
+    var username = document.getElementById('username-input').value.trim();
+    var domain = document.getElementById('domain-select').value;
     
-    if (!username) {
+    if (!username || !domain) {
         showNotification('Enter a username first!', 'error');
-        return;
-    }
-    
-    if (!domain || domain === '') {
-        showNotification('Select a domain first!', 'error');
         return;
     }
     
     currentEmail = username + '@' + domain;
     
-    const loader = document.getElementById('inbox-loader');
-    const list = document.getElementById('email-list');
-    loader.classList.remove('hidden');
-    loader.classList.add('flex');
+    var loader = document.getElementById('inbox-loader');
+    var list = document.getElementById('email-list');
+    var defaultMsg = document.getElementById('no-emails-default');
     
-    try {
-        const res = await fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail));
-        const data = await res.json();
-        
+    loader.style.display = 'flex';
+    defaultMsg.style.display = 'none';
+    
+    fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail))
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
         document.getElementById('email-count').textContent = data.emails.length + ' email' + (data.emails.length !== 1 ? 's' : '');
         
         list.innerHTML = '';
         
         if (data.emails.length === 0) {
-            list.innerHTML = '<div id="no-emails" class="text-center py-6 md:py-10 text-gray-300 flex flex-col items-center justify-center"><i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i><p class="text-sm md:text-lg font-medium">No emails yet</p><p class="text-xs mt-1 font-medium">Your inbox is ready for messages</p></div>';
+            list.innerHTML = '<div class="text-center py-6 md:py-10 text-gray-300 flex flex-col items-center justify-center"><i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i><p class="text-sm md:text-lg font-medium">No emails yet</p><p class="text-xs mt-1 font-medium">Your inbox is ready for messages</p></div>';
         } else {
             data.emails.forEach(function(email, idx) {
-                const item = document.createElement('div');
+                var item = document.createElement('div');
                 item.className = 'email-item bg-gray-800 p-3 rounded-lg mb-2 border border-gray-700';
                 item.innerHTML = '<div class="flex justify-between items-start mb-1"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(email.sender) + '</span><span class="text-xs text-gray-400">' + formatTime(email.timestamp) + '</span></div><div class="text-sm font-medium text-gray-200 mb-1">' + escapeHtml(email.subject) + '</div><div class="text-xs text-gray-400 truncate">' + escapeHtml(email.body).substring(0, 60) + '...</div>';
                 item.addEventListener('click', function() { viewEmail(email, item); });
                 list.appendChild(item);
             });
         }
-    } catch (error) {
+    })
+    .catch(function(error) {
         showNotification('Error loading emails', 'error');
-    } finally {
-        loader.classList.add('hidden');
-        loader.classList.remove('flex');
-    }
+    })
+    .finally(function() {
+        loader.style.display = 'none';
+    });
 }
 
 function viewEmail(email, itemEl) {
-    const items = document.querySelectorAll('.email-item');
+    var items = document.querySelectorAll('.email-item');
     items.forEach(function(el) { el.classList.remove('active'); });
     itemEl.classList.add('active');
     
@@ -495,8 +420,8 @@ function startAutoRefresh() {
 }
 
 function showNotification(message, type) {
-    const notif = document.getElementById('notification');
-    const text = document.getElementById('notification-text');
+    var notif = document.getElementById('notification');
+    var text = document.getElementById('notification-text');
     
     text.textContent = message;
     notif.className = type === 'success' ? 
@@ -508,16 +433,16 @@ function showNotification(message, type) {
 }
 
 function escapeHtml(text) {
-    const div = document.createElement('div');
+    var div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
 
 function formatTime(timestamp) {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diff = now - date;
-    const minutes = Math.floor(diff / 60000);
+    var date = new Date(timestamp);
+    var now = new Date();
+    var diff = now - date;
+    var minutes = Math.floor(diff / 60000);
     
     if (minutes < 1) return 'Just now';
     if (minutes < 60) return minutes + 'm ago';
