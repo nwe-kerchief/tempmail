@@ -330,14 +330,18 @@ function loadSession() {
             currentEmail = session.email;
             sessionStartTime = session.createdAt;
             
-            // Restore UI state
+            // Restore UI state - FILL THE FORM BUT DON'T CREATE YET
             var parts = currentEmail.split('@');
             document.getElementById('username-input').value = parts[0];
             document.getElementById('domain-select').value = parts[1];
+            
+            // SHOW THE EMAIL DISPLAY IMMEDIATELY
             document.getElementById('current-email').textContent = currentEmail;
             document.getElementById('email-display').classList.remove('hidden');
             
-            showNotification('✅ Session restored', 'success');
+            showNotification('✅ Session restored - loading emails...', 'success');
+            
+            // LOAD EMAILS IMMEDIATELY - THIS IS THE KEY FIX
             loadEmails();
             startAutoRefresh();
             startTimeUpdate();
@@ -391,6 +395,13 @@ document.getElementById('big-random-btn').addEventListener('click', function() {
 
 document.getElementById('create-btn').addEventListener('click', function() {
     var username = document.getElementById('username-input').value.trim();
+    var domain = document.getElementById('domain-select').value;
+    
+    if (!username || !domain) {
+        showNotification('❌ Please enter username and select domain!', 'error');
+        return;
+    }
+    
     createEmail(username);
 });
 
@@ -493,6 +504,10 @@ function loadEmails() {
     })
     .then(res => {
         if (!res.ok) {
+            // If email doesn't exist yet, that's fine - just return empty emails
+            if (res.status === 404) {
+                return { emails: [] };
+            }
             throw new Error('Failed to fetch emails');
         }
         return res.json();
@@ -539,7 +554,10 @@ function loadEmails() {
     })
     .catch(err => {
         console.error('Error loading emails:', err);
-        showNotification('❌ Error loading emails', 'error');
+        // Don't show error for 404 - it just means no emails yet
+        if (!err.message.includes('404')) {
+            showNotification('❌ Error loading emails', 'error');
+        }
     })
     .finally(function() {
         loader.style.display = 'none';
