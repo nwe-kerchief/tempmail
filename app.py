@@ -234,7 +234,9 @@ def webhook_inbound():
         print(f"  📄 Body: {len(body)} chars")
         print("=" * 50)
         
-        timestamp = datetime.utcnow().isoformat()
+        # Store ARRIVAL time, not email send time
+        timestamp = datetime.now().isoformat()
+
         conn = sqlite3.connect('emails.db')
         c = conn.cursor()
         c.execute('''
@@ -403,3 +405,4 @@ def health():
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
