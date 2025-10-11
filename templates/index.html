@@ -301,6 +301,7 @@ var autoRefreshInterval = null;
 var lastEmailCount = 0;
 var sessionId = generateSessionId();
 var emailSecurityKey = generateSecurityKey();
+var emailReceivedTimes = {}; // Track when emails were first received
 
 // Generate a unique session ID for security
 function generateSessionId() {
@@ -435,6 +436,13 @@ function loadEmails() {
         document.getElementById('email-count').textContent = newCount + ' email' + (newCount !== 1 ? 's' : '');
         document.title = newCount > 0 ? '(' + newCount + ') TempMail - AMMZ' : 'TempMail - AMMZ';
         
+        // Track when emails are first received
+        data.emails.forEach(function(email) {
+            if (!emailReceivedTimes[email.id]) {
+                emailReceivedTimes[email.id] = Date.now(); // Store current time when email is first seen
+            }
+        });
+        
         if (newCount > lastEmailCount && lastEmailCount > 0) {
             showNotification('🔔 ' + (newCount - lastEmailCount) + ' new email(s) received!', 'success');
         }
@@ -461,7 +469,7 @@ function loadEmails() {
                 
                 var item = document.createElement('div');
                 item.className = 'cursor-pointer p-2 md:p-4 rounded-xl mb-1 md:mb-3 border border-gray-700 hover:bg-gray-800 transition-all';
-                item.innerHTML = '<div class="flex justify-between items-start mb-1"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(displaySender) + '</span><span class="text-xs text-gray-400">' + formatTime(email.timestamp) + '</span></div><div class="text-sm font-medium text-gray-200 mb-1">' + escapeHtml(email.subject) + '</div><div class="text-xs text-gray-400 truncate">' + escapeHtml(previewText) + '...</div>';
+                item.innerHTML = '<div class="flex justify-between items-start mb-1"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(displaySender) + '</span><span class="text-xs text-gray-400">' + formatTime(email.timestamp, email.id) + '</span></div><div class="text-sm font-medium text-gray-200 mb-1">' + escapeHtml(email.subject) + '</div><div class="text-xs text-gray-400 truncate">' + escapeHtml(previewText) + '...</div>';
                 item.addEventListener('click', function() { viewEmail(email, item); });
                 list.appendChild(item);
             });
@@ -485,7 +493,7 @@ function viewEmail(email, itemEl) {
     
     document.getElementById('email-subject').textContent = email.subject;
     document.getElementById('email-from').textContent = email.sender;
-    document.getElementById('email-date').textContent = formatTime(email.timestamp);
+    document.getElementById('email-date').textContent = formatTime(email.timestamp, email.id);
     
     var bodyEl = document.getElementById('email-body');
     
@@ -757,11 +765,12 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Fixed time formatting function - NO PLURAL "s"
-function formatTime(timestamp) {
-    var date = new Date(timestamp);
-    var now = new Date();
-    var diff = now - date;
+// Fixed time formatting function - uses the time email was first received
+function formatTime(timestamp, emailId) {
+    // Use the time when we first received the email, not the email's timestamp
+    var receivedTime = emailReceivedTimes[emailId] || Date.now();
+    var now = Date.now();
+    var diff = now - receivedTime;
     var seconds = Math.floor(diff / 1000);
     var minutes = Math.floor(seconds / 60);
     var hours = Math.floor(minutes / 60);
@@ -772,6 +781,9 @@ function formatTime(timestamp) {
     if (minutes < 60) return minutes + ' min ago';
     if (hours < 24) return hours + ' hour ago';
     if (days < 7) return days + ' day ago';
+    
+    // Fallback to original timestamp if needed
+    var date = new Date(timestamp);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
 }
 
