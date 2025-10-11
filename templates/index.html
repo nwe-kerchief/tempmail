@@ -82,6 +82,65 @@ height: 450px;
 max-height: 450px;
 }
 }
+/* Custom styles for email content */
+.email-content-container {
+background: rgba(255, 255, 255, 0.05);
+border-radius: 12px;
+padding: 20px;
+overflow-y: auto;
+}
+.email-content-text {
+line-height: 1.6;
+font-size: 14px;
+color: #e5e7eb;
+}
+.email-content-text p {
+margin-bottom: 1rem;
+}
+.email-content-text code {
+background: rgba(255, 255, 255, 0.1);
+padding: 2px 6px;
+border-radius: 4px;
+font-family: monospace;
+}
+.email-content-text pre {
+background: rgba(0, 0, 0, 0.3);
+padding: 12px;
+border-radius: 6px;
+overflow-x: auto;
+margin: 1rem 0;
+}
+.email-content-text a {
+color: #60a5fa;
+text-decoration: underline;
+}
+.email-content-text ul, .email-content-text ol {
+padding-left: 1.5rem;
+margin-bottom: 1rem;
+}
+.email-content-text li {
+margin-bottom: 0.5rem;
+}
+.email-content-text h1, .email-content-text h2, .email-content-text h3 {
+color: white;
+margin-top: 1.5rem;
+margin-bottom: 0.75rem;
+}
+.email-content-text h1 {
+font-size: 1.5rem;
+}
+.email-content-text h2 {
+font-size: 1.3rem;
+}
+.email-content-text h3 {
+font-size: 1.1rem;
+}
+.email-content-text blockquote {
+border-left: 4px solid rgba(255, 255, 255, 0.3);
+padding-left: 1rem;
+margin: 1rem 0;
+font-style: italic;
+}
 </style>
 </head>
 <body class="text-gray-100 min-h-screen p-2 md:p-4">
@@ -189,7 +248,7 @@ class="w-full h-10 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 <strong class="mr-2 text-white font-semibold"><i class="fas fa-user mr-1"></i>From:</strong>
 <span id="email-from" class="font-mono font-medium break-all"></span>
 </div>
-<div id="email-body" class="text-gray-200 leading-relaxed bg-gray-900 p-3 md:p-6 rounded-lg font-medium text-xs md:text-base overflow-auto flex-1"></div>
+<div id="email-body" class="email-content-container email-content-text"></div>
 </div>
 </div>
 </div>
@@ -214,6 +273,18 @@ var API_URL = window.location.origin;
 var currentEmail = '';
 var autoRefreshInterval = null;
 var lastEmailCount = 0;
+var sessionId = generateSessionId();
+var emailSecurityKey = generateSecurityKey();
+
+// Generate a unique session ID for security
+function generateSessionId() {
+    return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+}
+
+// Generate a security key for email requests
+function generateSecurityKey() {
+    return 'key_' + Math.random().toString(36).substr(2, 16);
+}
 
 function loadDomains() {
     fetch(API_URL + '/api/domains')
@@ -243,12 +314,25 @@ function createEmail(customName) {
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
     
+    // Security: Include session ID and security key in request
     fetch(API_URL + '/api/create', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({name: customName})
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Session-ID': sessionId,
+            'X-Security-Key': emailSecurityKey
+        },
+        body: JSON.stringify({
+            name: customName,
+            sessionId: sessionId
+        })
     })
-    .then(res => res.json())
+    .then(res => {
+        if (!res.ok) {
+            throw new Error('Server error: ' + res.status);
+        }
+        return res.json();
+    })
     .then(data => {
         currentEmail = data.email;
         var parts = data.email.split('@');
@@ -266,13 +350,15 @@ function createEmail(customName) {
         loadEmails();
         startAutoRefresh();
     })
-    .catch(err => showNotification('❌ Error: ' + err.message, 'error'))
+    .catch(err => {
+        console.error('Error creating email:', err);
+        showNotification('❌ Error creating email: ' + err.message, 'error');
+    })
     .finally(function() {
         btn.disabled = false;
         btn.innerHTML = originalText;
     });
 }
-
 
 document.getElementById('copy-btn').addEventListener('click', function() {
     var username = document.getElementById('username-input').value.trim();
@@ -305,8 +391,19 @@ function loadEmails() {
     loader.style.display = 'flex';
     defaultMsg.style.display = 'none';
     
-    fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail))
-    .then(res => res.json())
+    // Security: Include session ID and security key in request
+    fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail), {
+        headers: {
+            'X-Session-ID': sessionId,
+            'X-Security-Key': emailSecurityKey
+        }
+    })
+    .then(res => {
+        if (!res.ok) {
+            throw new Error('Failed to fetch emails');
+        }
+        return res.json();
+    })
     .then(data => {
         var newCount = data.emails.length;
         document.getElementById('email-count').textContent = newCount + ' email' + (newCount !== 1 ? 's' : '');
@@ -344,11 +441,14 @@ function loadEmails() {
             });
         }
     })
+    .catch(err => {
+        console.error('Error loading emails:', err);
+        showNotification('❌ Error loading emails', 'error');
+    })
     .finally(function() {
         loader.style.display = 'none';
     });
 }
-
 
 function viewEmail(email, itemEl) {
     document.querySelectorAll('#email-list > div').forEach(el => el.classList.remove('bg-blue-600', 'border-blue-500'));
@@ -365,12 +465,61 @@ function viewEmail(email, itemEl) {
     var isHTML = email.body.includes('<html') || email.body.includes('<div') || email.body.includes('<table');
     
     if (isHTML) {
-        bodyEl.innerHTML = email.body;
-        bodyEl.className = 'text-gray-800 leading-relaxed bg-white p-3 md:p-6 rounded-lg font-medium text-xs md:text-base overflow-auto flex-1';
+        // Sanitize HTML before displaying
+        var sanitizedHTML = sanitizeHTML(email.body);
+        bodyEl.innerHTML = sanitizedHTML;
     } else {
-        bodyEl.textContent = extractTextFromHTML(email.body);
-        bodyEl.className = 'text-gray-200 leading-relaxed bg-gray-900 p-3 md:p-6 rounded-lg font-medium text-xs md:text-base overflow-auto flex-1';
+        // Format plain text for better readability
+        var formattedText = formatPlainText(email.body);
+        bodyEl.innerHTML = '<div class="whitespace-pre-wrap">' + escapeHtml(formattedText) + '</div>';
     }
+}
+
+// Sanitize HTML to prevent XSS attacks
+function sanitizeHTML(html) {
+    var temp = document.createElement('div');
+    temp.innerHTML = html;
+    
+    // Remove potentially dangerous tags
+    var dangerousTags = ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'form', 'input', 'button'];
+    dangerousTags.forEach(tag => {
+        var elements = temp.querySelectorAll(tag);
+        elements.forEach(el => el.remove());
+    });
+    
+    // Remove dangerous attributes
+    var allElements = temp.querySelectorAll('*');
+    allElements.forEach(el => {
+        var attributes = el.attributes;
+        for (var i = attributes.length - 1; i >= 0; i--) {
+            var attr = attributes[i];
+            if (attr.name.startsWith('on') || 
+                attr.name === 'href' && attr.value.startsWith('javascript:') ||
+                attr.name === 'src' && attr.value.startsWith('javascript:')) {
+                el.removeAttribute(attr.name);
+            }
+        }
+    });
+    
+    return temp.innerHTML;
+}
+
+// Format plain text for better readability
+function formatPlainText(text) {
+    // Extract verification codes
+    var codeMatch = text.match(/\b\d{4,8}\b/);
+    if (codeMatch) {
+        var code = codeMatch[0];
+        text = text.replace(code, '\n\n🔐 Verification Code: ' + code + '\n\n');
+    }
+    
+    // Remove excessive whitespace
+    text = text.replace(/\s+/g, ' ').trim();
+    
+    // Add paragraph breaks
+    text = text.replace(/([.!?])\s+/g, '$1\n\n');
+    
+    return text;
 }
 
 function extractTextFromHTML(html) {
@@ -383,11 +532,6 @@ function extractTextFromHTML(html) {
     if (text.length < 50) {
         var paragraphs = temp.querySelectorAll('p, div, td');
         text = Array.from(paragraphs).map(el => el.textContent).join('\n').replace(/\s+/g, ' ').trim();
-    }
-    var codeMatch = text.match(/\d{4,8}/);
-    if (codeMatch) {
-        var code = codeMatch[0];
-        text = text.replace(code, '\n\n' + code + '\n\n');
     }
     return text || 'No readable content found';
 }
@@ -431,9 +575,29 @@ function formatTime(timestamp) {
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
 }
 
+// Add session expiration
+function setupSessionExpiration() {
+    var sessionTimeout = 60 * 60 * 1000; // 1 hour in milliseconds
+    
+    setTimeout(function() {
+        showNotification('🕒 Session expired. Please create a new email address.', 'error');
+        currentEmail = '';
+        document.getElementById('email-display').classList.add('hidden');
+        document.getElementById('email-placeholder').style.display = 'flex';
+        document.getElementById('email-content').classList.add('hidden');
+        document.getElementById('email-list').innerHTML = '';
+        document.getElementById('email-count').textContent = '0 emails';
+        document.title = 'TempMail - AMMZ';
+        
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+    }, sessionTimeout);
+}
+
 loadDomains();
+setupSessionExpiration();
 </script>
 </body>
 </html>
-
-
