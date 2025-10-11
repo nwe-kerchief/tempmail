@@ -54,17 +54,17 @@ to { opacity: 1; transform: translateY(0); }
 .mobile-full { width: 100%; }
 .mobile-text-center { text-align: center; }
 .mobile-inbox-container { flex-direction: column; height: auto; }
-.mobile-inbox-list { height: 350px; max-height: 350px; }
-.mobile-email-content { height: 450px; max-height: 450px; }
+.mobile-inbox-list { height: 300px; max-height: 300px; }
+.mobile-email-content { height: 400px; max-height: 400px; }
 }
 #email-content-container {
-height: 550px;
-max-height: 550px;
+height: 500px;
+max-height: 500px;
 overflow: hidden;
 }
 #email-body {
-height: 350px;
-max-height: 350px;
+height: 300px;
+max-height: 300px;
 overflow-y: auto;
 overflow-x: hidden;
 }
@@ -74,12 +74,12 @@ word-wrap: break-word;
 }
 @media (min-width: 768px) {
 #email-content-container {
-height: 650px;
-max-height: 650px;
+height: 550px;
+max-height: 550px;
 }
 #email-body {
-height: 450px;
-max-height: 450px;
+height: 350px;
+max-height: 350px;
 }
 }
 /* Improved email content styling */
@@ -757,7 +757,7 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Fixed time formatting function
+// Fixed time formatting function - NO PLURAL "s"
 function formatTime(timestamp) {
     var date = new Date(timestamp);
     var now = new Date();
