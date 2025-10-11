@@ -8,6 +8,7 @@ from datetime import datetime
 import email
 from email import policy
 import re
+from functools import wraps
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'change-this-in-production')
@@ -82,6 +83,15 @@ def parse_email_body(raw_body):
         print(f"Email parsing error: {e}")
         return raw_body
 
+# Admin auth decorator
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('authenticated'):
+            return jsonify({'error': 'Unauthorized'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
 # Routes
 @app.route('/')
 def index():
@@ -153,7 +163,7 @@ def get_emails(email_address):
 
 @app.route('/api/webhook/inbound', methods=['POST'])
 def webhook_inbound():
-    """Cloudflare Email Routing webhook - Fixed for actual Cloudflare format"""
+    """Cloudflare Email Routing webhook - Fixed with clean sender"""
     try:
         json_data = request.get_json(force=True, silent=True)
         
@@ -168,6 +178,19 @@ def webhook_inbound():
         recipient = json_data.get('to', 'unknown@unknown.com')
         sender = json_data.get('from', 'unknown')
         subject = json_data.get('subject', 'No subject')
+        
+        # CLEAN SENDER - Extract readable name/email
+        if '<' in sender and '>' in sender:
+            sender = sender[sender.find('<')+1:sender.find('>')]
+        
+        # If it's a bounce address, clean it
+        if 'bounces+' in sender or 'bounce-md' in sender or 'bounce' in sender.lower():
+            if '@' in sender:
+                domain_part = sender.split('@')[1]
+                if 'openai.com' in domain_part or 'mandrillapp.com' in domain_part:
+                    sender = 'ChatGPT <noreply@tm.openai.com>'
+                else:
+                    sender = 'Notification'
         
         # Get HTML body first, fallback to plain text
         body = json_data.get('html_body', None)
@@ -209,6 +232,136 @@ def webhook_inbound():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 400
+
+# Admin routes
+@app.route('/admin')
+@admin_required
+def admin_panel():
+    """Admin dashboard"""
+    return render_template('admin.html')
+
+@app.route('/api/admin/stats', methods=['GET'])
+@admin_required
+def admin_stats():
+    """Get admin statistics"""
+    try:
+        conn = sqlite3.connect('emails.db')
+        c = conn.cursor()
+        
+        c.execute('SELECT COUNT(*) FROM emails')
+        total_emails = c.fetchone()[0]
+        
+        c.execute('SELECT COUNT(DISTINCT recipient) FROM emails')
+        total_addresses = c.fetchone()[0]
+        
+        c.execute('''
+            SELECT COUNT(*) FROM emails 
+            WHERE datetime(timestamp) > datetime('now', '-1 day')
+        ''')
+        recent_emails = c.fetchone()[0]
+        
+        conn.close()
+        
+        return jsonify({
+            'total_emails': total_emails,
+            'total_addresses': total_addresses,
+            'recent_emails': recent_emails
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/addresses', methods=['GET'])
+@admin_required
+def admin_addresses():
+    """Get all email addresses with counts"""
+    try:
+        conn = sqlite3.connect('emails.db')
+        c = conn.cursor()
+        
+        c.execute('''
+            SELECT recipient, COUNT(*) as count, MAX(timestamp) as last_email
+            FROM emails
+            GROUP BY recipient
+            ORDER BY last_email DESC
+        ''')
+        
+        addresses = []
+        for row in c.fetchall():
+            addresses.append({
+                'address': row[0],
+                'count': row[1],
+                'last_email': row[2]
+            })
+        
+        conn.close()
+        return jsonify({'addresses': addresses})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/emails/<email_address>', methods=['GET'])
+@admin_required
+def admin_get_emails(email_address):
+    """Get all emails for a specific address (admin view)"""
+    try:
+        conn = sqlite3.connect('emails.db')
+        c = conn.cursor()
+        
+        c.execute('''
+            SELECT id, sender, subject, body, timestamp 
+            FROM emails 
+            WHERE recipient = ? 
+            ORDER BY timestamp DESC
+        ''', (email_address,))
+        
+        emails = []
+        for row in c.fetchall():
+            emails.append({
+                'id': row[0],
+                'sender': row[1],
+                'subject': row[2],
+                'body': row[3],
+                'timestamp': row[4]
+            })
+        
+        conn.close()
+        return jsonify({'emails': emails})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/delete/<int:email_id>', methods=['DELETE'])
+@admin_required
+def admin_delete_email(email_id):
+    """Delete a specific email"""
+    try:
+        conn = sqlite3.connect('emails.db')
+        c = conn.cursor()
+        c.execute('DELETE FROM emails WHERE id = ?', (email_id,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/delete-address/<email_address>', methods=['DELETE'])
+@admin_required
+def admin_delete_address(email_address):
+    """Delete all emails for an address"""
+    try:
+        conn = sqlite3.connect('emails.db')
+        c = conn.cursor()
+        c.execute('DELETE FROM emails WHERE recipient = ?', (email_address,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/health')
 def health():
