@@ -258,6 +258,10 @@ function createEmail(customName) {
         document.getElementById('current-email').textContent = data.email;
         document.getElementById('email-display').classList.remove('hidden');
         
+        // Reset email view to placeholder
+        document.getElementById('email-placeholder').style.display = 'flex';
+        document.getElementById('email-content').classList.add('hidden');
+        
         showNotification('✅ Email created: ' + parts[0], 'success');
         loadEmails();
         startAutoRefresh();
@@ -268,6 +272,7 @@ function createEmail(customName) {
         btn.innerHTML = originalText;
     });
 }
+
 
 document.getElementById('copy-btn').addEventListener('click', function() {
     var username = document.getElementById('username-input').value.trim();
@@ -423,3 +428,4 @@ loadDomains();
 </script>
 </body>
 </html>
+
