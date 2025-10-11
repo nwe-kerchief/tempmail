@@ -289,7 +289,7 @@ class="w-full h-10 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 <div class="h-fit mt-2 md:mt-4">
 <div class="bg-gradient-to-r from-green-600 via-teal-600 to-blue-600 text-white py-2 px-4 rounded-lg shadow-lg border border-green-400">
 <marquee class="text-xs md:text-base font-medium">
-🔒 Secure & Private • All Rights Reserved by <b class="text yellow-300">AMMZ</b> • Built with Advanced AI Technology 🚀
+🔒 Secure & Private • All Rights Reserved by <b class="text-yellow-300">AMMZ</b> • Built with Advanced AI Technology 🚀
 </marquee>
 </div>
 </div>
@@ -398,13 +398,23 @@ function updateLastEmailTime() {
 
 function loadDomains() {
     return fetch(API_URL + '/api/domains')
-    .then(res => res.json())
+    .then(res => {
+        if (!res.ok) {
+            throw new Error('Failed to load domains');
+        }
+        return res.json();
+    })
     .then(data => {
         var select = document.getElementById('domain-select');
         select.innerHTML = '<option value="">Select domain</option>';
-        data.domains.forEach(function(d) {
-            select.innerHTML += '<option value="' + d + '">' + d + '</option>';
-        });
+        if (data.domains && data.domains.length > 0) {
+            data.domains.forEach(function(d) {
+                select.innerHTML += '<option value="' + d + '">' + d + '</option>';
+            });
+        } else {
+            // Fallback domain
+            select.innerHTML += '<option value="aungmyomyatzaw.online">aungmyomyatzaw.online</option>';
+        }
         domainsLoaded = true;
     })
     .catch(err => {
@@ -460,11 +470,18 @@ function createEmail(customName) {
     })
     .then(res => {
         if (!res.ok) {
-            throw new Error('Server error: ' + res.status);
+            // If server error, try to parse the error message
+            return res.text().then(text => {
+                throw new Error(text || 'Server error: ' + res.status);
+            });
         }
         return res.json();
     })
     .then(data => {
+        if (!data.email) {
+            throw new Error('No email returned from server');
+        }
+        
         currentEmail = data.email;
         sessionStartTime = Date.now();
         
@@ -483,7 +500,12 @@ function createEmail(customName) {
         
         // Save session and start timers
         saveSession();
-        loadEmails();
+        
+        // Wait a moment for the server to register the email, then load emails
+        setTimeout(() => {
+            loadEmails();
+        }, 1000);
+        
         startAutoRefresh();
         startTimeUpdate();
         setupSessionExpiration();
@@ -522,6 +544,8 @@ function createEmailLocally(customName) {
     
     // Save session and start timers
     saveSession();
+    
+    // Try to load emails anyway (might work if email exists on server)
     loadEmails();
     startAutoRefresh();
     startTimeUpdate();
@@ -555,7 +579,12 @@ document.getElementById('copy-btn').addEventListener('click', function() {
 document.getElementById('refresh-btn').addEventListener('click', loadEmails);
 
 function loadEmails() {
-    if (!currentEmail) return;
+    if (!currentEmail) {
+        console.log('No current email to load');
+        return;
+    }
+    
+    console.log('Loading emails for:', currentEmail);
     
     var loader = document.getElementById('inbox-loader');
     var list = document.getElementById('email-list');
@@ -563,6 +592,7 @@ function loadEmails() {
     
     loader.style.display = 'flex';
     defaultMsg.style.display = 'none';
+    list.innerHTML = '';
     
     // Security: Include session ID and security key in request
     fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail), {
@@ -574,14 +604,20 @@ function loadEmails() {
     .then(res => {
         if (!res.ok) {
             if (res.status === 404) {
+                // Email doesn't exist yet, that's fine
+                console.log('Email not found on server (404)');
                 return { emails: [] };
             }
-            throw new Error('Failed to fetch emails: ' + res.status);
+            return res.text().then(text => {
+                throw new Error(text || 'Failed to fetch emails: ' + res.status);
+            });
         }
         return res.json();
     })
     .then(data => {
-        var newCount = data.emails.length;
+        console.log('Emails loaded:', data);
+        
+        var newCount = data.emails ? data.emails.length : 0;
         document.getElementById('email-count').textContent = newCount + ' email' + (newCount !== 1 ? 's' : '');
         document.title = newCount > 0 ? '(' + newCount + ') TempMail - AMMZ' : 'TempMail - AMMZ';
         
@@ -594,7 +630,7 @@ function loadEmails() {
         list.innerHTML = '';
         
         if (newCount === 0) {
-            list.innerHTML = '<div class="text-center py-6 md:py-10 text-gray-300"><i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i><p class="text-sm md:text-lg font-medium">No emails yet</p></div>';
+            list.innerHTML = '<div class="text-center py-6 md:py-10 text-gray-300"><i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i><p class="text-sm md:text-lg font-medium">No emails yet</p><p class="text-xs mt-1">Waiting for new messages...</p></div>';
         } else {
             data.emails.forEach(function(email, idx) {
                 var displaySender = email.sender;
@@ -607,13 +643,13 @@ function loadEmails() {
                 // Extract clean preview text
                 var previewText = extractTextFromHTML(email.body);
                 if (previewText.length > 60) {
-                    previewText = previewText.substring(0, 60);
+                    previewText = previewText.substring(0, 60) + '...';
                 }
                 
                 var item = document.createElement('div');
                 item.className = 'cursor-pointer p-2 md:p-4 rounded-xl mb-1 md:mb-3 border border-gray-700 hover:bg-gray-800 transition-all email-item';
                 item.setAttribute('data-timestamp', email.timestamp);
-                item.innerHTML = '<div class="flex justify-between items-start mb-1"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(displaySender) + '</span><span class="text-xs text-gray-400 email-time">' + formatTime(email.timestamp) + '</span></div><div class="text-sm font-medium text-gray-200 mb-1">' + escapeHtml(email.subject) + '</div><div class="text-xs text-gray-400 truncate">' + escapeHtml(previewText) + '...</div>';
+                item.innerHTML = '<div class="flex justify-between items-start mb-1"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(displaySender) + '</span><span class="text-xs text-gray-400 email-time">' + formatTime(email.timestamp) + '</span></div><div class="text-sm font-medium text-gray-200 mb-1">' + escapeHtml(email.subject) + '</div><div class="text-xs text-gray-400 truncate">' + escapeHtml(previewText) + '</div>';
                 item.addEventListener('click', function() { viewEmail(email, item); });
                 list.appendChild(item);
             });
@@ -621,12 +657,13 @@ function loadEmails() {
     })
     .catch(err => {
         console.error('Error loading emails:', err);
+        
         // Don't show error for 404 - it just means no emails yet
         if (!err.message.includes('404')) {
-            showNotification('⚠️ Could not load emails', 'error');
+            showNotification('⚠️ Could not load emails: ' + err.message, 'error');
         }
         
-        list.innerHTML = '<div class="text-center py-6 md:py-10 text-gray-300"><i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i><p class="text-sm md:text-lg font-medium">No emails yet</p></div>';
+        list.innerHTML = '<div class="text-center py-6 md:py-10 text-gray-300"><i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i><p class="text-sm md:text-lg font-medium">No emails yet</p><p class="text-xs mt-1">Waiting for new messages...</p></div>';
     })
     .finally(function() {
         loader.style.display = 'none';
@@ -670,27 +707,84 @@ function viewEmail(email, itemEl) {
     bodyEl.innerHTML = cleanBody;
 }
 
-// Email body processing functions (keep the same as before)
+// Email body processing functions
 function extractCleanEmailBody(rawBody) {
-    // Implementation from previous code
-    // ... (keeping the same implementation)
-    return formatTextContent(rawBody);
+    try {
+        // Simple cleanup - remove excessive whitespace
+        let cleaned = rawBody.replace(/\s+/g, ' ').trim();
+        
+        // If it looks like HTML, sanitize it
+        if (cleaned.includes('<') && cleaned.includes('>')) {
+            return sanitizeHTML(cleaned);
+        }
+        
+        // Otherwise format as plain text
+        return formatTextContent(cleaned);
+    } catch (e) {
+        console.error('Error processing email body:', e);
+        return '<p>' + escapeHtml(rawBody) + '</p>';
+    }
 }
 
 function formatTextContent(text) {
-    // Implementation from previous code
-    // ... (keeping the same implementation)
-    return '<p>' + escapeHtml(text) + '</p>';
+    // Split into paragraphs and format
+    var paragraphs = text.split(/\n\s*\n/);
+    var html = '';
+    
+    for (var i = 0; i < paragraphs.length; i++) {
+        var paragraph = paragraphs[i].trim();
+        if (paragraph.length === 0) continue;
+        html += '<p>' + escapeHtml(paragraph) + '</p>';
+    }
+    
+    return html || '<p>No readable content found in this email.</p>';
+}
+
+function sanitizeHTML(html) {
+    var temp = document.createElement('div');
+    temp.innerHTML = html;
+    
+    // Remove potentially dangerous tags
+    var dangerousTags = ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'form', 'input', 'button'];
+    dangerousTags.forEach(tag => {
+        var elements = temp.querySelectorAll(tag);
+        elements.forEach(el => el.remove());
+    });
+    
+    // Remove dangerous attributes
+    var allElements = temp.querySelectorAll('*');
+    allElements.forEach(el => {
+        var attributes = el.attributes;
+        for (var i = attributes.length - 1; i >= 0; i--) {
+            var attr = attributes[i];
+            if (attr.name.startsWith('on') || 
+                attr.name === 'href' && attr.value.startsWith('javascript:') ||
+                attr.name === 'src' && attr.value.startsWith('javascript:')) {
+                el.removeAttribute(attr.name);
+            }
+        }
+    });
+    
+    return temp.innerHTML;
+}
+
+function extractTextFromHTML(html) {
+    var temp = document.createElement('div');
+    temp.innerHTML = html;
+    var scripts = temp.querySelectorAll('script, style, link, meta');
+    scripts.forEach(el => el.remove());
+    var text = temp.textContent || temp.innerText || '';
+    return text.replace(/\s+/g, ' ').trim();
 }
 
 function startAutoRefresh() {
     if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-    autoRefreshInterval = setInterval(loadEmails, 5000);
+    autoRefreshInterval = setInterval(loadEmails, 5000); // Refresh every 5 seconds
 }
 
 function startTimeUpdate() {
     if (timeUpdateInterval) clearInterval(timeUpdateInterval);
-    timeUpdateInterval = setInterval(updateEmailTimes, 1000);
+    timeUpdateInterval = setInterval(updateEmailTimes, 1000); // Update times every second
 }
 
 function showNotification(message, type) {
