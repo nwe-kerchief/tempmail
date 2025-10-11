@@ -411,7 +411,24 @@ function viewEmail(email, itemEl) {
     document.getElementById('email-subject').textContent = email.subject;
     document.getElementById('email-from').textContent = email.sender;
     document.getElementById('email-date').textContent = formatTime(email.timestamp);
-    document.getElementById('email-body').textContent = email.body;
+    
+    var bodyEl = document.getElementById('email-body');
+    
+    // Smart detection: Check if email contains HTML
+    var isHTML = email.body.includes('<div') || 
+                 email.body.includes('<p>') || 
+                 email.body.includes('<br') || 
+                 email.body.includes('<html');
+    
+    if (isHTML) {
+        // HTML email - render as HTML
+        bodyEl.innerHTML = email.body;
+        bodyEl.className = 'text-gray-800 leading-relaxed email-body bg-white p-3 md:p-6 rounded-lg font-medium text-xs md:text-base overflow-auto flex-1';
+    } else {
+        // Plain text - display as text
+        bodyEl.textContent = email.body;
+        bodyEl.className = 'text-gray-200 leading-relaxed email-body bg-gray-900 p-3 md:p-6 rounded-lg font-medium text-xs md:text-base overflow-auto flex-1';
+    }
 }
 
 function startAutoRefresh() {
@@ -452,3 +469,4 @@ function formatTime(timestamp) {
 </script>
 </body>
 </html>
+
