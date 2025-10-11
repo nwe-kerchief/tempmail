@@ -8,16 +8,15 @@ from datetime import datetime
 import email
 from email import policy
 from functools import wraps
+import re
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'change-this-in-production')
 CORS(app)
 
-# Configuration
 APP_PASSWORD = os.getenv('APP_PASSWORD', 'admin123')
 DOMAIN = os.getenv('DOMAIN', 'aungmyomyatzaw.online')
 
-# Initialize database
 def init_db():
     conn = sqlite3.connect('emails.db')
     c = conn.cursor()
@@ -36,9 +35,8 @@ def init_db():
 
 init_db()
 
-# Helper function to parse email body
 def parse_email_body(raw_body):
-    """Parse multipart MIME email and extract HTML or plain text body"""
+    """Parse MIME email and extract clean HTML/text"""
     try:
         if 'Content-Type:' in raw_body:
             msg = email.message_from_string(raw_body, policy=policy.default)
@@ -82,7 +80,6 @@ def parse_email_body(raw_body):
         print(f"Email parsing error: {e}")
         return raw_body
 
-# Admin auth decorator
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -91,20 +88,16 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# PUBLIC ROUTES (No password required)
 @app.route('/')
 def index():
-    """Main temp mail page - NO PASSWORD"""
     return render_template('index.html')
 
 @app.route('/api/domains', methods=['GET'])
 def get_domains():
-    """Public API - no auth needed"""
     return jsonify({'domains': [DOMAIN]})
 
 @app.route('/api/create', methods=['POST'])
 def create_email():
-    """Public API - no auth needed"""
     data = request.get_json() or {}
     custom_name = data.get('name', '').strip()
     
@@ -119,7 +112,6 @@ def create_email():
 
 @app.route('/api/emails/<email_address>', methods=['GET'])
 def get_emails(email_address):
-    """Public API - no auth needed"""
     conn = sqlite3.connect('emails.db')
     c = conn.cursor()
     c.execute('''
@@ -143,7 +135,6 @@ def get_emails(email_address):
 
 @app.route('/api/webhook/inbound', methods=['POST'])
 def webhook_inbound():
-    """Cloudflare Email Routing webhook"""
     try:
         json_data = request.get_json(force=True, silent=True)
         
@@ -152,7 +143,6 @@ def webhook_inbound():
         
         print("=" * 50)
         print("📧 INCOMING EMAIL")
-        print("=" * 50)
         
         recipient = json_data.get('to', 'unknown@unknown.com')
         sender = json_data.get('from', 'unknown')
@@ -162,14 +152,17 @@ def webhook_inbound():
         if '<' in sender and '>' in sender:
             sender = sender[sender.find('<')+1:sender.find('>')]
         
-        if 'bounces+' in sender or 'bounce-md' in sender or 'bounce' in sender.lower():
+        if 'bounce' in sender.lower():
             if '@' in sender:
                 domain_part = sender.split('@')[1]
                 if 'openai.com' in domain_part or 'mandrillapp.com' in domain_part:
-                    sender = 'ChatGPT <noreply@tm.openai.com>'
+                    sender = 'ChatGPT'
+                elif 'afraid.org' in domain_part:
+                    sender = 'FreeDNS'
                 else:
                     sender = 'Notification'
         
+        # Get body - HTML first, then plain
         body = json_data.get('html_body', None)
         if not body or body.strip() == '':
             body = json_data.get('plain_body', 'No content')
@@ -179,8 +172,20 @@ def webhook_inbound():
         subject = subject.strip()
         body = body.strip()
         
+        # Parse MIME if needed
         if 'Content-Type:' in body and 'multipart' in body:
             body = parse_email_body(body)
+        
+        # Remove "Received:" headers from body if present
+        if body.startswith('Received:'):
+            lines = body.split('\n')
+            content_start = 0
+            for i, line in enumerate(lines):
+                if line.strip() == '' or not line.startswith(('Received:', 'ARC-', 'DKIM-', 'Authentication-Results:', 'From:', 'To:', 'Subject:', 'Date:', 'Message-ID:', 'MIME-Version:', 'Content-Type:')):
+                    content_start = i
+                    break
+            if content_start > 0:
+                body = '\n'.join(lines[content_start:]).strip()
         
         print(f"  ✉️  From: {sender}")
         print(f"  📬 To: {recipient}")
@@ -207,15 +212,13 @@ def webhook_inbound():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 400
 
-# ADMIN ROUTES (Password required)
+# Admin routes
 @app.route('/admin')
 def admin_panel():
-    """Admin panel with login"""
     return render_template('admin.html')
 
 @app.route('/api/admin/login', methods=['POST'])
 def admin_login():
-    """Admin login"""
     data = request.get_json() or {}
     password = data.get('password', '')
     
@@ -227,14 +230,12 @@ def admin_login():
 @app.route('/api/admin/logout', methods=['POST'])
 @admin_required
 def admin_logout():
-    """Admin logout"""
     session.clear()
     return jsonify({'success': True})
 
 @app.route('/api/admin/stats', methods=['GET'])
 @admin_required
 def admin_stats():
-    """Get admin statistics"""
     try:
         conn = sqlite3.connect('emails.db')
         c = conn.cursor()
@@ -265,7 +266,6 @@ def admin_stats():
 @app.route('/api/admin/addresses', methods=['GET'])
 @admin_required
 def admin_addresses():
-    """Get all email addresses"""
     try:
         conn = sqlite3.connect('emails.db')
         c = conn.cursor()
@@ -294,7 +294,6 @@ def admin_addresses():
 @app.route('/api/admin/emails/<email_address>', methods=['GET'])
 @admin_required
 def admin_get_emails(email_address):
-    """Get emails for admin view"""
     try:
         conn = sqlite3.connect('emails.db')
         c = conn.cursor()
@@ -325,7 +324,6 @@ def admin_get_emails(email_address):
 @app.route('/api/admin/delete/<int:email_id>', methods=['DELETE'])
 @admin_required
 def admin_delete_email(email_id):
-    """Delete email"""
     try:
         conn = sqlite3.connect('emails.db')
         c = conn.cursor()
@@ -341,7 +339,6 @@ def admin_delete_email(email_id):
 @app.route('/api/admin/delete-address/<email_address>', methods=['DELETE'])
 @admin_required
 def admin_delete_address(email_address):
-    """Delete all emails for address"""
     try:
         conn = sqlite3.connect('emails.db')
         c = conn.cursor()
