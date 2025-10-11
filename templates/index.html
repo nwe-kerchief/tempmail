@@ -159,6 +159,14 @@ padding: 12px;
 border-radius: 8px;
 margin-bottom: 15px;
 }
+.email-meta {
+background: rgba(0, 0, 0, 0.1);
+padding: 10px;
+border-radius: 6px;
+margin-bottom: 15px;
+font-size: 12px;
+color: #9ca3af;
+}
 </style>
 </head>
 <body class="text-gray-100 min-h-screen p-2 md:p-4">
@@ -486,15 +494,75 @@ function viewEmail(email, itemEl) {
     bodyEl.innerHTML = cleanBody;
 }
 
-// Extract clean email body from raw email content
+// Improved function to extract clean email body from raw email content
 function extractCleanEmailBody(rawBody) {
-    // If it's already HTML, sanitize and return
-    if (rawBody.includes('<html') || rawBody.includes('<div') || rawBody.includes('<p>')) {
-        return sanitizeHTML(rawBody);
+    // First, try to decode quoted-printable encoding
+    var decodedBody = decodeQuotedPrintable(rawBody);
+    
+    // Try to extract HTML content if present
+    var htmlContent = extractHTMLContent(decodedBody);
+    if (htmlContent) {
+        return sanitizeHTML(htmlContent);
     }
     
-    // For plain text emails with headers, extract the actual message
-    var lines = rawBody.split('\n');
+    // Try to extract plain text content
+    var textContent = extractTextContent(decodedBody);
+    if (textContent) {
+        return formatTextContent(textContent);
+    }
+    
+    // Fallback: return a cleaned version of the raw body
+    return formatTextContent(cleanRawBody(decodedBody));
+}
+
+// Decode quoted-printable encoding
+function decodeQuotedPrintable(str) {
+    // Remove soft line breaks
+    str = str.replace(/=\r?\n/g, '');
+    
+    // Decode quoted-printable sequences
+    str = str.replace(/=([0-9A-F]{2})/g, function(match, p1) {
+        return String.fromCharCode(parseInt(p1, 16));
+    });
+    
+    // Handle specific encoded characters
+    str = str.replace(/=3D/g, '=');
+    str = str.replace(/=20/g, ' ');
+    str = str.replace(/=2E/g, '.');
+    str = str.replace(/=E2=80=99/g, "'");
+    str = str.replace(/=C2=A0/g, ' ');
+    
+    return str;
+}
+
+// Extract HTML content from email body
+function extractHTMLContent(body) {
+    // Look for HTML content
+    var htmlMatch = body.match(/<html[\s\S]*?<\/html>/i);
+    if (htmlMatch) return htmlMatch[0];
+    
+    htmlMatch = body.match(/<body[\s\S]*?<\/body>/i);
+    if (htmlMatch) return htmlMatch[0];
+    
+    htmlMatch = body.match(/<div[\s\S]*?<\/div>/i);
+    if (htmlMatch) return htmlMatch[0];
+    
+    // Look for content after the headers
+    var headerEnd = body.indexOf('Content-Type: text/html');
+    if (headerEnd !== -1) {
+        var contentStart = body.indexOf('>', headerEnd);
+        if (contentStart !== -1) {
+            return body.substring(contentStart + 1);
+        }
+    }
+    
+    return null;
+}
+
+// Extract plain text content from email body
+function extractTextContent(body) {
+    // Remove email headers
+    var lines = body.split('\n');
     var inBody = false;
     var bodyLines = [];
     
@@ -504,7 +572,24 @@ function extractCleanEmailBody(rawBody) {
         // Skip empty lines at the beginning
         if (!inBody && line === '') continue;
         
-        // Look for the start of the message body
+        // Skip technical headers
+        if (line.startsWith('Received:') || 
+            line.startsWith('DKIM-Signature:') ||
+            line.startsWith('ARC-') ||
+            line.startsWith('Content-') ||
+            line.startsWith('MIME-') ||
+            line.startsWith('Message-ID:') ||
+            line.startsWith('X-') ||
+            line.includes('boundary=') ||
+            line.includes('quoted-printable') ||
+            line.includes('base64') ||
+            line.includes('charset=') ||
+            line.includes('multipart/') ||
+            line.startsWith('--') && line.endsWith('--')) {
+            continue;
+        }
+        
+        // Look for the start of the actual message
         if (!inBody && (
             line.toLowerCase().includes('enter this temporary verification code') ||
             line.toLowerCase().includes('verification code') ||
@@ -517,112 +602,94 @@ function extractCleanEmailBody(rawBody) {
             inBody = true;
         }
         
-        // Once we're in the body, collect lines
         if (inBody) {
-            // Skip technical headers and encoded parts
-            if (line.includes('Content-') || 
-                line.includes('MIME-') || 
-                line.includes('boundary=') ||
-                line.includes('DKIM-') ||
-                line.includes('ARC-') ||
-                line.includes('Received:') ||
-                line.includes('Message-ID:') ||
-                line.includes('X-') ||
-                line.startsWith('--') ||
-                line.includes('quoted-printable') ||
-                line.includes('base64') ||
-                line.includes('charset=') ||
-                line.includes('multipart/') ||
-                line.includes('text/') ||
-                line.includes('=3D"') ||
-                line.includes('=20') ||
-                line.includes('=E2=80=99')) {
-                continue;
-            }
-            
-            // Decode quoted-printable encoded text
-            line = line.replace(/=([0-9A-F]{2})/g, function(match, p1) {
-                return String.fromCharCode(parseInt(p1, 16));
-            });
-            
-            // Remove =3D (equals sign in quoted-printable)
-            line = line.replace(/=3D/g, '=');
-            
-            // Remove =20 (space in quoted-printable)
-            line = line.replace(/=20/g, ' ');
-            
-            // Remove =2E (period in quoted-printable)
-            line = line.replace(/=2E/g, '.');
-            
-            // Remove =E2=80=99 (right single quote in quoted-printable)
-            line = line.replace(/=E2=80=99/g, "'");
-            
             bodyLines.push(line);
         }
     }
     
-    var cleanText = bodyLines.join('\n').trim();
-    
-    // If we didn't find much content, try a different approach
-    if (cleanText.length < 50) {
-        // Look for verification codes
-        var codeMatch = rawBody.match(/\b\d{4,8}\b/);
-        if (codeMatch) {
-            cleanText = "Your verification code is: \n\n" + 
-                       '<div class="verification-code">' + codeMatch[0] + '</div>' +
-                       "\n\nEnter this code to verify your account.";
-        } else {
-            // Fallback: extract text between known markers
-            var startMarker = rawBody.indexOf('Enter this temporary verification code');
-            if (startMarker === -1) startMarker = rawBody.indexOf('verification code');
-            
-            if (startMarker !== -1) {
-                var endMarker = rawBody.indexOf('Please ignore this email');
-                if (endMarker === -1) endMarker = rawBody.indexOf('Best,');
-                
-                if (endMarker !== -1 && endMarker > startMarker) {
-                    cleanText = rawBody.substring(startMarker, endMarker).trim();
-                } else {
-                    cleanText = rawBody.substring(startMarker).trim();
-                }
-            }
-        }
-    }
-    
-    // Format the clean text as HTML
-    return formatEmailContent(cleanText);
+    var text = bodyLines.join('\n').trim();
+    return text.length > 0 ? text : null;
 }
 
-// Format email content with proper HTML structure
-function formatEmailContent(text) {
+// Clean raw body when no structured content found
+function cleanRawBody(body) {
+    var lines = body.split('\n');
+    var cleanLines = [];
+    
+    for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim();
+        
+        // Skip technical lines
+        if (line.startsWith('Received:') || 
+            line.startsWith('DKIM-Signature:') ||
+            line.startsWith('ARC-') ||
+            line.startsWith('Content-') ||
+            line.startsWith('MIME-') ||
+            line.startsWith('Message-ID:') ||
+            line.startsWith('X-') ||
+            line.includes('boundary=') ||
+            line.includes('quoted-printable') ||
+            line.includes('base64') ||
+            line.includes('charset=') ||
+            line.includes('multipart/') ||
+            line.startsWith('--') && line.endsWith('--')) {
+            continue;
+        }
+        
+        // Skip very long lines (likely encoded data)
+        if (line.length > 200) continue;
+        
+        cleanLines.push(line);
+    }
+    
+    return cleanLines.join('\n');
+}
+
+// Format plain text content with proper HTML structure
+function formatTextContent(text) {
+    // Extract verification code
+    var codeMatch = text.match(/\b\d{4,8}\b/);
+    var verificationCode = codeMatch ? codeMatch[0] : null;
+    
     // Split into paragraphs
     var paragraphs = text.split(/\n\s*\n/);
     var html = '';
+    
+    // Add verification code prominently if found
+    if (verificationCode) {
+        html += '<div class="verification-code">' + verificationCode + '</div>';
+    }
     
     for (var i = 0; i < paragraphs.length; i++) {
         var paragraph = paragraphs[i].trim();
         if (paragraph.length === 0) continue;
         
-        // Check if this paragraph contains a verification code
-        var codeMatch = paragraph.match(/\b\d{4,8}\b/);
-        if (codeMatch && paragraph.length < 100) {
-            html += '<div class="verification-code">' + codeMatch[0] + '</div>';
+        // Skip the line that contains the verification code (already displayed)
+        if (verificationCode && paragraph.includes(verificationCode)) continue;
+        
+        // Skip technical lines
+        if (paragraph.includes('by cloudflare-email.net') ||
+            paragraph.includes('ARC-Seal:') ||
+            paragraph.includes('DKIM-Signature:') ||
+            paragraph.includes('Received:')) {
             continue;
         }
         
-        // Check if this is a greeting or signature
-        if (paragraph.toLowerCase().includes('best,') || 
-            paragraph.toLowerCase().includes('regards,') ||
-            paragraph.toLowerCase().includes('sincerely,')) {
-            html += '<div class="email-header">' + escapeHtml(paragraph) + '</div>';
-            continue;
+        // Format specific message parts
+        if (paragraph.toLowerCase().includes('enter this temporary verification code')) {
+            html += '<div class="email-header"><p>' + escapeHtml(paragraph) + '</p></div>';
+        } else if (paragraph.toLowerCase().includes('please ignore this email')) {
+            html += '<div class="email-meta"><p>' + escapeHtml(paragraph) + '</p></div>';
+        } else if (paragraph.toLowerCase().includes('best,') || 
+                   paragraph.toLowerCase().includes('regards,') ||
+                   paragraph.toLowerCase().includes('the chatgpt team')) {
+            html += '<div class="email-header"><p>' + escapeHtml(paragraph) + '</p></div>';
+        } else {
+            html += '<p>' + escapeHtml(paragraph) + '</p>';
         }
-        
-        // Regular paragraph
-        html += '<p>' + escapeHtml(paragraph) + '</p>';
     }
     
-    return html;
+    return html || '<p>No readable content found in this email.</p>';
 }
 
 // Sanitize HTML to prevent XSS attacks
