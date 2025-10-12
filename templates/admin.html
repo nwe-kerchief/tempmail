@@ -190,128 +190,125 @@ background: rgba(255, 255, 255, 0.5);
 
 <!-- ADMIN DASHBOARD (Hidden until logged in) -->
 <div id="admin-dashboard" style="display:none;">
-<div class="w-full max-w-7xl mx-auto fade-in">
-<header class="text-center mb-8">
-<div class="flex items-center justify-between mb-4">
-<div class="flex items-center">
-<i class="fas fa-shield-alt text-3xl text-white mr-3"></i>
-<h1 class="text-4xl font-bold text-white">Admin Dashboard</h1>
-</div>
-<div class="flex gap-2">
-<a href="/" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105">
-<i class="fas fa-home mr-2"></i>Main Site
-</a>
-<button id="logout-btn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105">
-<i class="fas fa-sign-out-alt mr-2"></i>Logout
-</button>
-</div>
-</div>
-<p class="text-gray-300">Monitor and manage all temporary email addresses</p>
-</header>
+    <div class="w-full max-w-7xl mx-auto fade-in">
+        <header class="text-center mb-8">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+                <div class="flex items-center">
+                    <i class="fas fa-shield-alt text-3xl text-white mr-3"></i>
+                    <h1 class="text-4xl font-bold text-white">Admin Dashboard</h1>
+                </div>
+                <div class="flex gap-2">
+                    <a href="/" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105">
+                        <i class="fas fa-home mr-2"></i>Main Site
+                    </a>
+                    <button id="logout-btn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105">
+                        <i class="fas fa-sign-out-alt mr-2"></i>Logout
+                    </button>
+                </div>
+            </div>
+            <p class="text-gray-300">Monitor and manage all temporary email addresses</p>
+        </header>
 
-<!-- Stats Cards -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-<div class="glass-effect rounded-xl p-6 fade-in">
-<div class="flex items-center justify-between">
-<div>
-<p class="text-gray-300 text-sm">Total Emails</p>
-<p id="stat-emails" class="text-3xl font-bold text-white">0</p>
-</div>
-<i class="fas fa-envelope text-4xl text-blue-400"></i>
-</div>
-</div>
-<div class="glass-effect rounded-xl p-6 fade-in">
-<div class="flex items-center justify-between">
-<div>
-<p class="text-gray-300 text-sm">Email Addresses</p>
-<p id="stat-addresses" class="text-3xl font-bold text-white">0</p>
-</div>
-<i class="fas fa-users text-4xl text-green-400"></i>
-</div>
-</div>
-<div class="glass-effect rounded-xl p-6 fade-in">
-<div class="flex items-center justify-between">
-<div>
-<p class="text-gray-300 text-sm">Last 24 Hours</p>
-<p id="stat-recent" class="text-3xl font-bold text-white">0</p>
-</div>
-<i class="fas fa-clock text-4xl text-purple-400"></i>
-</div>
-</div>
-</div>
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="glass-effect rounded-xl p-6 fade-in">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-300 text-sm">Total Emails</p>
+                        <p id="stat-emails" class="text-3xl font-bold text-white">0</p>
+                    </div>
+                    <i class="fas fa-envelope text-4xl text-blue-400"></i>
+                </div>
+            </div>
+            <div class="glass-effect rounded-xl p-6 fade-in">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-300 text-sm">Email Addresses</p>
+                        <p id="stat-addresses" class="text-3xl font-bold text-white">0</p>
+                    </div>
+                    <i class="fas fa-users text-4xl text-green-400"></i>
+                </div>
+            </div>
+            <div class="glass-effect rounded-xl p-6 fade-in">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-300 text-sm">Last 24 Hours</p>
+                        <p id="stat-recent" class="text-3xl font-bold text-white">0</p>
+                    </div>
+                    <i class="fas fa-clock text-4xl text-purple-400"></i>
+                </div>
+            </div>
+        </div>
 
-<!-- Main Content -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-<!-- Email Addresses List -->
-<div class="glass-effect rounded-xl p-6 fade-in">
-<div class="flex justify-between items-center mb-4">
-<h2 class="text-xl font-bold text-white">
-<i class="fas fa-list mr-2"></i>Email Addresses
-</h2>
-<div class="flex gap-2">
-<button onclick="loadAddresses()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition-all transform hover:scale-105">
-<i class="fas fa-sync-alt mr-1"></i> Refresh
-</button>
-</div>
-</div>
-<div id="address-list" class="space-y-2 max-h-96 overflow-y-auto custom-scrollbar">
-<p class="text-gray-400 text-center py-8">Loading addresses...</p>
-</div>
-</div>
+        <!-- Main Content -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <!-- Email Addresses List -->
+            <div class="glass-effect rounded-xl p-6 fade-in">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                    <h2 class="text-xl font-bold text-white">
+                        <i class="fas fa-list mr-2"></i>Email Addresses
+                    </h2>
+                    <button onclick="loadAddresses()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition-all transform hover:scale-105">
+                        <i class="fas fa-sync-alt mr-1"></i> Refresh
+                    </button>
+                </div>
+                <div id="address-list" class="space-y-2 max-h-96 overflow-y-auto custom-scrollbar">
+                    <p class="text-gray-400 text-center py-8">Loading addresses...</p>
+                </div>
+            </div>
 
-<!-- Email Details -->
-<div class="glass-effect rounded-xl p-6 fade-in">
-<div class="flex justify-between items-center mb-4">
-<h2 class="text-xl font-bold text-white">
-<i class="fas fa-envelope-open mr-2"></i>Emails for: 
-<span id="selected-address" class="text-blue-400">None selected</span>
-</h2>
-<div id="email-count-badge" class="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-medium hidden">
-0 emails
-</div>
-</div>
-<div id="email-details" class="space-y-2 max-h-96 overflow-y-auto custom-scrollbar">
-<p class="text-gray-400 text-center py-8">Select an email address to view emails</p>
-</div>
-</div>
-</div>
+            <!-- Email Details -->
+            <div class="glass-effect rounded-xl p-6 fade-in">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                    <h2 class="text-xl font-bold text-white">
+                        <i class="fas fa-envelope-open mr-2"></i>Emails for: 
+                        <span id="selected-address" class="text-blue-400">None selected</span>
+                    </h2>
+                    <div id="email-count-badge" class="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-medium hidden">
+                        0 emails
+                    </div>
+                </div>
+                <div id="email-details" class="space-y-2 max-h-96 overflow-y-auto custom-scrollbar">
+                    <p class="text-gray-400 text-center py-8">Select an address to view emails</p>
+                </div>
+            </div>
+        </div>
 
-<!-- Active Sessions Section -->
-<div class="glass-effect rounded-xl p-6 fade-in mt-6">
-<div class="flex justify-between items-center mb-4">
-<h2 class="text-xl font-bold text-white">
-<i class="fas fa-play-circle mr-2"></i>Active Sessions
-</h2>
-<button onclick="loadActiveSessions()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg transition-all transform hover:scale-105">
-<i class="fas fa-sync-alt mr-1"></i> Refresh
-</button>
-</div>
-<div id="active-sessions" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
-<p class="text-gray-400 text-center py-8">Loading active sessions...</p>
-</div>
-</div>
-</div>
-<!-- Blacklist Management Section -->
+        <!-- Active Sessions Section -->
+        <div class="glass-effect rounded-xl p-6 fade-in mb-6">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                <h2 class="text-xl font-bold text-white">
+                    <i class="fas fa-play-circle mr-2"></i>Active Sessions
+                </h2>
+                <button onclick="loadActiveSessions()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg transition-all transform hover:scale-105">
+                    <i class="fas fa-sync-alt mr-1"></i> Refresh
+                </button>
+            </div>
+            <div id="active-sessions" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+                <p class="text-gray-400 text-center py-8">Loading active sessions...</p>
+            </div>
+        </div>
 
-<div class="glass-effect rounded-xl p-6 fade-in mt-6">
-    <div class="flex justify-between items-center mb-4">
-        <h2 class="text-xl font-bold text-white">
-            <i class="fas fa-ban mr-2"></i>Blacklisted Usernames
-        </h2>
-        <div class="flex gap-2">
-            <input type="text" id="new-blacklist-username" placeholder="Enter username to blacklist" 
-                   class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none">
-            <button onclick="addToBlacklist()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105">
-                <i class="fas fa-plus mr-1"></i> Add
-            </button>
-        </div>
-    </div>
-    <div id="blacklist-list" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
-        <p class="text-gray-400 text-center py-8">Loading blacklist...</p>
-    </div>
+        <!-- Blacklist Management Section -->
+        <div class="glass-effect rounded-xl p-6 fade-in">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                <h2 class="text-xl font-bold text-white">
+                    <i class="fas fa-ban mr-2"></i>Blacklisted Usernames
+                </h2>
+                <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                    <input type="text" id="new-blacklist-username" placeholder="Enter username to blacklist" 
+                           class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none w-full sm:w-48">
+                    <button onclick="addToBlacklist()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105 whitespace-nowrap">
+                        <i class="fas fa-plus mr-1"></i> Add to Blacklist
+                    </button>
+                </div>
+            </div>
+            <div id="blacklist-list" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+                <p class="text-gray-400 text-center py-8">Loading blacklist...</p>
+            </div>
+        </div>
+    </div>
 </div>
-</div>
-
 
 
 <script>
