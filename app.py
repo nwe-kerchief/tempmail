@@ -51,10 +51,11 @@ def init_db():
         c.execute('''
             CREATE TABLE IF NOT EXISTS sessions (
                 session_token TEXT PRIMARY KEY,
-                email_address TEXT NOT NULL,
+                email_address TEXT NOT NULL UNIQUE,
                 created_at TIMESTAMP NOT NULL,
                 expires_at TIMESTAMP NOT NULL,
-                last_activity TIMESTAMP NOT NULL
+                last_activity TIMESTAMP NOT NULL,
+                is_active BOOLEAN DEFAULT TRUE
             )
         ''')
         
@@ -78,6 +79,7 @@ def init_db():
         c.execute('CREATE INDEX IF NOT EXISTS idx_session ON emails(session_token)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_received_at ON emails(received_at)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_email_address ON sessions(email_address)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_is_active ON sessions(is_active)')
         
         conn.commit()
         conn.close()
@@ -229,19 +231,40 @@ def create_email():
         
         email_address = f"{username}@{DOMAIN}"
         
+        # Check if email already has an active session
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('''
+            SELECT session_token, is_active 
+            FROM sessions 
+            WHERE email_address = %s AND expires_at > NOW()
+            ORDER BY created_at DESC 
+            LIMIT 1
+        ''', (email_address,))
+        
+        existing_session = c.fetchone()
+        
+        if existing_session and existing_session[1]:  # is_active is True
+            conn.close()
+            return jsonify({'error': 'Email address is already in use by another session'}), 409
+        
         # Create session token
         session_token = secrets.token_urlsafe(32)
         created_at = datetime.now()
         expires_at = created_at + timedelta(hours=1)
         
-        # Store session in PostgreSQL
-        conn = get_db()
-        c = conn.cursor()
-        
+        # Deactivate any old sessions for this email
         c.execute('''
-            INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity)
-            VALUES (%s, %s, %s, %s, %s)
-        ''', (session_token, email_address, created_at, expires_at, created_at))
+            UPDATE sessions 
+            SET is_active = FALSE 
+            WHERE email_address = %s
+        ''', (email_address,))
+        
+        # Store new session in PostgreSQL
+        c.execute('''
+            INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity, is_active)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        ''', (session_token, email_address, created_at, expires_at, created_at, True))
         
         conn.commit()
         conn.close()
@@ -269,9 +292,9 @@ def get_emails(email_address):
         conn = get_db()
         c = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Verify session
+        # Verify session is active
         c.execute('''
-            SELECT email_address, expires_at 
+            SELECT email_address, expires_at, is_active
             FROM sessions 
             WHERE session_token = %s AND email_address = %s
         ''', (session_token, email_address))
@@ -284,8 +307,16 @@ def get_emails(email_address):
         
         # Check if expired
         if datetime.now() > session_data['expires_at']:
+            # Mark session as inactive
+            c.execute('UPDATE sessions SET is_active = FALSE WHERE session_token = %s', (session_token,))
+            conn.commit()
             conn.close()
             return jsonify({'error': 'Session expired'}), 401
+        
+        # Check if session is active
+        if not session_data['is_active']:
+            conn.close()
+            return jsonify({'error': 'Session has been ended'}), 401
         
         # Update last activity
         c.execute('''
@@ -321,6 +352,40 @@ def get_emails(email_address):
     except Exception as e:
         logger.error(f"❌ Error fetching emails: {e}")
         return jsonify({'error': 'Failed to fetch emails'}), 500
+
+@app.route('/api/session/end', methods=['POST'])
+def end_session():
+    try:
+        data = request.get_json() or {}
+        session_token = data.get('session_token')
+        email_address = data.get('email_address')
+        
+        if not session_token or not email_address:
+            return jsonify({'error': 'Missing session data'}), 400
+        
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Verify and end session
+        c.execute('''
+            UPDATE sessions 
+            SET is_active = FALSE 
+            WHERE session_token = %s AND email_address = %s
+        ''', (session_token, email_address))
+        
+        if c.rowcount == 0:
+            conn.close()
+            return jsonify({'error': 'Session not found'}), 404
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"✅ Session ended for: {email_address}")
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        logger.error(f"❌ Error ending session: {e}")
+        return jsonify({'error': 'Failed to end session'}), 500
 
 @app.route('/api/webhook/inbound', methods=['POST'])
 def webhook_inbound():
@@ -381,7 +446,7 @@ def webhook_inbound():
         c.execute('''
             SELECT session_token 
             FROM sessions 
-            WHERE email_address = %s AND expires_at > NOW()
+            WHERE email_address = %s AND expires_at > NOW() AND is_active = TRUE
             ORDER BY created_at DESC 
             LIMIT 1
         ''', (recipient,))
