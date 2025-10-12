@@ -886,6 +886,17 @@ def remove_from_blacklist(username):
         logger.error(f"❌ Error removing from blacklist: {e}")
         return jsonify({'error': str(e)}), 500
 
+
+@app.before_request
+def check_admin_session():
+    """Check and expire admin sessions automatically"""
+    if session.get('admin_authenticated'):
+        # Set session to expire after 1 hour of inactivity
+        session.permanent = True
+        app.permanent_session_lifetime = timedelta(hours=1)
+        
+        # You can add additional checks here if needed
+        # For example, check last activity time
 # Error handlers
 @app.errorhandler(404)
 def not_found(error):
@@ -907,6 +918,7 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
 
 
 
