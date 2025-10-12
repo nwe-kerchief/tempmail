@@ -293,10 +293,109 @@ background: rgba(255, 255, 255, 0.5);
 </div>
 </div>
 
+<!-- Blacklist Management Section -->
+<div class="glass-effect rounded-xl p-6 fade-in mt-6">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold text-white">
+            <i class="fas fa-ban mr-2"></i>Blacklisted Usernames
+        </h2>
+        <div class="flex gap-2">
+            <input type="text" id="new-blacklist-username" placeholder="Enter username to blacklist" 
+                   class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none">
+            <button onclick="addToBlacklist()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105">
+                <i class="fas fa-plus mr-1"></i> Add
+            </button>
+        </div>
+    </div>
+    <div id="blacklist-list" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+        <p class="text-gray-400 text-center py-8">Loading blacklist...</p>
+    </div>
+</div>
+
 <script>
 var API_URL = window.location.origin;
 var selectedAddress = null;
 var autoRefreshInterval = null;
+var DOMAIN = 'aungmyomyatzaw.online';
+
+// Blacklist management functions
+function loadBlacklist() {
+    // For now, we'll show the static blacklist. You can make this dynamic later.
+    var blacklistEl = document.getElementById('blacklist-list');
+    var blacklisted = ['ammz', 'admin', 'owner', 'root', 'system'];
+    
+    blacklistEl.innerHTML = '';
+    
+    if (blacklisted.length === 0) {
+        blacklistEl.innerHTML = '<p class="text-gray-400 text-center py-8">No blacklisted usernames</p>';
+        return;
+    }
+    
+    blacklisted.forEach(username => {
+        var item = document.createElement('div');
+        item.className = 'bg-gray-800 p-3 rounded-lg border border-gray-700 flex justify-between items-center';
+        item.innerHTML = `
+            <div>
+                <span class="text-white font-semibold">${escapeHtml(username)}</span>
+                <span class="text-xs text-gray-400 ml-2">@${DOMAIN}</span>
+            </div>
+            <button onclick="removeFromBlacklist('${escapeHtml(username)}')" class="text-green-400 hover:text-green-300 p-1 rounded transition-colors" title="Remove from blacklist">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        blacklistEl.appendChild(item);
+    });
+}
+
+function addToBlacklist() {
+    var usernameInput = document.getElementById('new-blacklist-username');
+    var username = usernameInput.value.trim().toLowerCase();
+    
+    if (!username) {
+        showNotification('❌ Please enter a username', 'error');
+        return;
+    }
+    
+    if (!/^[a-zA-Z0-9-_]+$/.test(username)) {
+        showNotification('❌ Username can only contain letters, numbers, hyphens, and underscores', 'error');
+        return;
+    }
+    
+    showModal(
+        'Add to Blacklist',
+        `Are you sure you want to blacklist the username "<strong>${escapeHtml(username)}</strong>"?<br><br>This will prevent all users from using this username.`,
+        function() {
+            // For now, just show a message. You can implement backend API later.
+            showNotification(`✅ Username "${username}" would be blacklisted (backend integration needed)`, 'success');
+            usernameInput.value = '';
+            loadBlacklist();
+        }
+    );
+}
+
+function removeFromBlacklist(username) {
+    showModal(
+        'Remove from Blacklist',
+        `Are you sure you want to remove "<strong>${escapeHtml(username)}</strong>" from the blacklist?<br><br>Users will be able to use this username again.`,
+        function() {
+            // For now, just show a message. You can implement backend API later.
+            showNotification(`✅ Username "${username}" would be removed from blacklist (backend integration needed)`, 'success');
+            loadBlacklist();
+        }
+    );
+}
+
+// Update the startAutoRefresh to include blacklist
+function startAutoRefresh() {
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    autoRefreshInterval = setInterval(() => {
+        loadStats();
+        loadAddresses();
+        loadActiveSessions();
+        loadBlacklist();
+        if (selectedAddress) viewEmails(selectedAddress);
+    }, 10000);
+}
 
 // Custom Modal Functions
 function showModal(title, message, confirmCallback) {
@@ -360,12 +459,13 @@ function adminLogin() {
         return res.json();
     })
     .then(data => {
-        if (data.success) {
+                if (data.success) {
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('admin-dashboard').style.display = 'block';
             loadStats();
             loadAddresses();
             loadActiveSessions();
+            loadBlacklist();
             startAutoRefresh();
             showNotification('✅ Successfully logged in', 'success');
         } else {
@@ -720,26 +820,6 @@ function startAutoRefresh() {
         if (selectedAddress) viewEmails(selectedAddress);
     }, 8000); // Refresh every 10 seconds
 }
-
-// Initialize on load
-document.addEventListener('DOMContentLoaded', function() {
-    // Check if already logged in
-    fetch(API_URL + '/api/admin/stats')
-    .then(res => {
-        if (res.ok) {
-            // Already logged in, show dashboard
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('admin-dashboard').style.display = 'block';
-            loadStats();
-            loadAddresses();
-            loadActiveSessions();
-            startAutoRefresh();
-        }
-    })
-    .catch(() => {
-        // Not logged in, show login screen
-    });
-});
 </script>
 </body>
 </html>
