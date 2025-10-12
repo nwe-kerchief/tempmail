@@ -580,10 +580,12 @@ function handleApiError(error, defaultMessage = 'An error occurred') {
     }
 }
 
-// Session Management
 function clearSession() {
     currentEmail = '';
     sessionToken = '';
+    sessionStartTime = null;
+    
+    // Clear localStorage completely
     localStorage.removeItem('tempMailSession');
     
     // Clear the username input field
@@ -618,6 +620,11 @@ function clearSession() {
         clearInterval(timeUpdateInterval);
         timeUpdateInterval = null;
     }
+    
+    // Force reload the page to ensure clean state
+    setTimeout(() => {
+        window.location.reload();
+    }, 500);
     
     console.log('✅ Session cleared completely');
 }
@@ -1458,6 +1465,9 @@ async function verifyAdminPassword() {
 function activateAdminMode() {
     isAdminMode = true;
     
+    // Clear any existing session when entering admin mode
+    clearSession();
+    
     // Change UI colors
     document.body.classList.add('admin-mode');
     document.querySelector('header').classList.add('admin-header');
@@ -1467,17 +1477,20 @@ function activateAdminMode() {
     header.innerHTML = '<i class="fas fa-shield-alt text-xl md:text-3xl mr-2 md:mr-3"></i><span class="text-xl md:text-4xl lg:text-5xl font-bold">ADMIN MODE - TempMail</span>';
     header.classList.add('admin-text');
     
-    // Update the subtitle to match original styling
+    // Update the subtitle
     const subtitle = document.querySelector('header p');
     if (subtitle) {
         subtitle.innerHTML = '<span class="admin-text">Admin Mode Active - Blacklist Bypass Enabled</span>';
     }
     
-    showNotification('🔓 Admin Mode Activated', 'success');
+    showNotification('🔓 Admin Mode Activated - Session cleared', 'success');
 }
 
 function deactivateAdminMode() {
     isAdminMode = false;
+    
+    // Clear any admin-created session
+    clearSession();
     
     // Restore normal UI
     document.body.classList.remove('admin-mode');
@@ -1495,27 +1508,36 @@ function deactivateAdminMode() {
         subtitle.classList.remove('admin-text');
     }
     
-    showNotification('🔒 Admin Mode Deactivated', 'info');
+    // Force page reload after a short delay to ensure clean state
+    setTimeout(() => {
+        window.location.reload();
+    }, 1000);
 }
 
-// Check admin status on page load - but don't auto-activate
-// This ensures admin mode doesn't persist after refresh
+// Reset on page load
 window.addEventListener('load', function() {
-    // Always start in normal mode
+    // Check if we're coming from an admin session and clear it
+    const savedSession = localStorage.getItem('tempMailSession');
+    if (savedSession) {
+        try {
+            const session = JSON.parse(savedSession);
+            // If the email contains blacklisted usernames like 'ammz', clear it
+            if (session.email && (session.email.includes('ammz@') || session.email.includes('admin@'))) {
+                console.log('🔄 Clearing admin session from page load');
+                clearSession();
+                return;
+            }
+        } catch (e) {
+            // If there's any error parsing, clear the session
+            clearSession();
+        }
+    }
+    
+    // Always deactivate admin mode on page load
     if (isAdminMode) {
         deactivateAdminMode();
     }
-    
-    // Clear any potential admin session on page load
-    fetch('/api/admin/logout', {
-        method: 'POST',
-        credentials: 'include'
-    }).catch(() => {
-        // Silently fail if logout fails
-    });
 });
-
-
     // Auto-logout when page is closed/refreshed
 window.addEventListener('beforeunload', function() {
     if (isAdminMode) {
@@ -1660,6 +1682,7 @@ initApp();
 </script>
 </body>
 </html>
+
 
 
 
