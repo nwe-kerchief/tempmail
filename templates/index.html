@@ -534,6 +534,9 @@ function createEmail(customName) {
         document.getElementById('domain-select').value = parts[1];
         document.getElementById('current-email').textContent = data.email;
         document.getElementById('email-display').classList.remove('hidden');
+        // After: document.getElementById('email-display').classList.remove('hidden');
+        document.getElementById('end-session-btn').classList.remove('hidden');
+
         
         // Reset email view to placeholder
         document.getElementById('email-placeholder').style.display = 'flex';
@@ -1119,4 +1122,5 @@ initApp();
 </script>
 </body>
 </html>
+
 
