@@ -221,7 +221,6 @@ def index():
 @app.route('/api/domains', methods=['GET'])
 def get_domains():
     return jsonify({'domains': [DOMAIN]})
-
 @app.route('/api/create', methods=['POST'])
 def create_email():
     try:
@@ -239,7 +238,7 @@ def create_email():
             username = custom_name.lower()
             username = ''.join(c for c in username if c.isalnum() or c in '-_')
             if not username:
-                return jsonify({'error': 'Invalid username'}), 400
+                return jsonify({'error': 'Invalid username', 'code': 'INVALID_USERNAME'}), 400
         else:
             # Generate random name: malename + femalename + 3 digits
             male_name = random.choice(MALE_NAMES)
@@ -294,11 +293,17 @@ def create_email():
                 pass
             elif len(existing_session) > 1 and existing_session[1]:  # is_active is True
                 conn.close()
-                return jsonify({'error': 'Email address is already in use by another session'}), 409
+                return jsonify({
+                    'error': 'This email address is already in use by another session. Please choose a different username or wait for the current session to expire.',
+                    'code': 'EMAIL_IN_USE'
+                }), 409
             else:
                 # No is_active column, but session exists
                 conn.close()
-                return jsonify({'error': 'Email address is already in use by another session'}), 409
+                return jsonify({
+                    'error': 'This email address is already in use by another session. Please choose a different username or wait for the current session to expire.',
+                    'code': 'EMAIL_IN_USE'
+                }), 409
         
         # Create session token
         session_token = secrets.token_urlsafe(32)
@@ -340,7 +345,7 @@ def create_email():
         
     except Exception as e:
         logger.error(f"❌ Error creating email: {e}")
-        return jsonify({'error': 'Failed to create session'}), 500
+        return jsonify({'error': 'Failed to create session', 'code': 'SERVER_ERROR'}), 500
 
 @app.route('/api/emails/<email_address>', methods=['GET'])
 def get_emails(email_address):
@@ -803,3 +808,4 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
