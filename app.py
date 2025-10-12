@@ -435,16 +435,23 @@ def get_emails(email_address):
             # Convert to proper datetime object if it's a string
             if isinstance(display_timestamp, str):
                 try:
-                    display_timestamp = datetime.fromisoformat(display_timestamp.replace('Z', '+00:00'))
+                    # Handle different timestamp formats
+                    if 'Z' in display_timestamp:
+                        display_timestamp = datetime.fromisoformat(display_timestamp.replace('Z', '+00:00'))
+                    else:
+                        display_timestamp = datetime.fromisoformat(display_timestamp)
                 except:
                     display_timestamp = datetime.now()
+            
+            # Convert to local timezone (subtract 6 hours for your timezone)
+            local_timestamp = display_timestamp - timedelta(hours=6)
             
             emails.append({
                 'id': len(emails) + 1,
                 'sender': row['sender'],
                 'subject': row['subject'],
                 'body': row['body'],
-                'timestamp': display_timestamp.isoformat() if hasattr(display_timestamp, 'isoformat') else str(display_timestamp)
+                'timestamp': local_timestamp.isoformat()
             })
         
         conn.close()
@@ -722,10 +729,17 @@ def admin_addresses():
         
         addresses = []
         for row in c.fetchall():
+            if row['last_email']:
+                # Convert to local timezone (subtract 6 hours)
+                local_time = row['last_email'] - timedelta(hours=6)
+                last_email_str = local_time.isoformat()
+            else:
+                last_email_str = None
+                
             addresses.append({
                 'address': row['recipient'],
                 'count': row['count'],
-                'last_email': row['last_email'].isoformat() if row['last_email'] else None
+                'last_email': last_email_str
             })
         
         conn.close()
@@ -875,3 +889,4 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
