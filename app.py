@@ -79,7 +79,7 @@ def init_db():
             )
         ''')
         
-        # Blacklist table - NEW: Persist blacklist in database
+        # Blacklist table
         c.execute('''
             CREATE TABLE IF NOT EXISTS blacklist (
                 id SERIAL PRIMARY KEY,
@@ -121,6 +121,15 @@ def init_db():
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
 
+# MOVE ADMIN_REQUIRED DECORATOR TO TOP - BEFORE IT'S USED
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('admin_authenticated'):
+            return jsonify({'error': 'Unauthorized'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
 init_db()
 
 def is_username_blacklisted(username):
@@ -137,6 +146,107 @@ def is_username_blacklisted(username):
         return username.lower() in INITIAL_BLACKLIST
 
 # ... (keep all your existing email parsing functions)
+
+def extract_content_from_mime(msg):
+    """Extract content from MIME message"""
+    html_content = None
+    text_content = None
+    
+    if msg.is_multipart():
+        for part in msg.walk():
+            content_type = part.get_content_type()
+            content_disposition = str(part.get("Content-Disposition", ""))
+            
+            # Skip attachments
+            if "attachment" in content_disposition:
+                continue
+            
+            try:
+                payload = part.get_payload(decode=True)
+                if payload:
+                    decoded = payload.decode('utf-8', errors='ignore')
+                    
+                    if content_type == 'text/html' and not html_content:
+                        html_content = decoded
+                    elif content_type == 'text/plain' and not text_content:
+                        text_content = decoded
+            except Exception as e:
+                logger.warning(f"Failed to decode part: {e}")
+                continue
+    else:
+        payload = msg.get_payload(decode=True)
+        if payload:
+            decoded = payload.decode('utf-8', errors='ignore')
+            if msg.get_content_type() == 'text/html':
+                html_content = decoded
+            else:
+                text_content = decoded
+    
+    return html_content or text_content
+
+def clean_raw_email(raw_body):
+    """Clean raw email body by removing headers"""
+    header_patterns = [
+        'Received:', 'Received-SPF:', 'ARC-Seal:', 'ARC-Message-Signature:', 
+        'ARC-Authentication-Results:', 'DKIM-Signature:', 'Authentication-Results:',
+        'Return-Path:', 'Delivered-To:', 'X-', 'Message-ID:', 'Date:', 
+        'MIME-Version:', 'Content-Type:', 'Content-Transfer-Encoding:',
+        'Content-ID:', 'Reply-To:', 'List-', 'Precedence:'
+    ]
+    
+    lines = raw_body.split('\n')
+    clean_lines = []
+    skip_mode = True
+    empty_line_count = 0
+    
+    for line in lines:
+        stripped = line.strip()
+        
+        if stripped == '':
+            empty_line_count += 1
+            if empty_line_count >= 2:
+                skip_mode = False
+            continue
+        else:
+            empty_line_count = 0
+        
+        is_header = False
+        for pattern in header_patterns:
+            if stripped.startswith(pattern) or (skip_mode and ':' in stripped[:50]):
+                is_header = True
+                break
+        
+        if skip_mode and (line.startswith(' ') or line.startswith('\t')):
+            is_header = True
+        
+        if not is_header:
+            skip_mode = False
+        
+        if not skip_mode and not is_header:
+            clean_lines.append(line)
+    
+    return '\n'.join(clean_lines).strip()
+
+def parse_email_body(raw_body):
+    """Parse MIME email and extract clean HTML/text"""
+    try:
+        # If it's already clean HTML/text, return as is
+        if '<html' in raw_body.lower() or '<body' in raw_body.lower():
+            return raw_body
+        
+        if 'Content-Type:' in raw_body:
+            msg = email.message_from_string(raw_body, policy=policy.default)
+            content = extract_content_from_mime(msg)
+            if content:
+                return content
+        
+        return clean_raw_email(raw_body)
+        
+    except Exception as e:
+        logger.error(f"Email parsing error: {e}")
+        return clean_raw_email(raw_body)
+
+# ... (rest of your routes remain exactly the same)
 
 @app.route('/')
 def index():
@@ -249,7 +359,318 @@ def create_email():
         logger.error(f"❌ Error creating email: {e}")
         return jsonify({'error': 'Failed to create session', 'code': 'SERVER_ERROR'}), 500
 
-# ... (keep all your existing routes: get_emails, end_session, webhook_inbound, etc.)
+@app.route('/api/emails/<email_address>', methods=['GET'])
+def get_emails(email_address):
+    try:
+        session_token = request.headers.get('X-Session-Token')
+        
+        if not session_token:
+            return jsonify({'error': 'No session token'}), 401
+        
+        conn = get_db()
+        c = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Check if is_active column exists
+        try:
+            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
+            has_is_active = c.fetchone() is not None
+            
+            if has_is_active:
+                c.execute('''
+                    SELECT email_address, expires_at, is_active
+                    FROM sessions 
+                    WHERE session_token = %s AND email_address = %s
+                ''', (session_token, email_address))
+            else:
+                c.execute('''
+                    SELECT email_address, expires_at
+                    FROM sessions 
+                    WHERE session_token = %s AND email_address = %s
+                ''', (session_token, email_address))
+        except Exception as e:
+            logger.warning(f"Error checking session with is_active: {e}")
+            c.execute('''
+                SELECT email_address, expires_at
+                FROM sessions 
+                WHERE session_token = %s AND email_address = %s
+            ''', (session_token, email_address))
+        
+        session_data = c.fetchone()
+        
+        if not session_data:
+            conn.close()
+            return jsonify({'error': 'Invalid session'}), 401
+        
+        # Check if expired
+        if datetime.now() > session_data['expires_at']:
+            # Try to mark session as inactive if column exists
+            try:
+                c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
+                if c.fetchone():
+                    c.execute('UPDATE sessions SET is_active = FALSE WHERE session_token = %s', (session_token,))
+            except Exception:
+                pass  # Ignore if is_active column doesn't exist or update fails
+            conn.commit()
+            conn.close()
+            return jsonify({'error': 'Session expired'}), 401
+        
+        # Check if session is active (if is_active column exists)
+        if 'is_active' in session_data and not session_data['is_active']:
+            conn.close()
+            return jsonify({'error': 'Session has been ended'}), 401
+        
+        # Update last activity
+        c.execute('''
+            UPDATE sessions 
+            SET last_activity = %s 
+            WHERE session_token = %s
+        ''', (datetime.now(), session_token))
+        conn.commit()
+        
+        # Get emails for this session only
+        c.execute('''
+            SELECT sender, subject, body, received_at, timestamp 
+            FROM emails 
+            WHERE recipient = %s AND session_token = %s
+            ORDER BY received_at DESC
+        ''', (email_address, session_token))
+        
+        emails = []
+        for row in c.fetchall():
+            # Use received_at if available, otherwise use timestamp
+            if row['received_at']:
+                display_timestamp = row['received_at']
+            else:
+                display_timestamp = row['timestamp']
+            
+            # Convert to proper datetime object if it's a string
+            if isinstance(display_timestamp, str):
+                try:
+                    # Handle different timestamp formats
+                    if 'Z' in display_timestamp:
+                        display_timestamp = datetime.fromisoformat(display_timestamp.replace('Z', '+00:00'))
+                    else:
+                        display_timestamp = datetime.fromisoformat(display_timestamp)
+                except:
+                    display_timestamp = datetime.now()
+            
+            
+            local_timestamp = display_timestamp + timedelta(hours=6, minutes=30)
+            
+            emails.append({
+                'id': len(emails) + 1,
+                'sender': row['sender'],
+                'subject': row['subject'],
+                'body': row['body'],
+                'timestamp': local_timestamp.isoformat()
+            })
+        
+        conn.close()
+        return jsonify({'emails': emails})
+        
+    except Exception as e:
+        logger.error(f"❌ Error fetching emails: {e}")
+        return jsonify({'error': 'Failed to fetch emails'}), 500
+      
+@app.route('/api/session/end', methods=['POST'])
+def end_session():
+    try:
+        data = request.get_json() or {}
+        session_token = data.get('session_token')
+        email_address = data.get('email_address')
+        
+        if not session_token or not email_address:
+            return jsonify({'error': 'Missing session data'}), 400
+        
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Check if is_active column exists
+        try:
+            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
+            has_is_active = c.fetchone() is not None
+            
+            if has_is_active:
+                c.execute('''
+                    UPDATE sessions 
+                    SET is_active = FALSE 
+                    WHERE session_token = %s AND email_address = %s
+                ''', (session_token, email_address))
+            else:
+                # If is_active column doesn't exist, delete the session
+                c.execute('''
+                    DELETE FROM sessions 
+                    WHERE session_token = %s AND email_address = %s
+                ''', (session_token, email_address))
+        except Exception as e:
+            logger.warning(f"Error ending session: {e}")
+            # Fallback to deletion
+            c.execute('''
+                DELETE FROM sessions 
+                WHERE session_token = %s AND email_address = %s
+            ''', (session_token, email_address))
+        
+        if c.rowcount == 0:
+            conn.close()
+            return jsonify({'error': 'Session not found'}), 404
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"✅ Session ended for: {email_address}")
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        logger.error(f"❌ Error ending session: {e}")
+        return jsonify({'error': 'Failed to end session'}), 500
+
+@app.route('/api/webhook/inbound', methods=['POST'])
+def webhook_inbound():
+    try:
+        json_data = request.get_json(force=True, silent=True)
+        
+        if not json_data:
+            return jsonify({'error': 'No JSON data'}), 400
+        
+        logger.info("📧 INCOMING EMAIL")
+        
+        recipient = json_data.get('to', 'unknown@unknown.com')
+        sender = json_data.get('from', 'unknown')
+        subject = json_data.get('subject', 'No subject')
+        
+        # Clean sender
+        if '<' in sender and '>' in sender:
+            sender = sender[sender.find('<')+1:sender.find('>')]
+        
+        if 'bounce' in sender.lower():
+            if '@' in sender:
+                domain_part = sender.split('@')[1]
+                if 'openai.com' in domain_part or 'mandrillapp.com' in domain_part:
+                    sender = 'ChatGPT'
+                elif 'afraid.org' in domain_part:
+                    sender = 'FreeDNS'
+                else:
+                    sender = 'Notification'
+        
+        # Get body
+        body = json_data.get('html_body', None)
+        if not body or body.strip() == '':
+            body = json_data.get('plain_body', 'No content')
+        
+        recipient = recipient.strip()
+        sender = sender.strip()
+        subject = subject.strip()
+        body = body.strip()
+        
+        # Parse MIME if needed
+        if 'Content-Type:' in body and 'multipart' in body:
+            body = parse_email_body(body)
+        
+        # Clean headers
+        body = clean_raw_email(body)
+        
+        logger.info(f"  ✉️  From: {sender} → {recipient}")
+        logger.info(f"  📝 Subject: {subject}")
+        logger.info(f"  📄 Body: {len(body)} chars")
+        
+        # Store timestamps
+        received_at = datetime.now()
+        original_timestamp = json_data.get('timestamp', received_at.isoformat())
+        
+        # Find active session for this recipient
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Check if is_active column exists
+        try:
+            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
+            has_is_active = c.fetchone() is not None
+            
+            if has_is_active:
+                c.execute('''
+                    SELECT session_token 
+                    FROM sessions 
+                    WHERE email_address = %s AND expires_at > NOW() AND is_active = TRUE
+                    ORDER BY created_at DESC 
+                    LIMIT 1
+                ''', (recipient,))
+            else:
+                c.execute('''
+                    SELECT session_token 
+                    FROM sessions 
+                    WHERE email_address = %s AND expires_at > NOW()
+                    ORDER BY created_at DESC 
+                    LIMIT 1
+                ''', (recipient,))
+        except Exception as e:
+            logger.warning(f"Error finding session: {e}")
+            c.execute('''
+                SELECT session_token 
+                FROM sessions 
+                WHERE email_address = %s AND expires_at > NOW()
+                ORDER BY created_at DESC 
+                LIMIT 1
+            ''', (recipient,))
+        
+        session_data = c.fetchone()
+        
+        if session_data:
+            session_token = session_data[0]
+            
+            # Store email
+            c.execute('''
+                INSERT INTO emails (recipient, sender, subject, body, timestamp, received_at, session_token)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ''', (recipient, sender, subject, body, original_timestamp, received_at, session_token))
+            
+            # Update session last_activity
+            c.execute('''
+                UPDATE sessions 
+                SET last_activity = %s 
+                WHERE session_token = %s
+            ''', (received_at, session_token))
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"✅ Email stored: {sender} → {recipient}")
+            return '', 204
+        else:
+            conn.close()
+            logger.warning(f"⚠️ No active session for {recipient}")
+            return '', 204
+        
+    except Exception as e:
+        logger.error(f"❌ Webhook error: {e}")
+        return jsonify({'error': str(e)}), 400
+
+# Cleanup expired sessions
+def cleanup_expired_sessions():
+    while True:
+        time.sleep(300)  # Every 5 minutes
+        
+        try:
+            conn = get_db()
+            c = conn.cursor()
+            
+            # Delete expired sessions (CASCADE will delete emails too)
+            c.execute('''
+                DELETE FROM sessions 
+                WHERE expires_at < NOW()
+            ''')
+            
+            deleted = c.rowcount
+            conn.commit()
+            conn.close()
+            
+            if deleted > 0:
+                logger.info(f"🧹 Cleaned up {deleted} expired sessions")
+        except Exception as e:
+            logger.error(f"❌ Cleanup error: {e}")
+
+# Start cleanup thread
+cleanup_thread = Thread(target=cleanup_expired_sessions, daemon=True)
+cleanup_thread.start()
 
 # Admin routes
 @app.route('/admin')
@@ -544,7 +965,22 @@ def remove_from_blacklist(username):
         logger.error(f"❌ Error removing from blacklist: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ... (keep the rest of your existing routes: error handlers, health check, etc.)
+# Error handlers
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Resource not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/health')
+def health():
+    return jsonify({
+        'status': 'healthy',
+        'domain': DOMAIN,
+        'timestamp': datetime.utcnow().isoformat()
+    })
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
