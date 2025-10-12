@@ -764,8 +764,8 @@ function createEmail(customName) {
             document.getElementById('username-input').focus();
             
             showModal(
-                'Email Already in Use',
-                'This username is currently being used by another session. Please choose a different username or try again later.',
+                'Email Currently in Use',
+                'This username is currently being used by an active session.<br><br><strong>Please:</strong><br>• Choose a different username<br>• Wait for the current session to expire (1 hour)<br>• Ask the current user to end their session',
                 function() {
                     document.getElementById('username-input').focus();
                 }
@@ -1413,6 +1413,7 @@ initApp();
 </script>
 </body>
 </html>
+
 
 
 
