@@ -1359,9 +1359,9 @@ document.getElementById('end-session-btn').addEventListener('click', function() 
 });
     function toggleAdminMode() {
     if (!isAdminMode) {
-        // Show password prompt
         const password = prompt('🔐 Enter Admin Password:');
-        if (password === 'admin123') { // Change this to your preferred password
+        // Use the same password as admin panel
+        if (password === 'admin123') { // Same as APP_PASSWORD
             activateAdminMode();
         } else if (password) {
             alert('❌ Invalid password');
@@ -1489,6 +1489,7 @@ initApp();
 </script>
 </body>
 </html>
+
 
 
 
