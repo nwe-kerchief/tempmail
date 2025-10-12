@@ -737,8 +737,7 @@ def admin_addresses():
         addresses = []
         for row in c.fetchall():
             if row['last_email']:
-                # Convert to local timezone (subtract 6 hours)
-                local_time = row['last_email'] - timedelta(hours=6)
+                local_time = row['last_email'] + timedelta(hours=6)
                 last_email_str = local_time.isoformat()
             else:
                 last_email_str = None
@@ -896,5 +895,6 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
 
 
