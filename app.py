@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify, render_template, session
 from flask_cors import CORS
 import os
@@ -276,15 +275,12 @@ def create_email():
             if not username:
                 return jsonify({'error': 'Invalid username', 'code': 'INVALID_USERNAME'}), 400
             
-            admin_mode = data.get('admin_mode', False)
-    
-            # Skip blacklist check if admin mode is enabled
-            if not admin_mode and is_username_blacklisted(username):
+            # Check against database blacklist
+            if is_username_blacklisted(username):
                 return jsonify({
                     'error': 'This username is reserved for the system owner. Please choose a different username.',
                     'code': 'USERNAME_BLACKLISTED'
                 }), 403
-            
         else:
             # Generate random name
             male_name = random.choice(MALE_NAMES)
@@ -362,15 +358,6 @@ def create_email():
     except Exception as e:
         logger.error(f"❌ Error creating email: {e}")
         return jsonify({'error': 'Failed to create session', 'code': 'SERVER_ERROR'}), 500
-
-@app.route('/api/verify-admin', methods=['POST'])
-def verify_admin():
-    data = request.get_json()
-    password = data.get('password', '')
-    
-    if password == APP_PASSWORD:
-        return jsonify({'success': True})
-    return jsonify({'success': False}), 401
 
 @app.route('/api/emails/<email_address>', methods=['GET'])
 def get_emails(email_address):
@@ -999,5 +986,3 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
-
-
