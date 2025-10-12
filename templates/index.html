@@ -49,45 +49,15 @@ animation: fadeIn 0.5s ease-in;
 from { opacity: 0; transform: translateY(10px); }
 to { opacity: 1; transform: translateY(0); }
 }
-@media (max-width: 768px) {
-.mobile-stack { flex-direction: column; }
-.mobile-full { width: 100%; }
-.mobile-text-center { text-align: center; }
-.mobile-inbox-container { flex-direction: column; height: auto; }
-.mobile-inbox-list { height: 300px; max-height: 300px; }
-.mobile-email-content { height: 400px; max-height: 400px; }
-}
-#email-content-container {
-height: 500px;
-max-height: 500px;
-overflow: hidden;
-}
-#email-body {
-height: 300px;
-max-height: 300px;
-overflow-y: auto;
-overflow-x: hidden;
-}
-#email-body * {
-max-width: 100%;
-word-wrap: break-word;
-}
-@media (min-width: 768px) {
-#email-content-container {
-height: 550px;
-max-height: 550px;
-}
-#email-body {
-height: 350px;
-max-height: 350px;
-}
-}
+
+
 /* Improved email content styling */
 .email-content-container {
 background: rgba(255, 255, 255, 0.05);
 border-radius: 12px;
-padding: 20px;
+padding: 16px;
 overflow-y: auto;
+height: 100%;
 }
 .email-content-text {
 line-height: 1.6;
@@ -167,6 +137,82 @@ margin-bottom: 15px;
 font-size: 12px;
 color: #9ca3af;
 }
+
+/* Improved inbox list styling */
+#email-list-container {
+height: calc(100% - 60px);
+overflow-y: auto;
+}
+.email-list-item {
+padding: 12px;
+border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+transition: all 0.2s ease;
+cursor: pointer;
+}
+.email-list-item:hover {
+background: rgba(255, 255, 255, 0.1);
+}
+.email-list-item.active {
+background: rgba(168, 85, 247, 0.3);
+}
+.email-preview {
+display: -webkit-box;
+-webkit-line-clamp: 2;
+-webkit-box-orient: vertical;
+overflow: hidden;
+}
+
+@media (max-width: 768px) {
+    .mobile-inbox-container {
+        flex-direction: column !important;
+        height: auto !important;
+    }
+    .mobile-inbox-list {
+        height: 300px !important;
+        min-height: 300px !important;
+        max-height: 300px !important;
+    }
+    .mobile-email-content {
+        height: 400px !important;
+        min-height: 400px !important;
+        max-height: 400px !important;
+    }
+}
+
+/* Email content fixes using existing classes */
+#email-body {
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+}
+
+.email-content-text {
+    all: initial !important;
+    font-family: 'Inter', sans-serif !important;
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+    color: #e5e7eb !important;
+    max-width: 100% !important;
+    overflow-wrap: break-word !important;
+    word-break: break-word !important;
+}
+
+.email-content-text * {
+    all: revert !important;
+    font-family: 'Inter', sans-serif !important;
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+    margin: 2px 0 !important;
+    padding: 1px 0 !important;
+    color: #e5e7eb !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.email-content-container {
+    max-width: 100% !important;
+    overflow: hidden !important;
+}
 </style>
 </head>
 <body class="text-gray-100 min-h-screen p-2 md:p-4">
@@ -185,7 +231,7 @@ color: #9ca3af;
 <i class="fas fa-envelope text-xl md:text-3xl text-white mr-2 md:mr-3"></i>
 <h1 class="text-xl md:text-4xl lg:text-5xl font-bold text-white">Secure Temp Mail By AMMZ</h1>
 </div>
-<p class="text-gray-300 text-sm md:text-lg font-medium">Disposable email addresses that auto-delete in 1 hour</p>
+<p class="text-gray-300 text-sm md:text-lg font-medium">Disposable email addresses</p>
 </header>
 
 <main class="glass-effect rounded-2xl shadow-2xl p-3 md:p-6 lg:p-8 w-full fade-in">
@@ -198,24 +244,26 @@ Generate Random Email
 </div>
 
 <div class="mb-4 md:mb-8">
-<div class="flex flex-col md:flex-row items-center gap-2 md:gap-4 mb-3 md:mb-6">
-<div class="flex-1 flex gap-2 md:gap-3 w-full">
+<div class="flex flex-col gap-2 mb-3 md:mb-6">
+<div class="flex flex-col sm:flex-row gap-2 w-full">
 <div class="flex-1">
 <input type="text" id="username-input" placeholder="Enter username"
-class="w-full h-10 md:h-14 bg-gray-900 border-2 border-gray-700 text-white rounded-xl px-3 md:px-4 py-2 md:py-3 text-sm md:text-lg focus:outline-none focus:border-blue-500 transition-colors">
+class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white rounded-xl px-4 py-3 text-base md:text-lg focus:outline-none focus:border-blue-500 transition-colors">
 </div>
-<div class="w-full md:w-48">
-<select id="domain-select" class="w-full h-10 md:h-14 bg-gray-900 border-2 border-gray-700 text-white rounded-xl px-3 md:px-6 py-2 md:py-3 text-sm md:text-lg focus:outline-none focus:border-blue-500 transition-colors">
+<div class="w-full sm:w-auto sm:min-w-[200px]">
+<select id="domain-select" class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white rounded-xl px-4 py-3 text-base md:text-lg focus:outline-none focus:border-blue-500 transition-colors">
 <option value="">Select domain</option>
 </select>
 </div>
 </div>
-<div class="flex gap-2 md:gap-3 w-full md:w-auto">
-<button id="create-btn" class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-2 md:py-3 px-3 md:px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 md:flex-none text-sm md:text-base">
-<i class="fas fa-plus mr-1 md:mr-2"></i>Create
+
+<!-- Buttons row -->
+<div class="flex gap-2 w-full">
+<button id="create-btn" class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 text-base">
+<i class="fas fa-plus mr-2"></i>Create
 </button>
-<button id="copy-btn" class="bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-semibold py-2 md:py-3 px-3 md:px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 md:flex-none text-sm md:text-base">
-<i class="fas fa-copy mr-1 md:mr-2"></i>Copy
+<button id="copy-btn" class="bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-semibold py-3 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 text-base">
+<i class="fas fa-copy mr-2"></i>Copy
 </button>
 </div>
 </div>
@@ -233,57 +281,57 @@ class="w-full h-10 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 <span id="notification-text"></span>
 </div>
 
+<!-- Improved Inbox Section -->
 <div class="flex flex-col md:flex-row gap-3 md:gap-6 mobile-inbox-container">
-<div class="w-full md:w-2/5 glass-effect rounded-xl p-2 md:p-4 overflow-y-auto mobile-inbox-list">
+<!-- Inbox List - Improved -->
+<div class="w-full md:w-2/5 glass-effect rounded-xl p-2 md:p-4 overflow-y-auto mobile-full mobile-inbox-list mobile-scroll">
 <div class="flex justify-between items-center mb-2 md:mb-4">
 <h2 class="text-base md:text-xl font-semibold text-white">
 <i class="fas fa-inbox mr-1 md:mr-2"></i>Inbox
 </h2>
 <div class="flex items-center gap-2">
-<span id="email-count" class="text-xs text-gray-300 font-medium">0 emails</span>
-<button id="refresh-btn" class="p-1 md:p-2 rounded-full hover:bg-gray-700 transition-colors text-white">
-<i class="fas fa-sync-alt text-xs md:text-base"></i>
+<span id="email-count" class="text-xs text-gray-300 font-medium bg-gray-800 px-2 py-1 rounded">0 emails</span>
+<button id="refresh-btn" class="p-2 rounded-lg hover:bg-gray-700 transition-colors text-white">
+<i class="fas fa-sync-alt text-sm"></i>
 </button>
 </div>
 </div>
-<div id="email-list-container" class="h-full overflow-y-auto">
-<div id="no-emails-default" class="text-center py-6 md:py-10 text-gray-300">
+<div id="email-list-container" class=""h-full overflow-y-auto smooth-transition">
+<div id="no-emails-default" class="text-center py-6 md:py-10 text-gray-300 flex flex-col items-center justify-center">
 <i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i>
 <p class="text-sm md:text-lg font-medium">No emails yet</p>
 <p class="text-xs mt-1 font-medium">Your inbox is ready for messages</p>
 </div>
-<div id="inbox-loader" style="display:none;" class="flex justify-center items-center py-6 md:py-10">
+<div id="inbox-loader" style="display:none;" class="flex justify-center items-center py-8">
 <div id="loader"></div>
 </div>
-<div id="email-list"></div>
+<div id="email-list" class="space-y-2"></div>
 </div>
 </div>
 
-<div id="email-content-container" class="w-full md:w-3/5 glass-effect rounded-xl p-3 md:p-6 overflow-y-auto mobile-email-content">
-<div id="email-placeholder" class="flex flex-col items-center justify-center h-full text-gray-300 py-6">
-<i class="fas fa-envelope-open text-3xl md:text-6xl mb-2 md:mb-4 opacity-60"></i>
-<p class="text-base md:text-xl font-medium">Select an email to read</p>
-<p class="text-xs md:text-sm mt-1 text-center font-medium">Choose a message from your inbox</p>
+<!-- Email Content - Improved -->
+<div class="w-full md:w-3/5 glass-effect rounded-xl p-4 mobile-email-content">
+<div id="email-placeholder" class="flex flex-col items-center justify-center h-full text-gray-300 py-8">
+<i class="fas fa-envelope-open text-4xl md:text-5xl mb-4 opacity-60"></i>
+<p class="text-lg md:text-xl font-medium text-center">Select an email to read</p>
+<p class="text-sm mt-2 text-gray-400 text-center">Choose a message from your inbox to view its contents</p>
 </div>
 <div id="email-content" class="hidden h-full flex flex-col">
-<div class="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-6">
-<h2 id="email-subject" class="text-lg md:text-2xl font-bold text-white mb-1 md:mb-0 break-words"></h2>
-<span id="email-date" class="text-xs text-gray-300 bg-gray-800 px-2 py-1 rounded-lg font-medium"></span>
+<div class="flex flex-col md:flex-row justify-between items-start mb-4 gap-2">
+<h2 id="email-subject" class="text-xl md:text-2xl font-bold text-white break-words flex-1"></h2>
+<span id="email-date" class="text-xs text-gray-300 bg-gray-800 px-3 py-1 rounded-lg font-medium whitespace-nowrap"></span>
 </div>
-<div class="flex items-center text-xs md:text-sm text-gray-300 mb-3 md:mb-6 border-b border-gray-700 pb-2 md:pb-4">
-<strong class="mr-2 text-white font-semibold"><i class="fas fa-user mr-1"></i>From:</strong>
+<div class="flex items-center text-sm text-gray-300 mb-4 border-b border-gray-700 pb-3">
+<strong class="mr-2 text-white font-semibold flex items-center">
+<i class="fas fa-user mr-2"></i>From:
+</strong>
 <span id="email-from" class="font-mono font-medium break-all"></span>
 </div>
-<div id="email-body" class="email-content-container email-content-text"></div>
+<div id="email-body" class="email-content-container email-content-text flex-1"></div>
 </div>
 </div>
 </div>
 </main>
-
-<footer class="text-center mt-4 md:mt-8 text-gray-300 text-xs md:text-sm font-medium">
-<p>Emails automatically delete after 1 hour or when you end the session</p>
-<p class="mt-1">Your privacy is our priority - all data is deleted when session ends</p>
-</footer>
 </div>
 
 <div class="h-fit mt-2 md:mt-4">
@@ -298,10 +346,12 @@ class="w-full h-10 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 var API_URL = window.location.origin;
 var currentEmail = '';
 var autoRefreshInterval = null;
+var timeUpdateInterval = null;
 var lastEmailCount = 0;
 var sessionId = generateSessionId();
 var emailSecurityKey = generateSecurityKey();
-var emailReceivedTimes = {}; // Track when emails were first received
+var sessionStartTime = null;
+var domainsLoaded = false;
 
 // Generate a unique session ID for security
 function generateSessionId() {
@@ -313,15 +363,115 @@ function generateSecurityKey() {
     return 'key_' + Math.random().toString(36).substr(2, 16);
 }
 
+// Load session from localStorage
+function loadSession() {
+    const savedSession = localStorage.getItem('tempMailSession');
+    if (savedSession) {
+        const session = JSON.parse(savedSession);
+        const now = Date.now();
+        const sessionAge = now - session.createdAt;
+        
+        // Session expires after 1 hour OR if no emails received for 1 hour
+        const hasRecentEmail = session.lastEmailTime && (now - session.lastEmailTime < 60 * 60 * 1000);
+        const sessionValid = sessionAge < 60 * 60 * 1000 && hasRecentEmail;
+        
+        if (sessionValid && session.email) {
+            currentEmail = session.email;
+            sessionStartTime = session.createdAt;
+            
+            // Wait for domains to load before restoring
+            if (domainsLoaded) {
+                restoreSessionUI();
+            } else {
+                // If domains aren't loaded yet, wait for them
+                const checkDomains = setInterval(() => {
+                    if (domainsLoaded) {
+                        clearInterval(checkDomains);
+                        restoreSessionUI();
+                    }
+                }, 100);
+            }
+            return true;
+        } else {
+            // Session expired
+            localStorage.removeItem('tempMailSession');
+            showNotification('🕒 Session expired', 'error');
+        }
+    }
+    return false;
+}
+
+// Restore the session UI
+function restoreSessionUI() {
+    if (!currentEmail) return;
+    
+    var parts = currentEmail.split('@');
+    document.getElementById('username-input').value = parts[0];
+    document.getElementById('domain-select').value = parts[1];
+    
+    // Show the email display immediately
+    document.getElementById('current-email').textContent = currentEmail;
+    document.getElementById('email-display').classList.remove('hidden');
+    
+    showNotification('✅ Session restored', 'success');
+    
+    // Load emails immediately
+    loadEmails();
+    startAutoRefresh();
+    startTimeUpdate();
+    setupSessionExpiration();
+}
+
+// Save session to localStorage
+function saveSession() {
+    if (!currentEmail) return;
+    
+    const session = {
+        email: currentEmail,
+        createdAt: sessionStartTime || Date.now(),
+        lastEmailTime: Date.now()
+    };
+    localStorage.setItem('tempMailSession', JSON.stringify(session));
+}
+
+// Update last email time in session
+function updateLastEmailTime() {
+    const savedSession = localStorage.getItem('tempMailSession');
+    if (savedSession && currentEmail) {
+        const session = JSON.parse(savedSession);
+        session.lastEmailTime = Date.now();
+        localStorage.setItem('tempMailSession', JSON.stringify(session));
+    }
+}
+
 function loadDomains() {
-    fetch(API_URL + '/api/domains')
-    .then(res => res.json())
+    return fetch(API_URL + '/api/domains')
+    .then(res => {
+        if (!res.ok) {
+            throw new Error('Failed to load domains');
+        }
+        return res.json();
+    })
     .then(data => {
         var select = document.getElementById('domain-select');
         select.innerHTML = '<option value="">Select domain</option>';
-        data.domains.forEach(function(d) {
-            select.innerHTML += '<option value="' + d + '">' + d + '</option>';
-        });
+        if (data.domains && data.domains.length > 0) {
+            data.domains.forEach(function(d) {
+                select.innerHTML += '<option value="' + d + '">' + d + '</option>';
+            });
+        } else {
+            // Fallback domain
+            select.innerHTML += '<option value="aungmyomyatzaw.online">aungmyomyatzaw.online</option>';
+        }
+        domainsLoaded = true;
+    })
+    .catch(err => {
+        console.error('Error loading domains:', err);
+        // Set default domain if API fails
+        var select = document.getElementById('domain-select');
+        select.innerHTML = '<option value="">Select domain</option>';
+        select.innerHTML += '<option value="aungmyomyatzaw.online">aungmyomyatzaw.online</option>';
+        domainsLoaded = true;
     });
 }
 
@@ -332,11 +482,23 @@ document.getElementById('big-random-btn').addEventListener('click', function() {
 
 document.getElementById('create-btn').addEventListener('click', function() {
     var username = document.getElementById('username-input').value.trim();
+    var domain = document.getElementById('domain-select').value;
+    
+    if (!username) {
+        showNotification('❌ Please enter a username!', 'error');
+        return;
+    }
+    
+    if (!domain) {
+        showNotification('❌ Please select a domain!', 'error');
+        return;
+    }
+    
     createEmail(username);
 });
 
 function createEmail(customName) {
-    var btn = customName ? document.getElementById('create-btn') : document.getElementById('big-random-btn');
+    var btn = document.getElementById('create-btn');
     var originalText = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
@@ -356,13 +518,22 @@ function createEmail(customName) {
     })
     .then(res => {
         if (!res.ok) {
-            throw new Error('Server error: ' + res.status);
+            // If server error, try to parse the error message
+            return res.text().then(text => {
+                throw new Error(text || 'Server error: ' + res.status);
+            });
         }
         return res.json();
     })
     .then(data => {
+        if (!data.email) {
+            throw new Error('No email returned from server');
+        }
+        
         currentEmail = data.email;
-        var parts = data.email.split('@');
+        sessionStartTime = Date.now();
+        
+        var parts = currentEmail.split('@');
         
         document.getElementById('username-input').value = parts[0];
         document.getElementById('domain-select').value = parts[1];
@@ -373,13 +544,26 @@ function createEmail(customName) {
         document.getElementById('email-placeholder').style.display = 'flex';
         document.getElementById('email-content').classList.add('hidden');
         
-        showNotification('✅ Email created: ' + parts[0], 'success');
-        loadEmails();
+        showNotification('✅ Email created: ' + data.email, 'success');
+        
+        // Save session and start timers
+        saveSession();
+        
+        // Wait a moment for the server to register the email, then load emails
+        setTimeout(() => {
+            loadEmails();
+        }, 1000);
+        
         startAutoRefresh();
+        startTimeUpdate();
+        setupSessionExpiration();
     })
     .catch(err => {
         console.error('Error creating email:', err);
         showNotification('❌ Error creating email: ' + err.message, 'error');
+        
+        // Fallback: Create email locally if API fails
+        createEmailLocally(customName);
     })
     .finally(function() {
         btn.disabled = false;
@@ -387,29 +571,68 @@ function createEmail(customName) {
     });
 }
 
-document.getElementById('copy-btn').addEventListener('click', function() {
-    var username = document.getElementById('username-input').value.trim();
+// Fallback function to create email locally if API fails
+function createEmailLocally(customName) {
     var domain = document.getElementById('domain-select').value;
+    if (!domain) {
+        domain = 'aungmyomyatzaw.online';
+        document.getElementById('domain-select').value = domain;
+    }
     
-    if (!username || !domain) {
+    var username = customName || generateRandomUsername();
+    currentEmail = username + '@' + domain;
+    sessionStartTime = Date.now();
+    
+    document.getElementById('username-input').value = username;
+    document.getElementById('domain-select').value = domain;
+    document.getElementById('current-email').textContent = currentEmail;
+    document.getElementById('email-display').classList.remove('hidden');
+    
+    showNotification('✅ Email created locally: ' + currentEmail, 'success');
+    
+    // Save session and start timers
+    saveSession();
+    
+    // Try to load emails anyway (might work if email exists on server)
+    loadEmails();
+    startAutoRefresh();
+    startTimeUpdate();
+    setupSessionExpiration();
+}
+
+function generateRandomUsername() {
+    return Math.random().toString(36).substring(2, 12);
+}
+
+document.getElementById('copy-btn').addEventListener('click', function() {
+    if (!currentEmail) {
         showNotification('❌ Create an email first!', 'error');
         return;
     }
     
-    var email = username + '@' + domain;
-    navigator.clipboard.writeText(email);
-    showNotification('📋 Copied: ' + email, 'success');
+    navigator.clipboard.writeText(currentEmail).then(function() {
+        showNotification('📋 Copied: ' + currentEmail, 'success');
+    }).catch(function() {
+        // Fallback for older browsers
+        var textArea = document.createElement("textarea");
+        textArea.value = currentEmail;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        showNotification('📋 Copied: ' + currentEmail, 'success');
+    });
 });
 
 document.getElementById('refresh-btn').addEventListener('click', loadEmails);
 
 function loadEmails() {
-    var username = document.getElementById('username-input').value.trim();
-    var domain = document.getElementById('domain-select').value;
+    if (!currentEmail) {
+        console.log('No current email to load');
+        return;
+    }
     
-    if (!username || !domain) return;
-    
-    currentEmail = username + '@' + domain;
+    console.log('Loading emails for:', currentEmail);
     
     var loader = document.getElementById('inbox-loader');
     var list = document.getElementById('email-list');
@@ -417,6 +640,7 @@ function loadEmails() {
     
     loader.style.display = 'flex';
     defaultMsg.style.display = 'none';
+    list.innerHTML = '';
     
     // Security: Include session ID and security key in request
     fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail), {
@@ -427,31 +651,34 @@ function loadEmails() {
     })
     .then(res => {
         if (!res.ok) {
-            throw new Error('Failed to fetch emails');
+            if (res.status === 404) {
+                // Email doesn't exist yet, that's fine
+                console.log('Email not found on server (404)');
+                return { emails: [] };
+            }
+            return res.text().then(text => {
+                throw new Error(text || 'Failed to fetch emails: ' + res.status);
+            });
         }
         return res.json();
     })
     .then(data => {
-        var newCount = data.emails.length;
+        console.log('Emails loaded:', data);
+        
+        var newCount = data.emails ? data.emails.length : 0;
         document.getElementById('email-count').textContent = newCount + ' email' + (newCount !== 1 ? 's' : '');
         document.title = newCount > 0 ? '(' + newCount + ') TempMail - AMMZ' : 'TempMail - AMMZ';
         
-        // Track when emails are first received
-        data.emails.forEach(function(email) {
-            if (!emailReceivedTimes[email.id]) {
-                emailReceivedTimes[email.id] = Date.now(); // Store current time when email is first seen
-            }
-        });
-        
         if (newCount > lastEmailCount && lastEmailCount > 0) {
             showNotification('🔔 ' + (newCount - lastEmailCount) + ' new email(s) received!', 'success');
+            updateLastEmailTime();
         }
         lastEmailCount = newCount;
         
         list.innerHTML = '';
         
         if (newCount === 0) {
-            list.innerHTML = '<div class="text-center py-6 md:py-10 text-gray-300"><i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i><p class="text-sm md:text-lg font-medium">No emails yet</p></div>';
+            list.innerHTML = '<div class="text-center py-8 text-gray-300"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>';
         } else {
             data.emails.forEach(function(email, idx) {
                 var displaySender = email.sender;
@@ -463,13 +690,21 @@ function loadEmails() {
                 
                 // Extract clean preview text
                 var previewText = extractTextFromHTML(email.body);
-                if (previewText.length > 60) {
-                    previewText = previewText.substring(0, 60);
+                if (previewText.length > 80) {
+                    previewText = previewText.substring(0, 80) + '...';
                 }
                 
                 var item = document.createElement('div');
-                item.className = 'cursor-pointer p-2 md:p-4 rounded-xl mb-1 md:mb-3 border border-gray-700 hover:bg-gray-800 transition-all';
-                item.innerHTML = '<div class="flex justify-between items-start mb-1"><span class="text-sm font-semibold text-white truncate">' + escapeHtml(displaySender) + '</span><span class="text-xs text-gray-400">' + formatTime(email.timestamp, email.id) + '</span></div><div class="text-sm font-medium text-gray-200 mb-1">' + escapeHtml(email.subject) + '</div><div class="text-xs text-gray-400 truncate">' + escapeHtml(previewText) + '...</div>';
+                item.className = 'email-list-item rounded-lg border border-gray-700 hover:border-gray-600 transition-all';
+                item.setAttribute('data-timestamp', email.timestamp);
+                item.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-sm font-semibold text-white truncate flex-1 mr-2">${escapeHtml(displaySender)}</span>
+                        <span class="text-xs text-gray-400 email-time whitespace-nowrap">${formatTime(email.timestamp)}</span>
+                    </div>
+                    <div class="text-sm font-medium text-gray-200 mb-2 truncate">${escapeHtml(email.subject)}</div>
+                    <div class="text-xs text-gray-400 email-preview">${escapeHtml(previewText)}</div>
+                `;
                 item.addEventListener('click', function() { viewEmail(email, item); });
                 list.appendChild(item);
             });
@@ -477,11 +712,35 @@ function loadEmails() {
     })
     .catch(err => {
         console.error('Error loading emails:', err);
-        showNotification('❌ Error loading emails', 'error');
+        
+        // Don't show error for 404 - it just means no emails yet
+        if (!err.message.includes('404')) {
+            showNotification('⚠️ Could not load emails: ' + err.message, 'error');
+        }
+        
+        list.innerHTML = '<div class="text-center py-8 text-gray-300"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>';
     })
     .finally(function() {
         loader.style.display = 'none';
     });
+}
+
+// Update email times automatically
+function updateEmailTimes() {
+    const emailItems = document.querySelectorAll('.email-list-item');
+    emailItems.forEach(item => {
+        const timestamp = item.getAttribute('data-timestamp');
+        const timeElement = item.querySelector('.email-time');
+        if (timeElement && timestamp) {
+            timeElement.textContent = formatTime(timestamp);
+        }
+    });
+    
+    // Also update the time in email content if an email is open
+    const emailDateElement = document.getElementById('email-date');
+    if (emailDateElement && emailDateElement.getAttribute('data-timestamp')) {
+        emailDateElement.textContent = formatTime(emailDateElement.getAttribute('data-timestamp'));
+    }
 }
 
 function viewEmail(email, itemEl) {
@@ -748,6 +1007,16 @@ function startAutoRefresh() {
     autoRefreshInterval = setInterval(loadEmails, 15000);
 }
 
+function startAutoRefresh() {
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    autoRefreshInterval = setInterval(loadEmails, 5000); // Refresh every 5 seconds
+}
+
+function startTimeUpdate() {
+    if (timeUpdateInterval) clearInterval(timeUpdateInterval);
+    timeUpdateInterval = setInterval(updateEmailTimes, 1000); // Update times every second
+}
+
 function showNotification(message, type) {
     var notif = document.getElementById('notification');
     var text = document.getElementById('notification-text');
@@ -765,12 +1034,11 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Fixed time formatting function - uses the time email was first received
-function formatTime(timestamp, emailId) {
-    // Use the time when we first received the email, not the email's timestamp
-    var receivedTime = emailReceivedTimes[emailId] || Date.now();
-    var now = Date.now();
-    var diff = now - receivedTime;
+// Fixed time formatting function - NO PLURAL "s"
+function formatTime(timestamp) {
+    var date = new Date(timestamp);
+    var now = new Date();
+    var diff = now - date;
     var seconds = Math.floor(diff / 1000);
     var minutes = Math.floor(seconds / 60);
     var hours = Math.floor(minutes / 60);
@@ -782,8 +1050,6 @@ function formatTime(timestamp, emailId) {
     if (hours < 24) return hours + ' hour ago';
     if (days < 7) return days + ' day ago';
     
-    // Fallback to original timestamp if needed
-    var date = new Date(timestamp);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
 }
 
@@ -801,15 +1067,38 @@ function setupSessionExpiration() {
         document.getElementById('email-count').textContent = '0 emails';
         document.title = 'TempMail - AMMZ';
         
+        localStorage.removeItem('tempMailSession');
+        
         if (autoRefreshInterval) {
             clearInterval(autoRefreshInterval);
             autoRefreshInterval = null;
         }
+        if (timeUpdateInterval) {
+            clearInterval(timeUpdateInterval);
+            timeUpdateInterval = null;
+        }
     }, sessionTimeout);
 }
 
-loadDomains();
-setupSessionExpiration();
+// Initialize the app
+function initApp() {
+    loadDomains().then(() => {
+        // Try to load existing session after domains are loaded
+        if (!loadSession()) {
+            console.log('No valid session found, starting fresh');
+        }
+    }).catch(err => {
+        console.error('Error loading domains:', err);
+        // Even if domains fail, try to load session
+        if (!loadSession()) {
+            console.log('No valid session found, starting fresh');
+        }
+    });
+}
+
+// Start the app
+initApp();
 </script>
 </body>
 </html>
+
