@@ -257,23 +257,25 @@ def create_email():
         email_address = f"{username}@{DOMAIN}"
         
         # Check if email already has an active session
+                # Check if email already has an active session - FIXED VERSION
         conn = get_db()
         c = conn.cursor()
         
-        # Check if is_active column exists and handle accordingly
         try:
             c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
             has_is_active = c.fetchone() is not None
             
             if has_is_active:
+                # Check for active sessions only
                 c.execute('''
                     SELECT session_token, is_active 
                     FROM sessions 
-                    WHERE email_address = %s AND expires_at > NOW()
+                    WHERE email_address = %s AND expires_at > NOW() AND is_active = TRUE
                     ORDER BY created_at DESC 
                     LIMIT 1
                 ''', (email_address,))
             else:
+                # If no is_active column, check for any non-expired session
                 c.execute('''
                     SELECT session_token
                     FROM sessions 
@@ -295,18 +297,14 @@ def create_email():
         existing_session = c.fetchone()
         
         if existing_session:
-            # Check if session is active (if is_active column exists)
-            if len(existing_session) > 1 and existing_session[1] is False:
-                # Session exists but is inactive, we can proceed
-                pass
-            elif len(existing_session) > 1 and existing_session[1]:  # is_active is True
+            # Only block if session is active
+            if len(existing_session) > 1 and existing_session[1]:  # is_active is True
                 conn.close()
                 return jsonify({
                     'error': 'This email address is already in use by another session. Please choose a different username or wait for the current session to expire.',
                     'code': 'EMAIL_IN_USE'
                 }), 409
-            else:
-                # No is_active column, but session exists
+            elif len(existing_session) <= 1:  # No is_active column, session exists
                 conn.close()
                 return jsonify({
                     'error': 'This email address is already in use by another session. Please choose a different username or wait for the current session to expire.',
@@ -451,7 +449,7 @@ def get_emails(email_address):
                     display_timestamp = datetime.now()
             
             
-            local_timestamp = display_timestamp + timedelta(hours=6)
+            local_timestamp = display_timestamp + timedelta(hours=6, minutes=30)
             
             emails.append({
                 'id': len(emails) + 1,
@@ -737,7 +735,7 @@ def admin_addresses():
         addresses = []
         for row in c.fetchall():
             if row['last_email']:
-                local_time = row['last_email'] + timedelta(hours=6)
+                local_time = row['last_email'] + timedelta(hours=6, minutes=30)
                 last_email_str = local_time.isoformat()
             else:
                 last_email_str = None
@@ -895,6 +893,5 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
-
 
 
