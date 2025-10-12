@@ -794,10 +794,13 @@ function createEmail(customName) {
             }
         }
     })
-    .finally(function() {
-        btn.disabled = false;
-        btn.innerHTML = originalText;
-    });
+    // In createEmail() function, find the button reset part:
+.finally(function() {
+    // Reset button state PROPERLY
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create';
+    btn.classList.remove('opacity-50'); // Add this line
+});
 }
 
 // Fallback function to create email locally if API fails
@@ -1413,6 +1416,7 @@ initApp();
 </script>
 </body>
 </html>
+
 
 
 
