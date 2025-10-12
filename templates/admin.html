@@ -433,11 +433,19 @@ function formatTime(timestamp) {
             date = new Date(timestamp);
         }
         
-        // Apply timezone correction (add 6 hours to compensate for server UTC)
-        var correctedDate = new Date(date.getTime() + (6 * 60 * 60 * 1000));
+        // Applfunction formatTime(timestamp) {
+    try {
+        var date;
+        if (typeof timestamp === 'string') {
+            date = new Date(timestamp);
+        } else if (timestamp instanceof Date) {
+            date = timestamp;
+        } else {
+            date = new Date(timestamp);
+        }
         
         var now = new Date();
-        var diff = now - correctedDate;
+        var diff = now - date;
         var seconds = Math.floor(diff / 1000);
         var minutes = Math.floor(seconds / 60);
         var hours = Math.floor(minutes / 60);
@@ -449,9 +457,9 @@ function formatTime(timestamp) {
         if (hours < 24) return hours + ' hour ago';
         if (days < 7) return days + ' day ago';
         
-        return correctedDate.toLocaleDateString() + ' ' + correctedDate.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
     } catch (e) {
-        return 'unknown';
+        return 'recently';
     }
 }
 // Load addresses
@@ -740,8 +748,10 @@ function startAutoRefresh() {
     if (autoRefreshInterval) clearInterval(autoRefreshInterval);
     autoRefreshInterval = setInterval(() => {
         loadStats();
+        loadAddresses();
+        loadActiveSessions();
         if (selectedAddress) viewEmails(selectedAddress);
-    }, 30000); // Refresh every 30 seconds
+    }, 8000); // Refresh every 10 seconds
 }
 
 // Initialize on load
