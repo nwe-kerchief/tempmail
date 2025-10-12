@@ -257,8 +257,7 @@ def create_email():
         
         email_address = f"{username}@{DOMAIN}"
         
-        # Check if email already has an active session
-                # Check if email already has an active session - FIXED VERSION
+                # Check if email already has an active session - IMPROVED VERSION
         conn = get_db()
         c = conn.cursor()
         
@@ -267,7 +266,7 @@ def create_email():
             has_is_active = c.fetchone() is not None
             
             if has_is_active:
-                # Check for active sessions only
+                # Check only for ACTIVE sessions
                 c.execute('''
                     SELECT session_token, is_active 
                     FROM sessions 
@@ -297,20 +296,20 @@ def create_email():
         
         existing_session = c.fetchone()
         
+        # Only block if there's an active session
         if existing_session:
-            # Only block if session is active
-            if len(existing_session) > 1 and existing_session[1]:  # is_active is True
+            session_is_active = True
+            if len(existing_session) > 1:
+                session_is_active = existing_session[1]  # is_active field
+            
+            if session_is_active:
                 conn.close()
                 return jsonify({
-                    'error': 'This email address is already in use by another session. Please choose a different username or wait for the current session to expire.',
+                    'error': 'This email address is currently in use by an active session. Please choose a different username or wait for the session to expire.',
                     'code': 'EMAIL_IN_USE'
                 }), 409
-            elif len(existing_session) <= 1:  # No is_active column, session exists
-                conn.close()
-                return jsonify({
-                    'error': 'This email address is already in use by another session. Please choose a different username or wait for the current session to expire.',
-                    'code': 'EMAIL_IN_USE'
-                }), 409
+        
+        # If we get here, either no session exists or session is inactive
         
         # Create session token
         session_token = secrets.token_urlsafe(32)
@@ -943,6 +942,7 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
 
 
 
