@@ -233,6 +233,31 @@ height: 350px;
 max-height: 350px;
 }
 }
+    #inbox-list-container, 
+    #email-content-container {
+        width: 100%;
+        height: 500px;
+        max-height: 500px;
+    }
+    
+    .mobile-inbox-container {
+        height: auto;
+        min-height: 500px;
+    }
+    
+    #mobile-back-button {
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        margin-bottom: 15px;
+    }
+}
+
+/* Desktop improvements */
+@media (min-width: 768px) {
+    #mobile-back-button {
+        display: none !important;
+    }
+}
 /* Email content fixes using existing classes */
 #email-content-container {
 height: 500px;
@@ -358,53 +383,61 @@ class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 
 <!-- Improved Inbox Section -->
 <div class="flex flex-col md:flex-row gap-3 md:gap-6 mobile-inbox-container">
-<!-- Inbox List - Improved -->
-<div class="w-full md:w-2/5 glass-effect rounded-xl p-2 md:p-4 overflow-y-auto mobile-full mobile-inbox-list mobile-scroll">
-<div class="flex justify-between items-center mb-2 md:mb-4">
-<h2 class="text-base md:text-xl font-semibold text-white">
-<i class="fas fa-inbox mr-1 md:mr-2"></i>Inbox
-</h2>
-<div class="flex items-center gap-2">
-<span id="email-count" class="text-xs text-gray-300 font-medium bg-gray-800 px-2 py-1 rounded">0 emails</span>
-<button id="refresh-btn" class="p-2 rounded-lg hover:bg-gray-700 transition-colors text-white">
-<i class="fas fa-sync-alt text-sm"></i>
-</button>
-</div>
-</div>
-<div id="email-list-container" class="h-full overflow-y-auto smooth-transition">
-<div id="no-emails-default" class="text-center py-6 md:py-10 text-gray-300 flex flex-col items-center justify-center">
-<i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i>
-<p class="text-sm md:text-lg font-medium">No emails yet</p>
-<p class="text-xs mt-1 font-medium">Your inbox is ready for messages</p>
-</div>
-<div id="inbox-loader" style="display:none;" class="flex justify-center items-center py-8">
-<div id="loader"></div>
-</div>
-<div id="email-list" class="space-y-2"></div>
-</div>
-</div>
+    <!-- Inbox List - Always visible -->
+    <div id="inbox-list-container" class="w-full md:w-2/5 glass-effect rounded-xl p-2 md:p-4 overflow-y-auto mobile-full mobile-inbox-list mobile-scroll">
+        <div class="flex justify-between items-center mb-2 md:mb-4">
+            <h2 class="text-base md:text-xl font-semibold text-white">
+                <i class="fas fa-inbox mr-1 md:mr-2"></i>Inbox
+            </h2>
+            <div class="flex items-center gap-2">
+                <span id="email-count" class="text-xs text-gray-300 font-medium bg-gray-800 px-2 py-1 rounded">0 emails</span>
+                <button id="refresh-btn" class="p-2 rounded-lg hover:bg-gray-700 transition-colors text-white">
+                    <i class="fas fa-sync-alt text-sm"></i>
+                </button>
+            </div>
+        </div>
+        <div id="email-list-container" class="h-full overflow-y-auto smooth-transition">
+            <div id="no-emails-default" class="text-center py-6 md:py-10 text-gray-300 flex flex-col items-center justify-center">
+                <i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i>
+                <p class="text-sm md:text-lg font-medium">No emails yet</p>
+                <p class="text-xs mt-1 font-medium">Your inbox is ready for messages</p>
+            </div>
+            <div id="inbox-loader" style="display:none;" class="flex justify-center items-center py-8">
+                <div id="loader"></div>
+            </div>
+            <div id="email-list" class="space-y-2"></div>
+        </div>
+    </div>
 
-<!-- Email Content - Improved -->
-<div id="email-content-container" class="w-full md:w-3/5 glass-effect rounded-xl p-3 md:p-6 overflow-y-auto mobile-email-content">
-<div id="email-placeholder" class="flex flex-col items-center justify-center h-full text-gray-300 py-8">
-<i class="fas fa-envelope-open text-4xl md:text-5xl mb-4 opacity-60"></i>
-<p class="text-lg md:text-xl font-medium text-center">Select an email to read</p>
-<p class="text-sm mt-2 text-gray-400 text-center">Choose a message from your inbox to view its contents</p>
-</div>
-<div id="email-content" class="hidden h-full flex flex-col">
-<div class="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-6">
-<h2 id="email-subject" class="text-lg md:text-2xl font-bold text-white mb-1 md:mb-0 break-words"></h2>
-<span id="email-date" class="text-xs text-gray-300 bg-gray-800 px-3 py-1 rounded-lg font-medium whitespace-nowrap"></span>
-</div>
-<div class="flex items-center text-xs md:text-sm text-gray-300 mb-3 md:mb-6 border-b border-gray-700 pb-2 md:pb-4">
-<strong class="mr-2 text-white font-semibold flex items-center">
-<i class="fas fa-user mr-2"></i>From:
-</strong>
-<span id="email-from" class="font-mono font-medium break-all"></span>
-</div>
-<div id="email-body" class="email-content-container email-content-text flex-1"></div>
-</div>
-</div>
+    <!-- Email Content - Hidden on mobile by default -->
+    <div id="email-content-container" class="hidden md:block w-full md:w-3/5 glass-effect rounded-xl p-3 md:p-6 overflow-y-auto mobile-email-content">
+        <!-- Mobile Back Button -->
+        <div id="mobile-back-button" class="md:hidden flex items-center mb-4">
+            <button onclick="showInboxList()" class="flex items-center text-white hover:text-gray-300 transition-colors">
+                <i class="fas fa-arrow-left mr-2"></i>
+                <span class="font-medium">Back to Inbox</span>
+            </button>
+        </div>
+        
+        <div id="email-placeholder" class="flex flex-col items-center justify-center h-full text-gray-300 py-8">
+            <i class="fas fa-envelope-open text-4xl md:text-5xl mb-4 opacity-60"></i>
+            <p class="text-lg md:text-xl font-medium text-center">Select an email to read</p>
+            <p class="text-sm mt-2 text-gray-400 text-center">Choose a message from your inbox to view its contents</p>
+        </div>
+        <div id="email-content" class="hidden h-full flex flex-col">
+            <div class="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-6">
+                <h2 id="email-subject" class="text-lg md:text-2xl font-bold text-white mb-1 md:mb-0 break-words"></h2>
+                <span id="email-date" class="text-xs text-gray-300 bg-gray-800 px-3 py-1 rounded-lg font-medium whitespace-nowrap"></span>
+            </div>
+            <div class="flex items-center text-xs md:text-sm text-gray-300 mb-3 md:mb-6 border-b border-gray-700 pb-2 md:pb-4">
+                <strong class="mr-2 text-white font-semibold flex items-center">
+                    <i class="fas fa-user mr-2"></i>From:
+                </strong>
+                <span id="email-from" class="font-mono font-medium break-all"></span>
+            </div>
+            <div id="email-body" class="email-content-container email-content-text flex-1"></div>
+        </div>
+    </div>
 </div>
 </main>
 </div>
@@ -852,6 +885,60 @@ function createEmailLocally(customName) {
 function generateRandomUsername() {
     return Math.random().toString(36).substring(2, 12);
 }
+
+// Mobile/Desktop navigation
+function showInboxList() {
+    // Show inbox list, hide email content (mobile)
+    document.getElementById('inbox-list-container').classList.remove('hidden');
+    document.getElementById('email-content-container').classList.add('hidden');
+    
+    // Clear active email selection
+    document.querySelectorAll('.email-list-item').forEach(item => {
+        item.classList.remove('active');
+    });
+}
+
+function showEmailContent() {
+    // Hide inbox list, show email content (mobile)
+    document.getElementById('inbox-list-container').classList.add('hidden');
+    document.getElementById('email-content-container').classList.remove('hidden');
+}
+
+// Update viewEmail function
+function viewEmail(email, itemEl) {
+    // Set active state
+    document.querySelectorAll('.email-list-item').forEach(el => el.classList.remove('active'));
+    itemEl.classList.add('active');
+    
+    // Show email content
+    document.getElementById('email-placeholder').style.display = 'none';
+    document.getElementById('email-content').classList.remove('hidden');
+    
+    // Set email data
+    document.getElementById('email-subject').textContent = email.subject;
+    document.getElementById('email-from').textContent = email.sender;
+    document.getElementById('email-date').textContent = formatTime(email.timestamp);
+    document.getElementById('email-date').setAttribute('data-timestamp', email.timestamp);
+    
+    // Process email body
+    const bodyEl = document.getElementById('email-body');
+    const cleanBody = extractCleanEmailBody(email.body);
+    bodyEl.innerHTML = cleanBody;
+    
+    // On mobile, switch to email view
+    if (window.innerWidth < 768) {
+        showEmailContent();
+    }
+}
+
+// Handle window resize
+window.addEventListener('resize', function() {
+    if (window.innerWidth >= 768) {
+        // On desktop, always show both panels
+        document.getElementById('inbox-list-container').classList.remove('hidden');
+        document.getElementById('email-content-container').classList.remove('hidden');
+    }
+});
 
 function loadEmails() {
     if (!currentEmail) {
@@ -1573,5 +1660,6 @@ initApp();
 </script>
 </body>
 </html>
+
 
 
