@@ -339,7 +339,6 @@ def create_email():
                 'error': 'This email address is currently in use by another active session.',
                 'code': 'EMAIL_IN_USE'
             }), 409
-
         # Create session token
         session_token = secrets.token_urlsafe(32)
         created_at = datetime.now()
@@ -1009,6 +1008,7 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
 
 
 
