@@ -767,49 +767,39 @@ function createEmail(customName) {
         setupSessionExpiration();
     })
         .catch(err => {
-        console.error('Error creating email:', err);
+    console.error('Error creating email:', err);
+    
+    // Handle specific error cases
+    if (err.code === 'EMAIL_SELF_USED') {
+        showNotification('📧 You are already using this email in your current session', 'info');
+    } else if (err.code === 'EMAIL_IN_USE') {
+        showModal('Email Currently in Use', err.error, function() {
+            document.getElementById('username-input').focus();
+        });
+    } else if (err.code === 'USERNAME_BLACKLISTED') {
+        showNotification('🚫 ' + err.error, 'error');
+        document.getElementById('username-input').value = '';
+        document.getElementById('username-input').classList.add('border-red-500');
+        document.getElementById('username-input').focus();
         
-        // Handle specific error cases
-        // In createEmail() catch block, add:
-        if (err.code === 'EMAIL_SELF_USED') {
-            showNotification('📧 You are already using this email in your current session', 'info');
-        } else if (err.code === 'EMAIL_IN_USE') {
-            // Show the existing modal for other users
-            showModal('Email Currently in Use', err.error, function() {
+        showModal(
+            'Reserved Username',
+            'This username is reserved for the system owner. Please choose a different username.',
+            function() {
                 document.getElementById('username-input').focus();
-            });
-        }
-            showModal(
-                'Email Currently in Use',
-                'This username is currently being used by an active session.<br><br><strong>Please:</strong><br>• Choose a different username<br>• Wait for the current session to expire (1 hour)<br>• Ask the current user to end their session',
-                function() {
-                    document.getElementById('username-input').focus();
-                }
-            );
-        } else if (err.code === 'USERNAME_BLACKLISTED') {
-            showNotification('🚫 ' + err.error, 'error');
-            document.getElementById('username-input').value = '';
-            document.getElementById('username-input').classList.add('border-red-500');
-            document.getElementById('username-input').focus();
-            
-            showModal(
-                'Reserved Username',
-                'This username is reserved for the system owner. Please choose a different username.',
-                function() {
-                    document.getElementById('username-input').focus();
-                }
-            );
-        } else if (err.code === 'INVALID_USERNAME') {
-            showNotification('❌ ' + err.error, 'error');
-            document.getElementById('username-input').classList.add('border-red-500');
-            document.getElementById('username-input').focus();
-        } else {
-            handleApiError(err, 'Failed to create email');
-            if (!err.message.includes('409') && err.code !== 'EMAIL_IN_USE' && err.code !== 'USERNAME_BLACKLISTED') {
-                createEmailLocally(customName);
             }
+        );
+    } else if (err.code === 'INVALID_USERNAME') {
+        showNotification('❌ ' + err.error, 'error');
+        document.getElementById('username-input').classList.add('border-red-500');
+        document.getElementById('username-input').focus();
+    } else {
+        handleApiError(err, 'Failed to create email');
+        if (!err.message.includes('409') && err.code !== 'EMAIL_IN_USE' && err.code !== 'USERNAME_BLACKLISTED') {
+            createEmailLocally(customName);
         }
-    })
+    }
+})
     // In createEmail() function, find the button reset part:
 .finally(function() {
     // Reset button state PROPERLY
@@ -817,7 +807,6 @@ function createEmail(customName) {
     btn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create';
     btn.classList.remove('opacity-50'); // Add this line
 });
-}
 
 // Fallback function to create email locally if API fails
 function createEmailLocally(customName) {
@@ -1542,6 +1531,7 @@ initApp();
 </script>
 </body>
 </html>
+
 
 
 
