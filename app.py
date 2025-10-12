@@ -261,6 +261,7 @@ def create_email():
     try:
         data = request.get_json() or {}
         custom_name = data.get('name', '').strip()
+        admin_mode = data.get('admin_mode', False)
         
         # Validate security headers
         session_id = request.headers.get('X-Session-ID')
@@ -274,14 +275,9 @@ def create_email():
             username = ''.join(c for c in username if c.isalnum() or c in '-_')
             if not username:
                 return jsonify({'error': 'Invalid username', 'code': 'INVALID_USERNAME'}), 400
-              
+            
+            # Skip blacklist check if admin mode is enabled
             if not admin_mode and is_username_blacklisted(username):
-                return jsonify({
-                    'error': 'This username is reserved for the system owner. Please choose a different username.',
-                    'code': 'USERNAME_BLACKLISTED'
-                }), 403
-            # Check against database blacklist
-            if is_username_blacklisted(username):
                 return jsonify({
                     'error': 'This username is reserved for the system owner. Please choose a different username.',
                     'code': 'USERNAME_BLACKLISTED'
@@ -320,27 +316,27 @@ def create_email():
         existing_session = c.fetchone()
         
         if existing_session:
-    session_is_active = True
-    if len(existing_session) > 1:
-        session_is_active = existing_session[1]
-    
-    current_user_session = data.get('session_token')  # ADD THIS
-    
-    if session_is_active:
-        if existing_session[0] == current_user_session:
-            # It's the same user
-            conn.close()
-            return jsonify({
-                'error': 'You are already using this email address in your current session.',
-                'code': 'EMAIL_SELF_USED'
-            }), 409
-        else:
-            # It's a different user
-            conn.close()
-            return jsonify({
-                'error': 'This email address is currently in use by another active session.',
-                'code': 'EMAIL_IN_USE'
-            }), 409
+            session_is_active = True
+            if len(existing_session) > 1:
+                session_is_active = existing_session[1]
+            
+            current_user_session = data.get('session_token')
+            
+            if session_is_active:
+                if existing_session[0] == current_user_session:
+                    # It's the same user - tell them they're already using it
+                    conn.close()
+                    return jsonify({
+                        'error': 'You are already using this email address in your current session.',
+                        'code': 'EMAIL_SELF_USED'
+                    }), 409
+                else:
+                    # It's a different user
+                    conn.close()
+                    return jsonify({
+                        'error': 'This email address is currently in use by another active session.',
+                        'code': 'EMAIL_IN_USE'
+                    }), 409
         
         # Create session token
         session_token = secrets.token_urlsafe(32)
@@ -374,119 +370,6 @@ def create_email():
     except Exception as e:
         logger.error(f"❌ Error creating email: {e}")
         return jsonify({'error': 'Failed to create session', 'code': 'SERVER_ERROR'}), 500
-
-@app.route('/api/emails/<email_address>', methods=['GET'])
-def get_emails(email_address):
-    try:
-        session_token = request.headers.get('X-Session-Token')
-        
-        if not session_token:
-            return jsonify({'error': 'No session token'}), 401
-        
-        conn = get_db()
-        c = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # Check if is_active column exists
-        try:
-            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
-            has_is_active = c.fetchone() is not None
-            
-            if has_is_active:
-                c.execute('''
-                    SELECT email_address, expires_at, is_active
-                    FROM sessions 
-                    WHERE session_token = %s AND email_address = %s
-                ''', (session_token, email_address))
-            else:
-                c.execute('''
-                    SELECT email_address, expires_at
-                    FROM sessions 
-                    WHERE session_token = %s AND email_address = %s
-                ''', (session_token, email_address))
-        except Exception as e:
-            logger.warning(f"Error checking session with is_active: {e}")
-            c.execute('''
-                SELECT email_address, expires_at
-                FROM sessions 
-                WHERE session_token = %s AND email_address = %s
-            ''', (session_token, email_address))
-        
-        session_data = c.fetchone()
-        
-        if not session_data:
-            conn.close()
-            return jsonify({'error': 'Invalid session'}), 401
-        
-        # Check if expired
-        if datetime.now() > session_data['expires_at']:
-            # Try to mark session as inactive if column exists
-            try:
-                c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
-                if c.fetchone():
-                    c.execute('UPDATE sessions SET is_active = FALSE WHERE session_token = %s', (session_token,))
-            except Exception:
-                pass  # Ignore if is_active column doesn't exist or update fails
-            conn.commit()
-            conn.close()
-            return jsonify({'error': 'Session expired'}), 401
-        
-        # Check if session is active (if is_active column exists)
-        if 'is_active' in session_data and not session_data['is_active']:
-            conn.close()
-            return jsonify({'error': 'Session has been ended'}), 401
-        
-        # Update last activity
-        c.execute('''
-            UPDATE sessions 
-            SET last_activity = %s 
-            WHERE session_token = %s
-        ''', (datetime.now(), session_token))
-        conn.commit()
-        
-        # Get emails for this session only
-        c.execute('''
-            SELECT sender, subject, body, received_at, timestamp 
-            FROM emails 
-            WHERE recipient = %s AND session_token = %s
-            ORDER BY received_at DESC
-        ''', (email_address, session_token))
-        
-        emails = []
-        for row in c.fetchall():
-            # Use received_at if available, otherwise use timestamp
-            if row['received_at']:
-                display_timestamp = row['received_at']
-            else:
-                display_timestamp = row['timestamp']
-            
-            # Convert to proper datetime object if it's a string
-            if isinstance(display_timestamp, str):
-                try:
-                    # Handle different timestamp formats
-                    if 'Z' in display_timestamp:
-                        display_timestamp = datetime.fromisoformat(display_timestamp.replace('Z', '+00:00'))
-                    else:
-                        display_timestamp = datetime.fromisoformat(display_timestamp)
-                except:
-                    display_timestamp = datetime.now()
-            
-            
-            local_timestamp = display_timestamp + timedelta(hours=6, minutes=30)
-            
-            emails.append({
-                'id': len(emails) + 1,
-                'sender': row['sender'],
-                'subject': row['subject'],
-                'body': row['body'],
-                'timestamp': local_timestamp.isoformat()
-            })
-        
-        conn.close()
-        return jsonify({'emails': emails})
-        
-    except Exception as e:
-        logger.error(f"❌ Error fetching emails: {e}")
-        return jsonify({'error': 'Failed to fetch emails'}), 500
       
 @app.route('/api/session/end', methods=['POST'])
 def end_session():
@@ -1002,4 +885,5 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
 
