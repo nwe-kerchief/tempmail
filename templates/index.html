@@ -252,6 +252,13 @@ word-wrap: break-word;
 .border-red-500 {
     border-color: #ef4444 !important;
 }
+/* Add to your existing CSS */
+.bg-blue-600 {
+    background-color: #2563eb;
+}
+.bg-blue-600:hover {
+    background-color: #1d4ed8;
+}
 </style>
 </head>
 <body class="text-gray-100 min-h-screen p-2 md:p-4">
@@ -486,14 +493,31 @@ function clearSession() {
     currentEmail = '';
     sessionToken = '';
     localStorage.removeItem('tempMailSession');
+    
+    // Clear the username input field
+    document.getElementById('username-input').value = '';
+    
+    // Reset domain selection to default ("Select domain")
+    document.getElementById('domain-select').selectedIndex = 0;
+    
+    // Hide email display and end session button
     document.getElementById('email-display').classList.add('hidden');
     document.getElementById('end-session-btn').classList.add('hidden');
+    
+    // Reset email view to placeholder
     document.getElementById('email-placeholder').style.display = 'flex';
     document.getElementById('email-content').classList.add('hidden');
+    
+    // Clear email list and show default message
     document.getElementById('email-list').innerHTML = '';
     document.getElementById('email-count').textContent = '0 emails';
+    document.getElementById('no-emails-default').style.display = 'flex';
+    document.getElementById('inbox-loader').style.display = 'none';
+    
+    // Reset page title
     document.title = 'TempMail - AMMZ';
     
+    // Stop refresh intervals
     if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval);
         autoRefreshInterval = null;
@@ -502,8 +526,9 @@ function clearSession() {
         clearInterval(timeUpdateInterval);
         timeUpdateInterval = null;
     }
+    
+    console.log('✅ Session cleared completely');
 }
-
 // Load session from localStorage
 function loadSession() {
     const savedSession = localStorage.getItem('tempMailSession');
@@ -620,7 +645,16 @@ function loadDomains() {
 }
 
 document.getElementById('big-random-btn').addEventListener('click', function() {
+    // Clear username
     document.getElementById('username-input').value = '';
+    
+    // Auto-select first available domain if none selected
+    var domainSelect = document.getElementById('domain-select');
+    if (!domainSelect.value && domainSelect.options.length > 1) {
+        domainSelect.selectedIndex = 1;
+        showNotification('🔀 Auto-selected domain: ' + domainSelect.value, 'info');
+    }
+    
     createEmail('');
 });
 
@@ -1198,9 +1232,17 @@ function showNotification(message, type) {
     var notif = document.getElementById('notification');
     var text = document.getElementById('notification-text');
     text.textContent = message;
-    notif.className = type === 'success' ? 
-        'text-center mb-2 md:mb-4 p-2 md:p-4 rounded-xl text-white font-medium text-sm md:text-base bg-green-600' :
-        'text-center mb-2 md:mb-4 p-2 md:p-4 rounded-xl text-white font-medium text-sm md:text-base bg-red-600';
+    
+    var bgColor = 'bg-blue-600';
+    if (type === 'success') {
+        bgColor = 'bg-green-600';
+    } else if (type === 'error') {
+        bgColor = 'bg-red-600';
+    } else if (type === 'info') {
+        bgColor = 'bg-blue-600';
+    }
+    
+    notif.className = `text-center mb-2 md:mb-4 p-2 md:p-4 rounded-xl text-white font-medium text-sm md:text-base ${bgColor}`;
     notif.classList.remove('hidden');
     setTimeout(() => notif.classList.add('hidden'), 3000);
 }
@@ -1212,9 +1254,20 @@ function escapeHtml(text) {
 }
 
 // Fixed time formatting function - PROPER TIME FORMAT
+// Fixed time formatting function - PROPER TIME FORMAT
 function formatTime(timestamp) {
     try {
-        var date = new Date(timestamp);
+        // Handle both string timestamps and Date objects
+        var date;
+        if (typeof timestamp === 'string') {
+            // Remove timezone Z and convert to local time
+            date = new Date(timestamp.replace('Z', ''));
+        } else if (timestamp instanceof Date) {
+            date = timestamp;
+        } else {
+            date = new Date(timestamp);
+        }
+        
         var now = new Date();
         var diff = now - date;
         var seconds = Math.floor(diff / 1000);
@@ -1231,6 +1284,7 @@ function formatTime(timestamp) {
         // For older dates, show date and time
         return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
     } catch (e) {
+        console.error('Time formatting error:', e, 'timestamp:', timestamp);
         return 'recently';
     }
 }
@@ -1301,9 +1355,59 @@ function initApp() {
     });
 }
 
+// Add Enter key support for username input
+document.getElementById('username-input').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        createEmailFromInput();
+    }
+});
+
+// Function to handle email creation with auto domain selection
+function createEmailFromInput() {
+    var username = document.getElementById('username-input').value.trim();
+    var domainSelect = document.getElementById('domain-select');
+    var domain = domainSelect.value;
+    
+    // Clear previous error states
+    document.getElementById('username-input').classList.remove('border-red-500');
+    
+    if (!username) {
+        showNotification('❌ Please enter a username!', 'error');
+        document.getElementById('username-input').classList.add('border-red-500');
+        document.getElementById('username-input').focus();
+        return;
+    }
+    
+    // If no domain selected, auto-select first available domain
+    if (!domain) {
+        if (domainSelect.options.length > 1) {
+            domainSelect.selectedIndex = 1; // Select first domain (skip "Select domain" option)
+            domain = domainSelect.value;
+            showNotification('🔀 Auto-selected domain: ' + domain, 'info');
+        } else {
+            showNotification('❌ No domains available!', 'error');
+            return;
+        }
+    }
+    
+    // Validate username
+    if (!/^[a-zA-Z0-9-_]+$/.test(username)) {
+        showNotification('❌ Username can only contain letters, numbers, hyphens, and underscores!', 'error');
+        document.getElementById('username-input').classList.add('border-red-500');
+        document.getElementById('username-input').focus();
+        return;
+    }
+    
+    createEmail(username);
+}
+
+// Update the create button click handler
+document.getElementById('create-btn').addEventListener('click', createEmailFromInput);
+
 // Start the app
 initApp();
 </script>
 </body>
 </html>
+
 
