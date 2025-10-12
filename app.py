@@ -221,6 +221,7 @@ def index():
 @app.route('/api/domains', methods=['GET'])
 def get_domains():
     return jsonify({'domains': [DOMAIN]})
+
 @app.route('/api/create', methods=['POST'])
 def create_email():
     try:
@@ -782,63 +783,6 @@ def admin_delete_email(email_id):
         logger.error(f"❌ Admin delete email error: {e}")
         return jsonify({'error': str(e)}), 500
 
-// Load active sessions
-function loadActiveSessions() {
-    fetch(API_URL + '/api/admin/sessions')
-    .then(res => {
-        if (res.status === 401) {
-            location.reload();
-            return;
-        }
-        return res.json();
-    })
-    .then(data => {
-        var sessionsEl = document.getElementById('active-sessions');
-        
-        if (!data || data.error) {
-            sessionsEl.innerHTML = '<p class="text-red-400 text-center py-8">Error loading sessions</p>';
-            return;
-        }
-        
-        if (!data.sessions || data.sessions.length === 0) {
-            sessionsEl.innerHTML = '<p class="text-gray-400 text-center py-8">No active sessions</p>';
-            return;
-        }
-        
-        sessionsEl.innerHTML = '';
-        
-        data.sessions.forEach(session => {
-            var item = document.createElement('div');
-            item.className = 'address-item bg-gray-800 p-4 rounded-lg border border-gray-700 hover:border-gray-600';
-            item.innerHTML = `
-                <div class="flex justify-between items-start">
-                    <div class="flex-1">
-                        <p class="text-white font-semibold text-sm truncate">${escapeHtml(session.email)}</p>
-                        <div class="grid grid-cols-2 gap-2 mt-2 text-xs text-gray-400">
-                            <div>
-                                <i class="fas fa-play-circle mr-1"></i>
-                                ${session.session_age_minutes} min ago
-                            </div>
-                            <div>
-                                <i class="fas fa-clock mr-1"></i>
-                                ${session.time_remaining_minutes} min left
-                            </div>
-                        </div>
-                        <p class="text-xs text-gray-500 mt-1">
-                            Last active: ${formatTime(session.last_activity)}
-                        </p>
-                    </div>
-                </div>
-            `;
-            sessionsEl.appendChild(item);
-        });
-    })
-    .catch(err => {
-        console.error('Error loading sessions:', err);
-        document.getElementById('active-sessions').innerHTML = '<p class="text-red-400 text-center py-8">Failed to load sessions</p>';
-    });
-}
-
 @app.route('/api/admin/delete-address/<email_address>', methods=['DELETE'])
 @admin_required
 def admin_delete_address(email_address):
@@ -853,6 +797,61 @@ def admin_delete_address(email_address):
         
     except Exception as e:
         logger.error(f"❌ Admin delete address error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# Add the new active sessions endpoint
+@app.route('/api/admin/sessions', methods=['GET'])
+@admin_required
+def admin_get_sessions():
+    """Get all active sessions"""
+    try:
+        conn = get_db()
+        c = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Check if is_active column exists
+        try:
+            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
+            has_is_active = c.fetchone() is not None
+            
+            if has_is_active:
+                c.execute('''
+                    SELECT session_token, email_address, created_at, expires_at, last_activity
+                    FROM sessions 
+                    WHERE expires_at > NOW() AND is_active = TRUE
+                    ORDER BY last_activity DESC
+                ''')
+            else:
+                c.execute('''
+                    SELECT session_token, email_address, created_at, expires_at, last_activity
+                    FROM sessions 
+                    WHERE expires_at > NOW()
+                    ORDER BY last_activity DESC
+                ''')
+        except Exception as e:
+            logger.warning(f"Error checking is_active column: {e}")
+            c.execute('''
+                SELECT session_token, email_address, created_at, expires_at, last_activity
+                FROM sessions 
+                WHERE expires_at > NOW()
+                ORDER BY last_activity DESC
+            ''')
+        
+        sessions = []
+        for row in c.fetchall():
+            sessions.append({
+                'email': row['email_address'],
+                'created_at': row['created_at'].isoformat(),
+                'expires_at': row['expires_at'].isoformat(),
+                'last_activity': row['last_activity'].isoformat(),
+                'session_age_minutes': int((datetime.now() - row['created_at']).total_seconds() / 60),
+                'time_remaining_minutes': int((row['expires_at'] - datetime.now()).total_seconds() / 60)
+            })
+        
+        conn.close()
+        return jsonify({'sessions': sessions})
+        
+    except Exception as e:
+        logger.error(f"❌ Error fetching sessions: {e}")
         return jsonify({'error': str(e)}), 500
 
 # Error handlers
@@ -876,6 +875,3 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
-
-
-
