@@ -135,6 +135,61 @@ font-size: 12px;
 color: #9ca3af;
 }
 
+/* Custom Modal */
+.modal-overlay {
+position: fixed;
+top: 0;
+left: 0;
+right: 0;
+bottom: 0;
+background: rgba(0, 0, 0, 0.7);
+display: flex;
+align-items: center;
+justify-content: center;
+z-index: 1000;
+backdrop-filter: blur(5px);
+}
+.modal-content {
+background: linear-gradient(135deg, #1e293b 0%, #374151 100%);
+border-radius: 16px;
+padding: 2rem;
+max-width: 400px;
+width: 90%;
+border: 1px solid rgba(255, 255, 255, 0.1);
+box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+}
+.modal-buttons {
+display: flex;
+gap: 12px;
+margin-top: 1.5rem;
+}
+.modal-btn {
+flex: 1;
+padding: 12px 20px;
+border-radius: 10px;
+font-weight: 600;
+transition: all 0.2s ease;
+border: none;
+cursor: pointer;
+}
+.modal-btn-confirm {
+background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+color: white;
+}
+.modal-btn-confirm:hover {
+transform: translateY(-2px);
+box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+}
+.modal-btn-cancel {
+background: rgba(255, 255, 255, 0.1);
+color: white;
+border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.modal-btn-cancel:hover {
+background: rgba(255, 255, 255, 0.2);
+transform: translateY(-2px);
+}
+
 /* Improved inbox list styling */
 #email-list-container {
 height: calc(100% - 60px);
@@ -197,6 +252,21 @@ word-wrap: break-word;
 </style>
 </head>
 <body class="text-gray-100 min-h-screen p-2 md:p-4">
+
+<!-- Custom Modal Structure -->
+<div id="custom-modal" class="modal-overlay hidden">
+<div class="modal-content">
+<div class="text-center mb-4">
+<i class="fas fa-exclamation-triangle text-3xl text-yellow-400 mb-3"></i>
+<h3 class="text-xl font-bold text-white mb-2" id="modal-title">Confirm Action</h3>
+<p class="text-gray-300" id="modal-message">Are you sure you want to proceed?</p>
+</div>
+<div class="modal-buttons">
+<button id="modal-cancel" class="modal-btn modal-btn-cancel">Cancel</button>
+<button id="modal-confirm" class="modal-btn modal-btn-confirm">Confirm</button>
+</div>
+</div>
+</div>
 
 <div class="h-fit mb-2">
 <div class="bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 text-white py-2 px-4 rounded-lg shadow-lg">
@@ -339,6 +409,35 @@ var emailSecurityKey = generateSecurityKey();
 var sessionStartTime = null;
 var domainsLoaded = false;
 
+// Custom Modal Functions
+function showModal(title, message, confirmCallback) {
+    const modal = document.getElementById('custom-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalMessage = document.getElementById('modal-message');
+    const modalConfirm = document.getElementById('modal-confirm');
+    const modalCancel = document.getElementById('modal-cancel');
+    
+    modalTitle.textContent = title;
+    modalMessage.textContent = message;
+    modal.classList.remove('hidden');
+    
+    // Remove previous event listeners
+    const newConfirm = modalConfirm.cloneNode(true);
+    const newCancel = modalCancel.cloneNode(true);
+    modalConfirm.parentNode.replaceChild(newConfirm, modalConfirm);
+    modalCancel.parentNode.replaceChild(newCancel, modalCancel);
+    
+    // Add new event listeners
+    document.getElementById('modal-confirm').onclick = function() {
+        modal.classList.add('hidden');
+        if (confirmCallback) confirmCallback();
+    };
+    
+    document.getElementById('modal-cancel').onclick = function() {
+        modal.classList.add('hidden');
+    };
+}
+
 // Input validation
 function validateEmail(email) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -367,9 +466,11 @@ function handleApiError(error, defaultMessage = 'An error occurred') {
     
     if (error.message.includes('Failed to fetch')) {
         showNotification('🌐 Network error - check your connection', 'error');
-    } else if (error.message.includes('401')) {
-        showNotification('🔐 Session expired - creating new session', 'error');
+    } else if (error.message.includes('401') || error.message.includes('Session expired') || error.message.includes('Session has been ended')) {
+        showNotification('🔐 Session ended - creating new session', 'error');
         clearSession();
+    } else if (error.message.includes('409')) {
+        showNotification('⚠️ This email is already in use by another session', 'error');
     } else if (error.message.includes('404')) {
         // This is normal for new emails
         return;
@@ -384,9 +485,20 @@ function clearSession() {
     localStorage.removeItem('tempMailSession');
     document.getElementById('email-display').classList.add('hidden');
     document.getElementById('end-session-btn').classList.add('hidden');
+    document.getElementById('email-placeholder').style.display = 'flex';
+    document.getElementById('email-content').classList.add('hidden');
+    document.getElementById('email-list').innerHTML = '';
+    document.getElementById('email-count').textContent = '0 emails';
+    document.title = 'TempMail - AMMZ';
     
-    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-    if (timeUpdateInterval) clearInterval(timeUpdateInterval);
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+    if (timeUpdateInterval) {
+        clearInterval(timeUpdateInterval);
+        timeUpdateInterval = null;
+    }
 }
 
 // Load session from localStorage
@@ -397,9 +509,8 @@ function loadSession() {
         const now = Date.now();
         const sessionAge = now - session.createdAt;
         
-        // Session expires after 1 hour OR if no emails received for 1 hour
-        const hasRecentEmail = session.lastEmailTime && (now - session.lastEmailTime < 60 * 60 * 1000);
-        const sessionValid = sessionAge < 60 * 60 * 1000 && hasRecentEmail;
+        // Session expires after 1 hour
+        const sessionValid = sessionAge < 60 * 60 * 1000;
         
         if (sessionValid && session.email) {
             currentEmail = session.email;
@@ -602,8 +713,10 @@ function createEmail(customName) {
         console.error('Error creating email:', err);
         handleApiError(err, 'Failed to create email');
         
-        // Fallback: Create email locally if API fails
-        createEmailLocally(customName);
+        // Don't create locally if email is already in use
+        if (!err.message.includes('409')) {
+            createEmailLocally(customName);
+        }
     })
     .finally(function() {
         btn.disabled = false;
@@ -1066,23 +1179,28 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Fixed time formatting function - NO PLURAL "s"
+// Fixed time formatting function - PROPER TIME FORMAT
 function formatTime(timestamp) {
-    var date = new Date(timestamp);
-    var now = new Date();
-    var diff = now - date;
-    var seconds = Math.floor(diff / 1000);
-    var minutes = Math.floor(seconds / 60);
-    var hours = Math.floor(minutes / 60);
-    var days = Math.floor(hours / 24);
-    
-    if (seconds < 10) return 'just now';
-    if (seconds < 60) return seconds + ' sec ago';
-    if (minutes < 60) return minutes + ' min ago';
-    if (hours < 24) return hours + ' hour ago';
-    if (days < 7) return days + ' day ago';
-    
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    try {
+        var date = new Date(timestamp);
+        var now = new Date();
+        var diff = now - date;
+        var seconds = Math.floor(diff / 1000);
+        var minutes = Math.floor(seconds / 60);
+        var hours = Math.floor(minutes / 60);
+        var days = Math.floor(hours / 24);
+        
+        if (seconds < 10) return 'just now';
+        if (seconds < 60) return seconds + ' sec ago';
+        if (minutes < 60) return minutes + ' min ago';
+        if (hours < 24) return hours + ' hour ago';
+        if (days < 7) return days + ' day ago';
+        
+        // For older dates, show date and time
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    } catch (e) {
+        return 'recently';
+    }
 }
 
 // Add session expiration
@@ -1092,21 +1210,47 @@ function setupSessionExpiration() {
     setTimeout(function() {
         showNotification('🕒 Session expired. Please create a new email address.', 'error');
         clearSession();
-        document.getElementById('email-placeholder').style.display = 'flex';
-        document.getElementById('email-content').classList.add('hidden');
-        document.getElementById('email-list').innerHTML = '';
-        document.getElementById('email-count').textContent = '0 emails';
-        document.title = 'TempMail - AMMZ';
     }, sessionTimeout);
 }
 
-document.getElementById('end-session-btn').addEventListener('click', function() {
-    if (confirm('⚠️ End this session? You will lose access to your emails!')) {
+// End session properly
+function endSession() {
+    if (!currentEmail || !sessionToken) return;
+    
+    fetch(API_URL + '/api/session/end', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            session_token: sessionToken,
+            email_address: currentEmail
+        })
+    })
+    .then(res => {
+        if (!res.ok) {
+            throw new Error('Failed to end session');
+        }
+        return res.json();
+    })
+    .then(data => {
         clearSession();
-        document.getElementById('email-placeholder').style.display = 'flex';
-        document.getElementById('email-content').classList.add('hidden');
+        showNotification('✅ Session ended successfully', 'success');
+    })
+    .catch(err => {
+        console.error('Error ending session:', err);
+        // Still clear session locally even if API fails
+        clearSession();
         showNotification('✅ Session ended', 'success');
-    }
+    });
+}
+
+document.getElementById('end-session-btn').addEventListener('click', function() {
+    showModal(
+        'End Session', 
+        'Are you sure you want to end this session? You will lose access to your current emails!',
+        endSession
+    );
 });
 
 // Initialize the app
