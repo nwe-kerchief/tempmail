@@ -359,6 +359,15 @@ def create_email():
         logger.error(f"❌ Error creating email: {e}")
         return jsonify({'error': 'Failed to create session', 'code': 'SERVER_ERROR'}), 500
 
+@app.route('/api/verify-admin', methods=['POST'])
+def verify_admin():
+    data = request.get_json()
+    password = data.get('password', '')
+    
+    if password == APP_PASSWORD:
+        return jsonify({'success': True})
+    return jsonify({'success': False}), 401
+
 @app.route('/api/emails/<email_address>', methods=['GET'])
 def get_emails(email_address):
     try:
@@ -986,3 +995,4 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
