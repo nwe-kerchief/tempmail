@@ -753,21 +753,32 @@ function createEmail(customName) {
         startTimeUpdate();
         setupSessionExpiration();
     })
-    .catch(err => {
+        .catch(err => {
         console.error('Error creating email:', err);
         
         // Handle specific error cases
         if (err.code === 'EMAIL_IN_USE') {
             showNotification('⚠️ ' + err.error, 'error');
-            // Clear the username input and highlight it
             document.getElementById('username-input').value = '';
             document.getElementById('username-input').classList.add('border-red-500');
             document.getElementById('username-input').focus();
             
-            // Show custom modal for email in use
             showModal(
                 'Email Already in Use',
                 'This username is currently being used by another session. Please choose a different username or try again later.',
+                function() {
+                    document.getElementById('username-input').focus();
+                }
+            );
+        } else if (err.code === 'USERNAME_BLACKLISTED') {
+            showNotification('🚫 ' + err.error, 'error');
+            document.getElementById('username-input').value = '';
+            document.getElementById('username-input').classList.add('border-red-500');
+            document.getElementById('username-input').focus();
+            
+            showModal(
+                'Reserved Username',
+                'This username is reserved for the system owner. Please choose a different username.',
                 function() {
                     document.getElementById('username-input').focus();
                 }
@@ -778,8 +789,7 @@ function createEmail(customName) {
             document.getElementById('username-input').focus();
         } else {
             handleApiError(err, 'Failed to create email');
-            // Don't create locally if email is already in use
-            if (!err.message.includes('409') && !err.code === 'EMAIL_IN_USE') {
+            if (!err.message.includes('409') && err.code !== 'EMAIL_IN_USE' && err.code !== 'USERNAME_BLACKLISTED') {
                 createEmailLocally(customName);
             }
         }
@@ -1253,13 +1263,10 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Fixed time formatting function - PROPER TIME FORMAT with timezone correction
 function formatTime(timestamp) {
     try {
-        // Handle both string timestamps and Date objects
         var date;
         if (typeof timestamp === 'string') {
-            // Handle ISO string with timezone
             date = new Date(timestamp);
         } else if (timestamp instanceof Date) {
             date = timestamp;
@@ -1267,11 +1274,8 @@ function formatTime(timestamp) {
             date = new Date(timestamp);
         }
         
-        // Apply timezone correction (add 6 hours to compensate for server UTC)
-        var correctedDate = new Date(date.getTime() + (6 * 60 * 60 * 1000));
-        
         var now = new Date();
-        var diff = now - correctedDate;
+        var diff = now - date;
         var seconds = Math.floor(diff / 1000);
         var minutes = Math.floor(seconds / 60);
         var hours = Math.floor(minutes / 60);
@@ -1283,10 +1287,8 @@ function formatTime(timestamp) {
         if (hours < 24) return hours + ' hour ago';
         if (days < 7) return days + ' day ago';
         
-        // For older dates, show date and time
-        return correctedDate.toLocaleDateString() + ' ' + correctedDate.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
     } catch (e) {
-        console.error('Time formatting error:', e, 'timestamp:', timestamp);
         return 'recently';
     }
 }
@@ -1411,6 +1413,7 @@ initApp();
 </script>
 </body>
 </html>
+
 
 
 
