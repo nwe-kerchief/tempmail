@@ -249,6 +249,9 @@ overflow-x: hidden;
 max-width: 100%;
 word-wrap: break-word;
 }
+.border-red-500 {
+    border-color: #ef4444 !important;
+}
 </style>
 </head>
 <body class="text-gray-100 min-h-screen p-2 md:p-4">
@@ -650,6 +653,9 @@ function createEmail(customName) {
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
     
+    // Clear any previous error states
+    document.getElementById('username-input').classList.remove('border-red-500');
+    
     // Security: Include session ID and security key in request
     fetch(API_URL + '/api/create', {
         method: 'POST',
@@ -666,7 +672,13 @@ function createEmail(customName) {
     .then(res => {
         if (!res.ok) {
             return res.text().then(text => {
-                throw new Error(text || 'Server error: ' + res.status);
+                let errorData;
+                try {
+                    errorData = JSON.parse(text);
+                } catch (e) {
+                    errorData = { error: text, code: 'UNKNOWN_ERROR' };
+                }
+                throw errorData;
             });
         }
         return res.json();
@@ -677,11 +689,10 @@ function createEmail(customName) {
         }
         
         currentEmail = data.email;
-        sessionToken = data.session_token;  // Fixed: match backend field name
+        sessionToken = data.session_token;
         sessionStartTime = Date.now();
         saveSession();
 
-        
         var parts = currentEmail.split('@');
         
         document.getElementById('username-input').value = parts[0];
@@ -690,7 +701,6 @@ function createEmail(customName) {
         document.getElementById('email-display').classList.remove('hidden');
         document.getElementById('end-session-btn').classList.remove('hidden');
 
-        
         // Reset email view to placeholder
         document.getElementById('email-placeholder').style.display = 'flex';
         document.getElementById('email-content').classList.add('hidden');
@@ -711,11 +721,33 @@ function createEmail(customName) {
     })
     .catch(err => {
         console.error('Error creating email:', err);
-        handleApiError(err, 'Failed to create email');
         
-        // Don't create locally if email is already in use
-        if (!err.message.includes('409')) {
-            createEmailLocally(customName);
+        // Handle specific error cases
+        if (err.code === 'EMAIL_IN_USE') {
+            showNotification('⚠️ ' + err.error, 'error');
+            // Clear the username input and highlight it
+            document.getElementById('username-input').value = '';
+            document.getElementById('username-input').classList.add('border-red-500');
+            document.getElementById('username-input').focus();
+            
+            // Show custom modal for email in use
+            showModal(
+                'Email Already in Use',
+                'This username is currently being used by another session. Please choose a different username or try again later.',
+                function() {
+                    document.getElementById('username-input').focus();
+                }
+            );
+        } else if (err.code === 'INVALID_USERNAME') {
+            showNotification('❌ ' + err.error, 'error');
+            document.getElementById('username-input').classList.add('border-red-500');
+            document.getElementById('username-input').focus();
+        } else {
+            handleApiError(err, 'Failed to create email');
+            // Don't create locally if email is already in use
+            if (!err.message.includes('409') && !err.code === 'EMAIL_IN_USE') {
+                createEmailLocally(customName);
+            }
         }
     })
     .finally(function() {
@@ -1274,3 +1306,4 @@ initApp();
 </script>
 </body>
 </html>
+
