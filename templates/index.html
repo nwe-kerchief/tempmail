@@ -371,7 +371,7 @@ class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 </button>
 </div>
 </div>
-<div id="email-list-container" class=""h-full overflow-y-auto smooth-transition">
+<div id="email-list-container" class="h-full overflow-y-auto smooth-transition">
 <div id="no-emails-default" class="text-center py-6 md:py-10 text-gray-300 flex flex-col items-center justify-center">
 <i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i>
 <p class="text-sm md:text-lg font-medium">No emails yet</p>
@@ -418,20 +418,70 @@ class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 </div>
 
 <script>
-var API_URL = window.location.origin;
-var currentEmail = '';
-var sessionToken = ''; 
-var autoRefreshInterval = null;
-var timeUpdateInterval = null;
-var lastEmailCount = 0;
-var sessionId = generateSessionId();
-var emailSecurityKey = generateSecurityKey();
-var sessionStartTime = null;
-var domainsLoaded = false;
-var isAdminMode = false;
+// Configuration
+const API_URL = window.location.origin;
+const SESSION_TIMEOUT = 60 * 60 * 1000; // 1 hour
 
+// State variables
+let currentEmail = '';
+let sessionToken = ''; 
+let autoRefreshInterval = null;
+let timeUpdateInterval = null;
+let lastEmailCount = 0;
+let sessionId = generateSessionId();
+let emailSecurityKey = generateSecurityKey();
+let sessionStartTime = null;
+let domainsLoaded = false;
+let isAdminMode = false;
 
-// Custom Modal Functions
+// Utility Functions
+function generateSessionId() {
+    return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+}
+
+function generateSecurityKey() {
+    return 'key_' + Math.random().toString(36).substr(2, 16);
+}
+
+function validateEmail(email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+}
+
+function sanitizeInput(input) {
+    const div = document.createElement('div');
+    div.textContent = input;
+    return div.innerHTML;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatTime(timestamp) {
+    try {
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diff = now - date;
+        const seconds = Math.floor(diff / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+        
+        if (seconds < 60) return seconds + ' sec ago';
+        if (minutes < 60) return minutes + ' min ago';
+        if (hours < 24) return hours + ' hour' + (hours > 1 ? 's' : '') + ' ago';
+        if (days < 7) return days + ' day' + (days > 1 ? 's' : '') + ' ago';
+        
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    } catch (e) {
+        return 'recently';
+    }
+}
+
+// UI Functions
 function showModal(title, message, confirmCallback) {
     const modal = document.getElementById('custom-modal');
     const modalTitle = document.getElementById('modal-title');
@@ -460,40 +510,36 @@ function showModal(title, message, confirmCallback) {
     };
 }
 
-// Input validation
-function validateEmail(email) {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+function showNotification(message, type) {
+    const notif = document.getElementById('notification');
+    const text = document.getElementById('notification-text');
+    text.textContent = message;
+    
+    let bgColor = 'bg-blue-600';
+    if (type === 'success') {
+        bgColor = 'bg-green-600';
+    } else if (type === 'error') {
+        bgColor = 'bg-red-600';
+    } else if (type === 'info') {
+        bgColor = 'bg-blue-600';
+    }
+    
+    notif.className = `text-center mb-2 md:mb-4 p-2 md:p-4 rounded-xl text-white font-medium text-sm md:text-base ${bgColor}`;
+    notif.classList.remove('hidden');
+    setTimeout(() => notif.classList.add('hidden'), 3000);
 }
 
-function sanitizeInput(input) {
-    const div = document.createElement('div');
-    div.textContent = input;
-    return div.innerHTML;
-}
-
-// Generate a unique session ID for security
-function generateSessionId() {
-    return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
-}
-
-// Generate a security key for email requests
-function generateSecurityKey() {
-    return 'key_' + Math.random().toString(36).substr(2, 16);
-}
-
-// Enhanced error handling
 function handleApiError(error, defaultMessage = 'An error occurred') {
     console.error('API Error:', error);
     
-    if (error.message.includes('Failed to fetch')) {
+    if (error.message && error.message.includes('Failed to fetch')) {
         showNotification('🌐 Network error - check your connection', 'error');
-    } else if (error.message.includes('401') || error.message.includes('Session expired') || error.message.includes('Session has been ended')) {
+    } else if (error.message && (error.message.includes('401') || error.message.includes('Session expired') || error.message.includes('Session has been ended'))) {
         showNotification('🔐 Session ended - creating new session', 'error');
         clearSession();
-    } else if (error.message.includes('409')) {
+    } else if (error.message && error.message.includes('409')) {
         showNotification('⚠️ This email is already in use by another session', 'error');
-    } else if (error.message.includes('404')) {
+    } else if (error.message && error.message.includes('404')) {
         // This is normal for new emails
         return;
     } else {
@@ -501,6 +547,7 @@ function handleApiError(error, defaultMessage = 'An error occurred') {
     }
 }
 
+// Session Management
 function clearSession() {
     currentEmail = '';
     sessionToken = '';
@@ -541,50 +588,53 @@ function clearSession() {
     
     console.log('✅ Session cleared completely');
 }
-// Load session from localStorage
+
 function loadSession() {
     const savedSession = localStorage.getItem('tempMailSession');
     if (savedSession) {
-        const session = JSON.parse(savedSession);
-        const now = Date.now();
-        const sessionAge = now - session.createdAt;
-        
-        // Session expires after 1 hour
-        const sessionValid = sessionAge < 60 * 60 * 1000;
-        
-        if (sessionValid && session.email) {
-            currentEmail = session.email;
-            sessionStartTime = session.createdAt;
-            sessionToken = session.sessionToken || '';
-
+        try {
+            const session = JSON.parse(savedSession);
+            const now = Date.now();
+            const sessionAge = now - session.createdAt;
             
-            // Wait for domains to load before restoring
-            if (domainsLoaded) {
-                restoreSessionUI();
+            // Session expires after 1 hour
+            const sessionValid = sessionAge < SESSION_TIMEOUT;
+            
+            if (sessionValid && session.email) {
+                currentEmail = session.email;
+                sessionStartTime = session.createdAt;
+                sessionToken = session.sessionToken || '';
+
+                // Wait for domains to load before restoring
+                if (domainsLoaded) {
+                    restoreSessionUI();
+                } else {
+                    // If domains aren't loaded yet, wait for them
+                    const checkDomains = setInterval(() => {
+                        if (domainsLoaded) {
+                            clearInterval(checkDomains);
+                            restoreSessionUI();
+                        }
+                    }, 100);
+                }
+                return true;
             } else {
-                // If domains aren't loaded yet, wait for them
-                const checkDomains = setInterval(() => {
-                    if (domainsLoaded) {
-                        clearInterval(checkDomains);
-                        restoreSessionUI();
-                    }
-                }, 100);
+                // Session expired
+                localStorage.removeItem('tempMailSession');
+                showNotification('🕒 Session expired', 'error');
             }
-            return true;
-        } else {
-            // Session expired
+        } catch (e) {
+            console.error('Error parsing saved session:', e);
             localStorage.removeItem('tempMailSession');
-            showNotification('🕒 Session expired', 'error');
         }
     }
     return false;
 }
 
-// Restore the session UI
 function restoreSessionUI() {
     if (!currentEmail) return;
     
-    var parts = currentEmail.split('@');
+    const parts = currentEmail.split('@');
     document.getElementById('username-input').value = parts[0];
     document.getElementById('domain-select').value = parts[1];
     
@@ -602,7 +652,6 @@ function restoreSessionUI() {
     setupSessionExpiration();
 }
 
-// Save session to localStorage
 function saveSession() {
     if (!currentEmail) return;
     
@@ -615,16 +664,20 @@ function saveSession() {
     localStorage.setItem('tempMailSession', JSON.stringify(session));
 }
 
-// Update last email time in session
-function updateLastEmailTime() {
-    const savedSession = localStorage.getItem('tempMailSession');
-    if (savedSession && currentEmail) {
-        const session = JSON.parse(savedSession);
-        session.lastEmailTime = Date.now();
-        localStorage.setItem('tempMailSession', JSON.stringify(session));
+function setupSessionExpiration() {
+    // Clear any existing timeout
+    if (window.sessionExpirationTimeout) {
+        clearTimeout(window.sessionExpirationTimeout);
     }
+    
+    // Set new timeout
+    window.sessionExpirationTimeout = setTimeout(function() {
+        showNotification('🕒 Session expired. Please create a new email address.', 'error');
+        clearSession();
+    }, SESSION_TIMEOUT);
 }
 
+// Email Management
 function loadDomains() {
     return fetch(API_URL + '/api/domains')
     .then(res => {
@@ -634,7 +687,7 @@ function loadDomains() {
         return res.json();
     })
     .then(data => {
-        var select = document.getElementById('domain-select');
+        const select = document.getElementById('domain-select');
         select.innerHTML = '<option value="">Select domain</option>';
         if (data.domains && data.domains.length > 0) {
             data.domains.forEach(function(d) {
@@ -649,53 +702,16 @@ function loadDomains() {
     .catch(err => {
         console.error('Error loading domains:', err);
         // Set default domain if API fails
-        var select = document.getElementById('domain-select');
+        const select = document.getElementById('domain-select');
         select.innerHTML = '<option value="">Select domain</option>';
         select.innerHTML += '<option value="aungmyomyatzaw.online">aungmyomyatzaw.online</option>';
         domainsLoaded = true;
     });
 }
 
-document.getElementById('big-random-btn').addEventListener('click', function() {
-    // Clear username
-    document.getElementById('username-input').value = '';
-    
-    // Auto-select first available domain if none selected
-    var domainSelect = document.getElementById('domain-select');
-    if (!domainSelect.value && domainSelect.options.length > 1) {
-        domainSelect.selectedIndex = 1;
-        showNotification('🔀 Auto-selected domain: ' + domainSelect.value, 'info');
-    }
-    
-    createEmail('');
-});
-
-document.getElementById('create-btn').addEventListener('click', function() {
-    var username = document.getElementById('username-input').value.trim();
-    var domain = document.getElementById('domain-select').value;
-    
-    if (!username) {
-        showNotification('❌ Please enter a username!', 'error');
-        return;
-    }
-    
-    if (!domain) {
-        showNotification('❌ Please select a domain!', 'error');
-        return;
-    }
-    
-    // Validate username
-    if (!/^[a-zA-Z0-9-_]+$/.test(username)) {
-        showNotification('❌ Username can only contain letters, numbers, hyphens, and underscores!', 'error');
-        return;
-    }
-    
-    createEmail(username);
-});
-
 function createEmail(customName) {
-    var btn = document.getElementById('create-btn');
-    var originalText = btn.innerHTML;
+    const btn = document.getElementById('create-btn');
+    const originalText = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
     
@@ -740,7 +756,7 @@ function createEmail(customName) {
         sessionStartTime = Date.now();
         saveSession();
 
-        var parts = currentEmail.split('@');
+        const parts = currentEmail.split('@');
         
         document.getElementById('username-input').value = parts[0];
         document.getElementById('domain-select').value = parts[1];
@@ -766,56 +782,52 @@ function createEmail(customName) {
         startTimeUpdate();
         setupSessionExpiration();
     })
-        .catch(err => {
-    console.error('Error creating email:', err);
-    
-    // Handle specific error cases
-    if (err.code === 'EMAIL_SELF_USED') {
-        showNotification('📧 You are already using this email in your current session', 'info');
-    } else if (err.code === 'EMAIL_IN_USE') {
-        showModal('Email Currently in Use', err.error, function() {
-            document.getElementById('username-input').focus();
-        });
-    } else if (err.code === 'USERNAME_BLACKLISTED') {
-        showNotification('🚫 ' + err.error, 'error');
-        document.getElementById('username-input').value = '';
-        document.getElementById('username-input').classList.add('border-red-500');
-        document.getElementById('username-input').focus();
+    .catch(err => {
+        console.error('Error creating email:', err);
         
-        showModal(
-            'Reserved Username',
-            'This username is reserved for the system owner. Please choose a different username.',
-            function() {
+        // Handle specific error cases
+        if (err.code === 'EMAIL_SELF_USED') {
+            showNotification('📧 You are already using this email in your current session', 'info');
+        } else if (err.code === 'EMAIL_IN_USE') {
+            showModal('Email Currently in Use', err.error, function() {
                 document.getElementById('username-input').focus();
+            });
+        } else if (err.code === 'USERNAME_BLACKLISTED') {
+            showNotification('🚫 ' + err.error, 'error');
+            document.getElementById('username-input').value = '';
+            document.getElementById('username-input').classList.add('border-red-500');
+            document.getElementById('username-input').focus();
+            
+            showModal(
+                'Reserved Username',
+                'This username is reserved for the system owner. Please choose a different username.',
+                function() {
+                    document.getElementById('username-input').focus();
+                }
+            );
+        } else if (err.code === 'INVALID_USERNAME') {
+            showNotification('❌ ' + err.error, 'error');
+            document.getElementById('username-input').classList.add('border-red-500');
+            document.getElementById('username-input').focus();
+        } else {
+            handleApiError(err, 'Failed to create email');
+            if (!err.message || (!err.message.includes('409') && err.code !== 'EMAIL_IN_USE' && err.code !== 'USERNAME_BLACKLISTED')) {
+                createEmailLocally(customName);
             }
-        );
-    } else if (err.code === 'INVALID_USERNAME') {
-        showNotification('❌ ' + err.error, 'error');
-        document.getElementById('username-input').classList.add('border-red-500');
-        document.getElementById('username-input').focus();
-    } else {
-        handleApiError(err, 'Failed to create email');
-        if (!err.message.includes('409') && err.code !== 'EMAIL_IN_USE' && err.code !== 'USERNAME_BLACKLISTED') {
-            createEmailLocally(customName);
         }
-    }
-})
-.finally(function() {
-    // Reset button state PROPERLY
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create';
-    btn.classList.remove('opacity-50');
-});
+    })
+    .finally(function() {
+        // Reset button state PROPERLY
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create';
+        btn.classList.remove('opacity-50');
+    });
+}
 
 // Fallback function to create email locally if API fails
 function createEmailLocally(customName) {
-    var domain = document.getElementById('domain-select').value;
-    if (!domain) {
-        domain = 'aungmyomyatzaw.online';
-        document.getElementById('domain-select').value = domain;
-    }
-    
-    var username = customName || generateRandomUsername();
+    const domain = document.getElementById('domain-select').value || 'aungmyomyatzaw.online';
+    const username = customName || generateRandomUsername();
     currentEmail = username + '@' + domain;
     sessionStartTime = Date.now();
     
@@ -841,28 +853,6 @@ function generateRandomUsername() {
     return Math.random().toString(36).substring(2, 12);
 }
 
-document.getElementById('copy-btn').addEventListener('click', function() {
-    if (!currentEmail) {
-        showNotification('❌ Create an email first!', 'error');
-        return;
-    }
-    
-    navigator.clipboard.writeText(currentEmail).then(function() {
-        showNotification('📋 Copied: ' + currentEmail, 'success');
-    }).catch(function() {
-        // Fallback for older browsers
-        var textArea = document.createElement("textarea");
-        textArea.value = currentEmail;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textArea);
-        showNotification('📋 Copied: ' + currentEmail, 'success');
-    });
-});
-
-document.getElementById('refresh-btn').addEventListener('click', loadEmails);
-
 function loadEmails() {
     if (!currentEmail) {
         console.log('No current email to load');
@@ -871,9 +861,9 @@ function loadEmails() {
     
     console.log('Loading emails for:', currentEmail);
     
-    var loader = document.getElementById('inbox-loader');
-    var list = document.getElementById('email-list');
-    var defaultMsg = document.getElementById('no-emails-default');
+    const loader = document.getElementById('inbox-loader');
+    const list = document.getElementById('email-list');
+    const defaultMsg = document.getElementById('no-emails-default');
     
     loader.style.display = 'flex';
     defaultMsg.style.display = 'none';
@@ -901,7 +891,7 @@ function loadEmails() {
     .then(data => {
         console.log('Emails loaded:', data);
         
-        var newCount = data.emails ? data.emails.length : 0;
+        const newCount = data.emails ? data.emails.length : 0;
         document.getElementById('email-count').textContent = newCount + ' email' + (newCount !== 1 ? 's' : '');
         document.title = newCount > 0 ? '(' + newCount + ') TempMail - AMMZ' : 'TempMail - AMMZ';
         
@@ -917,7 +907,7 @@ function loadEmails() {
             list.innerHTML = '<div class="text-center py-8 text-gray-300"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>';
         } else {
             data.emails.forEach(function(email, idx) {
-                var displaySender = email.sender;
+                let displaySender = email.sender;
                 if (displaySender.includes('bounces+') || displaySender.includes('bounce-md')) {
                     displaySender = 'ChatGPT';
                 } else if (displaySender.includes('<')) {
@@ -925,12 +915,12 @@ function loadEmails() {
                 }
                 
                 // Extract clean preview text
-                var previewText = extractTextFromHTML(email.body);
+                let previewText = extractTextFromHTML(email.body);
                 if (previewText.length > 80) {
                     previewText = previewText.substring(0, 80) + '...';
                 }
                 
-                var item = document.createElement('div');
+                const item = document.createElement('div');
                 item.className = 'email-list-item rounded-lg border border-gray-700 hover:border-gray-600 transition-all';
                 item.setAttribute('data-timestamp', email.timestamp);
                 item.innerHTML = `
@@ -957,6 +947,19 @@ function loadEmails() {
     });
 }
 
+function updateLastEmailTime() {
+    const savedSession = localStorage.getItem('tempMailSession');
+    if (savedSession && currentEmail) {
+        try {
+            const session = JSON.parse(savedSession);
+            session.lastEmailTime = Date.now();
+            localStorage.setItem('tempMailSession', JSON.stringify(session));
+        } catch (e) {
+            console.error('Error updating last email time:', e);
+        }
+    }
+}
+
 // Update email times automatically
 function updateEmailTimes() {
     const emailItems = document.querySelectorAll('.email-list-item');
@@ -976,8 +979,10 @@ function updateEmailTimes() {
 }
 
 function viewEmail(email, itemEl) {
-    document.querySelectorAll('#email-list > div').forEach(el => el.classList.remove('bg-blue-600', 'border-blue-500'));
-    itemEl.classList.add('bg-blue-600', 'border-blue-500');
+    document.querySelectorAll('#email-list > div').forEach(el => {
+        el.classList.remove('active', 'bg-blue-600', 'border-blue-500');
+    });
+    itemEl.classList.add('active');
     
     document.getElementById('email-placeholder').style.display = 'none';
     document.getElementById('email-content').classList.remove('hidden');
@@ -987,26 +992,26 @@ function viewEmail(email, itemEl) {
     document.getElementById('email-date').textContent = formatTime(email.timestamp);
     document.getElementById('email-date').setAttribute('data-timestamp', email.timestamp);
     
-    var bodyEl = document.getElementById('email-body');
+    const bodyEl = document.getElementById('email-body');
     
     // Process the email body to extract clean content
-    var cleanBody = extractCleanEmailBody(email.body);
+    const cleanBody = extractCleanEmailBody(email.body);
     bodyEl.innerHTML = cleanBody;
 }
 
-// Improved function to extract clean email body from raw email content
+// Email Content Processing Functions
 function extractCleanEmailBody(rawBody) {
     // First, try to decode quoted-printable encoding
-    var decodedBody = decodeQuotedPrintable(rawBody);
+    const decodedBody = decodeQuotedPrintable(rawBody);
     
     // Try to extract HTML content if present
-    var htmlContent = extractHTMLContent(decodedBody);
+    const htmlContent = extractHTMLContent(decodedBody);
     if (htmlContent) {
         return sanitizeHTML(htmlContent);
     }
     
     // Try to extract plain text content
-    var textContent = extractTextContent(decodedBody);
+    const textContent = extractTextContent(decodedBody);
     if (textContent) {
         return formatTextContent(textContent);
     }
@@ -1015,7 +1020,6 @@ function extractCleanEmailBody(rawBody) {
     return formatTextContent(cleanRawBody(decodedBody));
 }
 
-// Decode quoted-printable encoding
 function decodeQuotedPrintable(str) {
     // Remove soft line breaks
     str = str.replace(/=\r?\n/g, '');
@@ -1035,10 +1039,9 @@ function decodeQuotedPrintable(str) {
     return str;
 }
 
-// Extract HTML content from email body
 function extractHTMLContent(body) {
     // Look for HTML content
-    var htmlMatch = body.match(/<html[\s\S]*?<\/html>/i);
+    let htmlMatch = body.match(/<html[\s\S]*?<\/html>/i);
     if (htmlMatch) return htmlMatch[0];
     
     htmlMatch = body.match(/<body[\s\S]*?<\/body>/i);
@@ -1048,9 +1051,9 @@ function extractHTMLContent(body) {
     if (htmlMatch) return htmlMatch[0];
     
     // Look for content after the headers
-    var headerEnd = body.indexOf('Content-Type: text/html');
+    const headerEnd = body.indexOf('Content-Type: text/html');
     if (headerEnd !== -1) {
-        var contentStart = body.indexOf('>', headerEnd);
+        const contentStart = body.indexOf('>', headerEnd);
         if (contentStart !== -1) {
             return body.substring(contentStart + 1);
         }
@@ -1059,15 +1062,14 @@ function extractHTMLContent(body) {
     return null;
 }
 
-// Extract plain text content from email body
 function extractTextContent(body) {
     // Remove email headers
-    var lines = body.split('\n');
-    var inBody = false;
-    var bodyLines = [];
+    const lines = body.split('\n');
+    let inBody = false;
+    const bodyLines = [];
     
-    for (var i = 0; i < lines.length; i++) {
-        var line = lines[i].trim();
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i].trim();
         
         // Skip empty lines at the beginning
         if (!inBody && line === '') continue;
@@ -1085,7 +1087,7 @@ function extractTextContent(body) {
             line.includes('base64') ||
             line.includes('charset=') ||
             line.includes('multipart/') ||
-            line.startsWith('--') && line.endsWith('--')) {
+            (line.startsWith('--') && line.endsWith('--'))) {
             continue;
         }
         
@@ -1107,17 +1109,16 @@ function extractTextContent(body) {
         }
     }
     
-    var text = bodyLines.join('\n').trim();
+    const text = bodyLines.join('\n').trim();
     return text.length > 0 ? text : null;
 }
 
-// Clean raw body when no structured content found
 function cleanRawBody(body) {
-    var lines = body.split('\n');
-    var cleanLines = [];
+    const lines = body.split('\n');
+    const cleanLines = [];
     
-    for (var i = 0; i < lines.length; i++) {
-        var line = lines[i].trim();
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i].trim();
         
         // Skip technical lines
         if (line.startsWith('Received:') || 
@@ -1132,7 +1133,7 @@ function cleanRawBody(body) {
             line.includes('base64') ||
             line.includes('charset=') ||
             line.includes('multipart/') ||
-            line.startsWith('--') && line.endsWith('--')) {
+            (line.startsWith('--') && line.endsWith('--'))) {
             continue;
         }
         
@@ -1145,23 +1146,22 @@ function cleanRawBody(body) {
     return cleanLines.join('\n');
 }
 
-// Format plain text content with proper HTML structure
 function formatTextContent(text) {
     // Extract verification code
-    var codeMatch = text.match(/\b\d{4,8}\b/);
-    var verificationCode = codeMatch ? codeMatch[0] : null;
+    const codeMatch = text.match(/\b\d{4,8}\b/);
+    const verificationCode = codeMatch ? codeMatch[0] : null;
     
     // Split into paragraphs
-    var paragraphs = text.split(/\n\s*\n/);
-    var html = '';
+    const paragraphs = text.split(/\n\s*\n/);
+    let html = '';
     
     // Add verification code prominently if found
     if (verificationCode) {
         html += '<div class="verification-code">' + verificationCode + '</div>';
     }
     
-    for (var i = 0; i < paragraphs.length; i++) {
-        var paragraph = paragraphs[i].trim();
+    for (let i = 0; i < paragraphs.length; i++) {
+        let paragraph = paragraphs[i].trim();
         if (paragraph.length === 0) continue;
         
         // Skip the line that contains the verification code (already displayed)
@@ -1192,27 +1192,26 @@ function formatTextContent(text) {
     return html || '<p>No readable content found in this email.</p>';
 }
 
-// Sanitize HTML to prevent XSS attacks
 function sanitizeHTML(html) {
-    var temp = document.createElement('div');
+    const temp = document.createElement('div');
     temp.innerHTML = html;
     
     // Remove potentially dangerous tags
-    var dangerousTags = ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'form', 'input', 'button'];
+    const dangerousTags = ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'form', 'input', 'button'];
     dangerousTags.forEach(tag => {
-        var elements = temp.querySelectorAll(tag);
+        const elements = temp.querySelectorAll(tag);
         elements.forEach(el => el.remove());
     });
     
     // Remove dangerous attributes
-    var allElements = temp.querySelectorAll('*');
+    const allElements = temp.querySelectorAll('*');
     allElements.forEach(el => {
-        var attributes = el.attributes;
-        for (var i = attributes.length - 1; i >= 0; i--) {
-            var attr = attributes[i];
+        const attributes = el.attributes;
+        for (let i = attributes.length - 1; i >= 0; i--) {
+            const attr = attributes[i];
             if (attr.name.startsWith('on') || 
-                attr.name === 'href' && attr.value.startsWith('javascript:') ||
-                attr.name === 'src' && attr.value.startsWith('javascript:')) {
+                (attr.name === 'href' && attr.value.startsWith('javascript:')) ||
+                (attr.name === 'src' && attr.value.startsWith('javascript:'))) {
                 el.removeAttribute(attr.name);
             }
         }
@@ -1222,19 +1221,20 @@ function sanitizeHTML(html) {
 }
 
 function extractTextFromHTML(html) {
-    var temp = document.createElement('div');
+    const temp = document.createElement('div');
     temp.innerHTML = html;
-    var scripts = temp.querySelectorAll('script, style, link, meta');
+    const scripts = temp.querySelectorAll('script, style, link, meta');
     scripts.forEach(el => el.remove());
-    var text = temp.textContent || temp.innerText || '';
+    let text = temp.textContent || temp.innerText || '';
     text = text.replace(/\s+/g, ' ').replace(/\n+/g, '\n').trim();
     if (text.length < 50) {
-        var paragraphs = temp.querySelectorAll('p, div, td');
+        const paragraphs = temp.querySelectorAll('p, div, td');
         text = Array.from(paragraphs).map(el => el.textContent).join('\n').replace(/\s+/g, ' ').trim();
     }
     return text || 'No readable content found';
 }
 
+// Auto-refresh functions
 function startAutoRefresh() {
     if (autoRefreshInterval) clearInterval(autoRefreshInterval);
     autoRefreshInterval = setInterval(loadEmails, 5000); // Refresh every 5 seconds
@@ -1245,74 +1245,12 @@ function startTimeUpdate() {
     timeUpdateInterval = setInterval(updateEmailTimes, 1000); // Update times every second
 }
 
-function showNotification(message, type) {
-    var notif = document.getElementById('notification');
-    var text = document.getElementById('notification-text');
-    text.textContent = message;
-    
-    var bgColor = 'bg-blue-600';
-    if (type === 'success') {
-        bgColor = 'bg-green-600';
-    } else if (type === 'error') {
-        bgColor = 'bg-red-600';
-    } else if (type === 'info') {
-        bgColor = 'bg-blue-600';
-    }
-    
-    notif.className = `text-center mb-2 md:mb-4 p-2 md:p-4 rounded-xl text-white font-medium text-sm md:text-base ${bgColor}`;
-    notif.classList.remove('hidden');
-    setTimeout(() => notif.classList.add('hidden'), 3000);
-}
-
-function escapeHtml(text) {
-    var div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function formatTime(timestamp) {
-    try {
-        var date;
-        if (typeof timestamp === 'string') {
-            date = new Date(timestamp);
-        } else if (timestamp instanceof Date) {
-            date = timestamp;
-        } else {
-            date = new Date(timestamp);
-        }
-        
-        var now = new Date();
-        var diff = now - date;
-        var seconds = Math.floor(diff / 1000);
-        var minutes = Math.floor(seconds / 60);
-        var hours = Math.floor(minutes / 60);
-        var days = Math.floor(hours / 24);
-        
-        if (seconds < 10) return 'just now';
-        if (seconds < 60) return seconds + ' sec ago';
-        if (minutes < 60) return minutes + ' min ago';
-        if (hours < 24) return hours + ' hour ago';
-        if (days < 7) return days + ' day ago';
-        
-        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-    } catch (e) {
-        return 'recently';
-    }
-}
-
-// Add session expiration
-function setupSessionExpiration() {
-    var sessionTimeout = 60 * 60 * 1000; // 1 hour in milliseconds
-    
-    setTimeout(function() {
-        showNotification('🕒 Session expired. Please create a new email address.', 'error');
-        clearSession();
-    }, sessionTimeout);
-}
-
-// End session properly
+// Session end function
 function endSession() {
-    if (!currentEmail || !sessionToken) return;
+    if (!currentEmail || !sessionToken) {
+        clearSession();
+        return;
+    }
     
     fetch(API_URL + '/api/session/end', {
         method: 'POST',
@@ -1342,14 +1280,8 @@ function endSession() {
     });
 }
 
-document.getElementById('end-session-btn').addEventListener('click', function() {
-    showModal(
-        'End Session', 
-        'Are you sure you want to end this session? You will lose access to your current emails!',
-        endSession
-    );
-});
-  function toggleAdminMode() {
+// Admin Mode Functions
+function toggleAdminMode() {
     if (!isAdminMode) {
         showPasswordModal();
     } else {
@@ -1414,11 +1346,14 @@ async function verifyAdminPassword() {
             } else {
                 alert('❌ Invalid password');
             }
+        } else {
+            alert('❌ Verification failed');
         }
     } catch (error) {
         alert('❌ Verification failed');
     }
 }
+
 function activateAdminMode() {
     isAdminMode = true;
     
@@ -1453,41 +1388,11 @@ function deactivateAdminMode() {
     showNotification('🔒 Admin Mode Deactivated', 'info');
 }
 
-// Reset on page load
-window.addEventListener('load', function() {
-    if (isAdminMode) {
-        deactivateAdminMode();
-    }
-});
-
-// Initialize the app
-function initApp() {
-    loadDomains().then(() => {
-        // Try to load existing session after domains are loaded
-        if (!loadSession()) {
-            console.log('No valid session found, starting fresh');
-        }
-    }).catch(err => {
-        console.error('Error loading domains:', err);
-        // Even if domains fail, try to load session
-        if (!loadSession()) {
-            console.log('No valid session found, starting fresh');
-        }
-    });
-}
-
-// Add Enter key support for username input
-document.getElementById('username-input').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-        createEmailFromInput();
-    }
-});
-
-// Function to handle email creation with auto domain selection
+// Email creation from input
 function createEmailFromInput() {
-    var username = document.getElementById('username-input').value.trim();
-    var domainSelect = document.getElementById('domain-select');
-    var domain = domainSelect.value;
+    const username = document.getElementById('username-input').value.trim();
+    const domainSelect = document.getElementById('domain-select');
+    const domain = domainSelect.value;
     
     // Clear previous error states
     document.getElementById('username-input').classList.remove('border-red-500');
@@ -1503,8 +1408,8 @@ function createEmailFromInput() {
     if (!domain) {
         if (domainSelect.options.length > 1) {
             domainSelect.selectedIndex = 1; // Select first domain (skip "Select domain" option)
-            domain = domainSelect.value;
-            showNotification('🔀 Auto-selected domain: ' + domain, 'info');
+            const selectedDomain = domainSelect.value;
+            showNotification('🔀 Auto-selected domain: ' + selectedDomain, 'info');
         } else {
             showNotification('❌ No domains available!', 'error');
             return;
@@ -1522,24 +1427,85 @@ function createEmailFromInput() {
     createEmail(username);
 }
 
-// Update the create button click handler
+// Initialize the app
+function initApp() {
+    loadDomains().then(() => {
+        // Try to load existing session after domains are loaded
+        if (!loadSession()) {
+            console.log('No valid session found, starting fresh');
+        }
+    }).catch(err => {
+        console.error('Error loading domains:', err);
+        // Even if domains fail, try to load session
+        if (!loadSession()) {
+            console.log('No valid session found, starting fresh');
+        }
+    });
+}
+
+// Event Listeners
+document.getElementById('big-random-btn').addEventListener('click', function() {
+    // Clear username
+    document.getElementById('username-input').value = '';
+    
+    // Auto-select first available domain if none selected
+    const domainSelect = document.getElementById('domain-select');
+    if (!domainSelect.value && domainSelect.options.length > 1) {
+        domainSelect.selectedIndex = 1;
+        showNotification('🔀 Auto-selected domain: ' + domainSelect.value, 'info');
+    }
+    
+    createEmail('');
+});
+
 document.getElementById('create-btn').addEventListener('click', createEmailFromInput);
+
+document.getElementById('copy-btn').addEventListener('click', function() {
+    if (!currentEmail) {
+        showNotification('❌ Create an email first!', 'error');
+        return;
+    }
+    
+    navigator.clipboard.writeText(currentEmail).then(function() {
+        showNotification('📋 Copied: ' + currentEmail, 'success');
+    }).catch(function() {
+        // Fallback for older browsers
+        const textArea = document.createElement("textarea");
+        textArea.value = currentEmail;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        showNotification('📋 Copied: ' + currentEmail, 'success');
+    });
+});
+
+document.getElementById('refresh-btn').addEventListener('click', loadEmails);
+
+document.getElementById('end-session-btn').addEventListener('click', function() {
+    showModal(
+        'End Session', 
+        'Are you sure you want to end this session? You will lose access to your current emails!',
+        endSession
+    );
+});
+
+// Add Enter key support for username input
+document.getElementById('username-input').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        createEmailFromInput();
+    }
+});
+
+// Reset on page load
+window.addEventListener('load', function() {
+    if (isAdminMode) {
+        deactivateAdminMode();
+    }
+});
 
 // Start the app
 initApp();
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
