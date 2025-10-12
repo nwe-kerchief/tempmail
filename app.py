@@ -121,7 +121,7 @@ def init_db():
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
 
-# MOVE ADMIN_REQUIRED DECORATOR TO TOP - BEFORE IT'S USED
+# Admin required decorator
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -144,8 +144,6 @@ def is_username_blacklisted(username):
     except Exception as e:
         logger.error(f"Error checking blacklist: {e}")
         return username.lower() in INITIAL_BLACKLIST
-
-# ... (keep all your existing email parsing functions)
 
 def extract_content_from_mime(msg):
     """Extract content from MIME message"""
@@ -246,7 +244,48 @@ def parse_email_body(raw_body):
         logger.error(f"Email parsing error: {e}")
         return clean_raw_email(raw_body)
 
-# ... (rest of your routes remain exactly the same)
+def validate_session(email_address, session_token):
+    """Validate if session is valid"""
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Check if session exists and is active
+        try:
+            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
+            has_is_active = c.fetchone() is not None
+            
+            if has_is_active:
+                c.execute('''
+                    SELECT session_token FROM sessions 
+                    WHERE email_address = %s AND session_token = %s 
+                    AND expires_at > NOW() AND is_active = TRUE
+                ''', (email_address, session_token))
+            else:
+                c.execute('''
+                    SELECT session_token FROM sessions 
+                    WHERE email_address = %s AND session_token = %s 
+                    AND expires_at > NOW()
+                ''', (email_address, session_token))
+        except Exception as e:
+            logger.warning(f"Error checking session: {e}")
+            c.execute('''
+                SELECT session_token FROM sessions 
+                WHERE email_address = %s AND session_token = %s 
+                AND expires_at > NOW()
+            ''', (email_address, session_token))
+        
+        session_data = c.fetchone()
+        conn.close()
+        
+        if not session_data:
+            return False, "Invalid or expired session"
+        
+        return True, "Valid session"
+        
+    except Exception as e:
+        logger.error(f"Session validation error: {e}")
+        return False, str(e)
 
 @app.route('/')
 def index():
@@ -430,6 +469,7 @@ def end_session():
     except Exception as e:
         logger.error(f"❌ Error ending session: {e}")
         return jsonify({'error': 'Failed to end session'}), 500
+
 @app.route('/api/emails/<email_address>', methods=['GET'])
 def get_emails(email_address):
     """Get emails for a specific email address"""
@@ -825,7 +865,7 @@ def admin_get_sessions():
         logger.error(f"❌ Error fetching sessions: {e}")
         return jsonify({'error': str(e)}), 500
 
-# NEW: End session from admin panel
+# End session from admin panel
 @app.route('/api/admin/session/<session_token>/end', methods=['POST'])
 @admin_required
 def admin_end_session(session_token):
@@ -855,7 +895,7 @@ def admin_end_session(session_token):
         logger.error(f"❌ Error ending session from admin: {e}")
         return jsonify({'error': str(e)}), 500
 
-# FIXED: Blacklist endpoints with database persistence
+# Blacklist endpoints with database persistence
 @app.route('/api/admin/blacklist', methods=['GET'])
 @admin_required
 def get_blacklist():
@@ -933,36 +973,6 @@ def remove_from_blacklist(username):
         logger.error(f"❌ Error removing from blacklist: {e}")
         return jsonify({'error': str(e)}), 500
 
-
-def validate_session(email_address, session_token):
-    """Validate if session is valid and not using blacklisted username in non-admin mode"""
-    try:
-        conn = get_db()
-        c = conn.cursor()
-        
-        # Extract username from email
-        username = email_address.split('@')[0].lower()
-        
-        # Check if username is blacklisted
-        if is_username_blacklisted(username):
-            # Check if this is an admin session
-            c.execute('''
-                SELECT session_token FROM sessions 
-                WHERE email_address = %s AND session_token = %s AND expires_at > NOW()
-            ''', (email_address, session_token))
-            
-            session_data = c.fetchone()
-            if not session_data:
-                conn.close()
-                return False, "Invalid session for blacklisted username"
-        
-        conn.close()
-        return True, "Valid session"
-        
-    except Exception as e:
-        logger.error(f"Session validation error: {e}")
-        return False, str(e)
-
 @app.before_request
 def check_admin_session():
     """Check and expire admin sessions automatically"""
@@ -970,9 +980,7 @@ def check_admin_session():
         # Set session to expire after 1 hour of inactivity
         session.permanent = True
         app.permanent_session_lifetime = timedelta(hours=1)
-        
-        # You can add additional checks here if needed
-        # For example, check last activity time
+
 # Error handlers
 @app.errorhandler(404)
 def not_found(error):
@@ -994,10 +1002,3 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
-
-
-
-
-
-
-
