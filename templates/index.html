@@ -1329,12 +1329,16 @@ function closePasswordModal() {
 
 async function verifyAdminPassword() {
     const password = document.getElementById('admin-password-input').value;
-    if (!password) return;
+    if (!password) {
+        alert('❌ Please enter a password');
+        return;
+    }
     
     try {
-        const response = await fetch('/api/verify-admin', {
+        const response = await fetch('/api/admin/login', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
+            credentials: 'include', // Important for session cookies
             body: JSON.stringify({password: password})
         });
         
@@ -1343,14 +1347,17 @@ async function verifyAdminPassword() {
             if (result.success) {
                 closePasswordModal();
                 activateAdminMode();
+                showNotification('🔓 Admin Mode Activated', 'success');
             } else {
                 alert('❌ Invalid password');
             }
         } else {
-            alert('❌ Verification failed');
+            const error = await response.json();
+            alert('❌ ' + (error.error || 'Verification failed'));
         }
     } catch (error) {
-        alert('❌ Verification failed');
+        console.error('Admin login error:', error);
+        alert('❌ Connection error - check console for details');
     }
 }
 
@@ -1366,7 +1373,19 @@ function activateAdminMode() {
     header.innerHTML = '<i class="fas fa-shield-alt mr-2"></i><span class="text-sm md:text-xl lg:text-2xl">ADMIN MODE - TempMail</span>';
     header.classList.add('admin-text');
     
-    showNotification('🔓 Admin Mode Activated', 'success');
+    // Add admin panel link to navigation
+    const adminLink = document.createElement('a');
+    adminLink.href = '/admin';
+    adminLink.target = '_blank';
+    adminLink.className = 'bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors ml-2';
+    adminLink.innerHTML = '<i class="fas fa-cog mr-2"></i>Admin Panel';
+    
+    const headerDiv = document.querySelector('header .flex');
+    if (headerDiv && !document.querySelector('a[href="/admin"]')) {
+        headerDiv.appendChild(adminLink);
+    }
+    
+    showNotification('🔓 Admin Mode Activated - Blacklist bypass enabled', 'success');
 }
 
 function deactivateAdminMode() {
@@ -1386,6 +1405,23 @@ function deactivateAdminMode() {
     if (adminLink) adminLink.remove();
     
     showNotification('🔒 Admin Mode Deactivated', 'info');
+}
+
+// Check admin status on page load
+async function checkAdminStatus() {
+    try {
+        const response = await fetch('/api/admin/status', {
+            credentials: 'include'
+        });
+        if (response.ok) {
+            const result = await response.json();
+            if (result.authenticated) {
+                activateAdminMode();
+            }
+        }
+    } catch (error) {
+        // Silently fail - user is not admin
+    }
 }
 
 // Email creation from input
@@ -1509,3 +1545,4 @@ initApp();
 </script>
 </body>
 </html>
+
