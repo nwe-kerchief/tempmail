@@ -145,8 +145,6 @@ def is_username_blacklisted(username):
         logger.error(f"Error checking blacklist: {e}")
         return username.lower() in INITIAL_BLACKLIST
 
-# ... (keep all your existing email parsing functions)
-
 def extract_content_from_mime(msg):
     """Extract content from MIME message"""
     html_content = None
@@ -246,8 +244,6 @@ def parse_email_body(raw_body):
         logger.error(f"Email parsing error: {e}")
         return clean_raw_email(raw_body)
 
-# ... (rest of your routes remain exactly the same)
-
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -319,26 +315,27 @@ def create_email():
         
         if existing_session:
             session_is_active = True
-        if len(existing_session) > 1:
-            session_is_active = existing_session[1]
-    
-        current_user_session = data.get('session_token')
-    
-        if session_is_active:
-            if existing_session[0] == current_user_session:
-            # It's the same user - tell them they're already using it
-            conn.close()
-            return jsonify({
-                'error': 'You are already using this email address in your current session.',
-                'code': 'EMAIL_SELF_USED'
-            }), 409
-        else:
-            # It's a different user
-            conn.close()
-            return jsonify({
-                'error': 'This email address is currently in use by another active session.',
-                'code': 'EMAIL_IN_USE'
-            }), 409
+            if len(existing_session) > 1:
+                session_is_active = existing_session[1]
+        
+            current_user_session = data.get('session_token')
+        
+            if session_is_active:
+                if existing_session[0] == current_user_session:
+                    # It's the same user - tell them they're already using it
+                    conn.close()
+                    return jsonify({
+                        'error': 'You are already using this email address in your current session.',
+                        'code': 'EMAIL_SELF_USED'
+                    }), 409
+                else:
+                    # It's a different user
+                    conn.close()
+                    return jsonify({
+                        'error': 'This email address is currently in use by another active session.',
+                        'code': 'EMAIL_IN_USE'
+                    }), 409
+
         # Create session token
         session_token = secrets.token_urlsafe(32)
         created_at = datetime.now()
@@ -475,7 +472,6 @@ def get_emails(email_address):
                         display_timestamp = datetime.fromisoformat(display_timestamp)
                 except:
                     display_timestamp = datetime.now()
-            
             
             local_timestamp = display_timestamp + timedelta(hours=6, minutes=30)
             
@@ -1008,9 +1004,3 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
-
-
-
-
-
-
