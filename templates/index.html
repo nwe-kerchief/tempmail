@@ -259,6 +259,16 @@ word-wrap: break-word;
 .bg-blue-600:hover {
     background-color: #1d4ed8;
 }
+.admin-mode {
+    background: linear-gradient(135deg, #1f2937 0%, #374151 100%) !important;
+}
+.admin-header {
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+}
+.admin-text {
+    color: #fbbf24 !important;
+    font-weight: bold;
+}
 </style>
 </head>
 <body class="text-gray-100 min-h-screen p-2 md:p-4">
@@ -398,11 +408,11 @@ class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 </div>
 </main>
 </div>
-
+    
 <div class="h-fit mt-2 md:mt-4">
 <div class="bg-gradient-to-r from-green-600 via-teal-600 to-blue-600 text-white py-2 px-4 rounded-lg shadow-lg border border-green-400">
 <marquee class="text-xs md:text-base font-medium">
-🔒 Secure & Private • All Rights Reserved by <b class="text-yellow-300">AMMZ</b> • Built with Advanced AI Technology 🚀
+    🔒 Secure & Private • All Rights Reserved by <b class="text-yellow-300 cursor-pointer hover:underline" onclick="toggleAdminMode()">AMMZ</b> • Built with Advanced AI Technology 🚀
 </marquee>
 </div>
 </div>
@@ -418,6 +428,8 @@ var sessionId = generateSessionId();
 var emailSecurityKey = generateSecurityKey();
 var sessionStartTime = null;
 var domainsLoaded = false;
+var isAdminMode = false;
+
 
 // Custom Modal Functions
 function showModal(title, message, confirmCallback) {
@@ -1345,6 +1357,67 @@ document.getElementById('end-session-btn').addEventListener('click', function() 
         endSession
     );
 });
+    function toggleAdminMode() {
+    if (!isAdminMode) {
+        // Show password prompt
+        const password = prompt('🔐 Enter Admin Password:');
+        if (password === 'admin123') { // Change this to your preferred password
+            activateAdminMode();
+        } else if (password) {
+            alert('❌ Invalid password');
+        }
+    } else {
+        deactivateAdminMode();
+    }
+}
+
+function activateAdminMode() {
+    isAdminMode = true;
+    
+    // Change UI colors
+    document.body.classList.add('admin-mode');
+    document.querySelector('header').classList.add('admin-header');
+    
+    // Change header text
+    const header = document.querySelector('h1');
+    header.innerHTML = '<i class="fas fa-shield-alt mr-2"></i>ADMIN MODE - TempMail';
+    header.classList.add('admin-text');
+    
+    // Add admin panel link
+    const adminLink = document.createElement('a');
+    adminLink.href = '/admin';
+    adminLink.className = 'bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all ml-4';
+    adminLink.innerHTML = '<i class="fas fa-cog mr-2"></i>Admin Panel';
+    document.querySelector('header').appendChild(adminLink);
+    
+    showNotification('🔓 Admin Mode Activated', 'success');
+}
+
+function deactivateAdminMode() {
+    isAdminMode = false;
+    
+    // Restore normal UI
+    document.body.classList.remove('admin-mode');
+    document.querySelector('header').classList.remove('admin-header');
+    
+    // Restore header text
+    const header = document.querySelector('h1');
+    header.innerHTML = '<i class="fas fa-envelope mr-2"></i>Secure TempMail By AMMZ';
+    header.classList.remove('admin-text');
+    
+    // Remove admin panel link
+    const adminLink = document.querySelector('a[href="/admin"]');
+    if (adminLink) adminLink.remove();
+    
+    showNotification('🔒 Admin Mode Deactivated', 'info');
+}
+
+// Reset on page load
+window.addEventListener('load', function() {
+    if (isAdminMode) {
+        deactivateAdminMode();
+    }
+});
 
 // Initialize the app
 function initApp() {
@@ -1416,6 +1489,7 @@ initApp();
 </script>
 </body>
 </html>
+
 
 
 
