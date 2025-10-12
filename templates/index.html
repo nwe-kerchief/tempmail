@@ -770,12 +770,15 @@ function createEmail(customName) {
         console.error('Error creating email:', err);
         
         // Handle specific error cases
-        if (err.code === 'EMAIL_IN_USE') {
-            showNotification('⚠️ ' + err.error, 'error');
-            document.getElementById('username-input').value = '';
-            document.getElementById('username-input').classList.add('border-red-500');
-            document.getElementById('username-input').focus();
-            
+        // In createEmail() catch block, add:
+        if (err.code === 'EMAIL_SELF_USED') {
+            showNotification('📧 You are already using this email in your current session', 'info');
+        } else if (err.code === 'EMAIL_IN_USE') {
+            // Show the existing modal for other users
+            showModal('Email Currently in Use', err.error, function() {
+                document.getElementById('username-input').focus();
+            });
+        }
             showModal(
                 'Email Currently in Use',
                 'This username is currently being used by an active session.<br><br><strong>Please:</strong><br>• Choose a different username<br>• Wait for the current session to expire (1 hour)<br>• Ask the current user to end their session',
@@ -1539,6 +1542,7 @@ initApp();
 </script>
 </body>
 </html>
+
 
 
 
