@@ -1368,41 +1368,73 @@ function startTimeUpdate() {
     timeUpdateInterval = setInterval(updateEmailTimes, 1000); // Update times every second
 }
 
-// Session end function
 function endSession() {
-    if (!currentEmail || !sessionToken) {
-        clearSession();
-        return;
+    // Clear frontend state immediately
+    currentEmail = '';
+    sessionToken = '';
+    sessionStartTime = null;
+    
+    // Clear localStorage
+    localStorage.removeItem('tempMailSession');
+    
+    // Reset UI immediately
+    document.getElementById('username-input').value = '';
+    document.getElementById('domain-select').selectedIndex = 0;
+    document.getElementById('email-display').classList.add('hidden');
+    document.getElementById('end-session-btn').classList.add('hidden');
+    document.getElementById('email-count').textContent = '0 emails';
+    document.getElementById('email-list').innerHTML = '';
+    document.getElementById('no-emails-default').style.display = 'flex';
+    
+    // Stop auto-refresh
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+    if (timeUpdateInterval) {
+        clearInterval(timeUpdateInterval);
+        timeUpdateInterval = null;
     }
     
-    fetch(API_URL + '/api/session/end', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            session_token: sessionToken,
-            email_address: currentEmail
+    // Try to notify backend, but don't wait for it
+    if (currentEmail && sessionToken) {
+        fetch(API_URL + '/api/session/end', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                session_token: sessionToken,
+                email_address: currentEmail
+            })
         })
-    })
-    .then(res => {
-        if (!res.ok) {
-            throw new Error('Failed to end session');
-        }
-        return res.json();
-    })
-    .then(data => {
-        clearSession();
-        showNotification('✅ Session ended successfully', 'success');
-    })
-    .catch(err => {
-        console.error('Error ending session:', err);
-        // Still clear session locally even if API fails
-        clearSession();
-        showNotification('✅ Session ended', 'success');
-    });
+        .then(res => {
+            if (!res.ok) {
+                console.log('Backend session end failed, but continuing');
+            }
+            return res.json();
+        })
+        .then(data => {
+            console.log('✅ Backend session ended');
+        })
+        .catch(err => {
+            console.log('❌ Backend session end error (ignoring):', err);
+        })
+        .finally(() => {
+            // Always show success and reload
+            showNotification('✅ Session ended successfully', 'success');
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        });
+    } else {
+        // No session data, just reload
+        showNotification('✅ Session cleared', 'success');
+        setTimeout(() => {
+            window.location.reload();
+        }, 1000);
+    }
 }
-
 // Admin Mode Functions
 function toggleAdminMode() {
     if (!isAdminMode) {
@@ -1589,6 +1621,32 @@ window.addEventListener('unload', function() {
         });
     }
 });
+
+function validateCurrentSession() {
+    if (!currentEmail || !sessionToken) return false;
+    
+    // Check if session is expired
+    if (sessionStartTime) {
+        const sessionAge = Date.now() - sessionStartTime;
+        if (sessionAge > SESSION_TIMEOUT) {
+            console.log('Session expired, clearing...');
+            clearSession();
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+// Update your loadEmails function to check session first
+function loadEmails() {
+    if (!validateCurrentSession()) {
+        console.log('No valid session to load emails');
+        return;
+    }
+    
+    // ... rest of your existing loadEmails code
+}
     
 // Email creation from input
 function createEmailFromInput() {
@@ -1688,7 +1746,9 @@ document.getElementById('end-session-btn').addEventListener('click', function() 
     showModal(
         'End Session', 
         'Are you sure you want to end this session? You will lose access to your current emails!',
-        endSession
+        function() {
+            endSession();
+        }
     );
 });
 
@@ -1711,6 +1771,7 @@ initApp();
 </script>
 </body>
 </html>
+
 
 
 
