@@ -1253,23 +1253,25 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Fixed time formatting function - PROPER TIME FORMAT
-// Fixed time formatting function - PROPER TIME FORMAT
+// Fixed time formatting function - PROPER TIME FORMAT with timezone correction
 function formatTime(timestamp) {
     try {
         // Handle both string timestamps and Date objects
         var date;
         if (typeof timestamp === 'string') {
-            // Remove timezone Z and convert to local time
-            date = new Date(timestamp.replace('Z', ''));
+            // Handle ISO string with timezone
+            date = new Date(timestamp);
         } else if (timestamp instanceof Date) {
             date = timestamp;
         } else {
             date = new Date(timestamp);
         }
         
+        // Apply timezone correction (add 6 hours to compensate for server UTC)
+        var correctedDate = new Date(date.getTime() + (6 * 60 * 60 * 1000));
+        
         var now = new Date();
-        var diff = now - date;
+        var diff = now - correctedDate;
         var seconds = Math.floor(diff / 1000);
         var minutes = Math.floor(seconds / 60);
         var hours = Math.floor(minutes / 60);
@@ -1282,7 +1284,7 @@ function formatTime(timestamp) {
         if (days < 7) return days + ' day ago';
         
         // For older dates, show date and time
-        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+        return correctedDate.toLocaleDateString() + ' ' + correctedDate.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
     } catch (e) {
         console.error('Time formatting error:', e, 'timestamp:', timestamp);
         return 'recently';
@@ -1409,5 +1411,6 @@ initApp();
 </script>
 </body>
 </html>
+
 
 
