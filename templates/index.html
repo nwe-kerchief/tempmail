@@ -247,10 +247,6 @@ class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 <button id="copy-btn" class="bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-semibold py-3 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 text-base">
 <i class="fas fa-copy mr-2"></i>Copy
 </button>
-<button id="end-session-btn" class="bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white font-semibold py-3 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 text-base hidden">
-<i class="fas fa-times-circle mr-2"></i>End Session
-</button>
-
 </div>
 </div>
 
@@ -640,7 +636,7 @@ function loadEmails() {
     // Security: Include session ID and security key in request
     fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail), {
       headers: {
-         'X-Session-Token': sessionToken
+        'X-Session-Token': sessionToken
       }
   })
 
@@ -1075,29 +1071,6 @@ function setupSessionExpiration() {
     }, sessionTimeout);
 }
 
-document.getElementById('end-session-btn').addEventListener('click', function() {
-    if (confirm('⚠️ End this session? You will lose access to your emails!')) {
-        // Clear everything
-        currentEmail = '';
-        sessionToken = '';
-        localStorage.removeItem('tempMailSession');
-        
-        // Reset UI
-        document.getElementById('email-display').classList.add('hidden');
-        document.getElementById('email-list').innerHTML = '';
-        document.getElementById('email-placeholder').style.display = 'flex';
-        document.getElementById('email-content').classList.add('hidden');
-        document.getElementById('end-session-btn').classList.add('hidden');
-        
-        // Stop refresh
-        if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-        if (timeUpdateInterval) clearInterval(timeUpdateInterval);
-        
-        showNotification('✅ Session ended', 'success');
-    }
-});
-
-
 // Initialize the app
 function initApp() {
     loadDomains().then(() => {
@@ -1119,5 +1092,4 @@ initApp();
 </script>
 </body>
 </html>
-
 
