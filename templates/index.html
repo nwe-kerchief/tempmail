@@ -435,7 +435,7 @@ class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
             </div>
             <div id="inbox-loader" style="display:none;" class="flex justify-center items-center py-8 h-full">
                 <div id="loader"></div>
-            </div>
+</div>
             <div id="email-list" class="space-y-2"></div>
         </div>
 
@@ -505,122 +505,6 @@ let sessionStartTime = null;
 let domainsLoaded = false;
 let isAdminMode = false;
 
-// State variables
-let currentEmail = '';
-let sessionToken = ''; 
-let autoRefreshInterval = null;
-let timeUpdateInterval = null;
-let lastEmailCount = 0;
-let sessionId = generateSessionId();
-let emailSecurityKey = generateSecurityKey();
-let sessionStartTime = null;
-let domainsLoaded = false;
-let isAdminMode = false;
-
-// MOVE loadEmails FUNCTION TO HERE - RIGHT AFTER STATE VARIABLES
-function loadEmails() {
-    if (!currentEmail) {
-        console.log('No current email to load');
-        return;
-    }
-    
-    console.log('Loading emails for:', currentEmail);
-    
-    const loader = document.getElementById('inbox-loader');
-    const list = document.getElementById('email-list');
-    const defaultMsg = document.getElementById('no-emails-default');
-    
-    loader.style.display = 'flex';
-    defaultMsg.style.display = 'none';
-    list.innerHTML = '';
-    
-    // Use AbortController to prevent multiple simultaneous requests
-    if (window.emailFetchController) {
-        window.emailFetchController.abort();
-    }
-    window.emailFetchController = new AbortController();
-    
-    fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail), {
-        headers: {
-            'X-Session-Token': sessionToken
-        },
-        signal: window.emailFetchController.signal
-    })
-    .then(res => {
-        if (!res.ok) {
-            if (res.status === 404) {
-                return { emails: [] };
-            }
-            throw new Error('Failed to fetch emails: ' + res.status);
-        }
-        return res.json();
-    })
-    .then(data => {
-        console.log('Emails loaded:', data.emails?.length || 0);
-        
-        const newCount = data.emails ? data.emails.length : 0;
-        document.getElementById('email-count').textContent = newCount + ' email' + (newCount !== 1 ? 's' : '');
-        document.title = newCount > 0 ? '(' + newCount + ') TempMail - AMMZ' : 'TempMail - AMMZ';
-        
-        // Show new email notification
-        if (newCount > lastEmailCount && lastEmailCount > 0) {
-            showNotification('🔔 ' + (newCount - lastEmailCount) + ' new email(s) received!', 'success');
-        }
-        lastEmailCount = newCount;
-        
-        list.innerHTML = '';
-        
-        if (newCount === 0) {
-            list.innerHTML = '<div class="text-center py-8 text-gray-300 h-full flex flex-col justify-center"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>';
-        } else {
-            // Use document fragment for better performance
-            const fragment = document.createDocumentFragment();
-            
-            data.emails.forEach(function(email, idx) {
-                let displaySender = email.sender;
-                if (displaySender.includes('bounces+') || displaySender.includes('bounce-md')) {
-                    displaySender = 'ChatGPT';
-                } else if (displaySender.includes('<')) {
-                    displaySender = displaySender.substring(0, displaySender.indexOf('<')).trim() || displaySender.substring(displaySender.indexOf('<')+1, displaySender.indexOf('>')).trim();
-                }
-                
-                // Simple preview text extraction (faster)
-                let previewText = email.body.replace(/<[^>]*>/g, '').substring(0, 80);
-                if (previewText.length === 80) previewText += '...';
-                
-                const item = document.createElement('div');
-                item.className = 'email-list-item rounded-lg border border-gray-700 hover:border-gray-600 transition-all cursor-pointer';
-                item.setAttribute('data-timestamp', email.timestamp);
-                item.innerHTML = `
-                    <div class="flex justify-between items-start mb-2">
-                        <span class="text-sm font-semibold text-white truncate flex-1 mr-2">${escapeHtml(displaySender)}</span>
-                        <span class="text-xs text-gray-400 email-time whitespace-nowrap">${formatTime(email.timestamp)}</span>
-                    </div>
-                    <div class="text-sm font-medium text-gray-200 mb-2 truncate">${escapeHtml(email.subject)}</div>
-                    <div class="text-xs text-gray-400 email-preview">${escapeHtml(previewText)}</div>
-                `;
-                item.addEventListener('click', function() { viewEmail(email, item); });
-                fragment.appendChild(item);
-            });
-            
-            list.appendChild(fragment);
-        }
-    })
-    .catch(err => {
-        if (err.name === 'AbortError') {
-            console.log('Email fetch aborted');
-            return;
-        }
-        console.error('Error loading emails:', err);
-        handleApiError(err, 'Failed to load emails');
-        
-        list.innerHTML = '<div class="text-center py-8 text-gray-300"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>';
-    })
-    .finally(function() {
-        loader.style.display = 'none';
-        window.emailFetchController = null;
-    });
-}
 // Utility Functions
 function generateSessionId() {
     return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
@@ -753,8 +637,8 @@ function clearSession() {
     document.getElementById('end-session-btn').classList.add('hidden');
     
     // Reset email view to placeholder
-    document.getElementById('email-placeholder').style.display = 'flex';
-    document.getElementById('email-content').classList.add('hidden');
+    document.getElementById('desktop-email-placeholder').style.display = 'flex';
+    document.getElementById('desktop-email-content-inner').classList.add('hidden');
     
     // Clear email list and show default message
     document.getElementById('email-list').innerHTML = '';
@@ -774,11 +658,6 @@ function clearSession() {
         clearInterval(timeUpdateInterval);
         timeUpdateInterval = null;
     }
-    
-    // Force reload the page to ensure clean state
-    setTimeout(() => {
-        window.location.reload();
-    }, 500);
     
     console.log('✅ Session cleared completely');
 }
@@ -872,6 +751,110 @@ function setupSessionExpiration() {
 }
 
 // Email Management
+function loadEmails() {
+    if (!currentEmail) {
+        console.log('No current email to load');
+        return;
+    }
+    
+    console.log('Loading emails for:', currentEmail);
+    
+    const loader = document.getElementById('inbox-loader');
+    const list = document.getElementById('email-list');
+    const defaultMsg = document.getElementById('no-emails-default');
+    
+    loader.style.display = 'flex';
+    defaultMsg.style.display = 'none';
+    list.innerHTML = '';
+    
+    // Use AbortController to prevent multiple simultaneous requests
+    if (window.emailFetchController) {
+        window.emailFetchController.abort();
+    }
+    window.emailFetchController = new AbortController();
+    
+    fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail), {
+        headers: {
+            'X-Session-Token': sessionToken
+        },
+        signal: window.emailFetchController.signal
+    })
+    .then(res => {
+        if (!res.ok) {
+            if (res.status === 404) {
+                return { emails: [] };
+            }
+            throw new Error('Failed to fetch emails: ' + res.status);
+        }
+        return res.json();
+    })
+    .then(data => {
+        console.log('Emails loaded:', data.emails?.length || 0);
+        
+        const newCount = data.emails ? data.emails.length : 0;
+        document.getElementById('email-count').textContent = newCount + ' email' + (newCount !== 1 ? 's' : '');
+        document.title = newCount > 0 ? '(' + newCount + ') TempMail - AMMZ' : 'TempMail - AMMZ';
+        
+        // Show new email notification
+        if (newCount > lastEmailCount && lastEmailCount > 0) {
+            showNotification('🔔 ' + (newCount - lastEmailCount) + ' new email(s) received!', 'success');
+        }
+        lastEmailCount = newCount;
+        
+        list.innerHTML = '';
+        
+        if (newCount === 0) {
+            list.innerHTML = '<div class="text-center py-8 text-gray-300 h-full flex flex-col justify-center"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>';
+        } else {
+            // Use document fragment for better performance
+            const fragment = document.createDocumentFragment();
+            
+            data.emails.forEach(function(email, idx) {
+                let displaySender = email.sender;
+                if (displaySender.includes('bounces+') || displaySender.includes('bounce-md')) {
+                    displaySender = 'ChatGPT';
+                } else if (displaySender.includes('<')) {
+                    displaySender = displaySender.substring(0, displaySender.indexOf('<')).trim() || displaySender.substring(displaySender.indexOf('<')+1, displaySender.indexOf('>')).trim();
+                }
+                
+                // Simple preview text extraction (faster)
+                let previewText = email.body.replace(/<[^>]*>/g, '').substring(0, 80);
+                if (previewText.length === 80) previewText += '...';
+                
+                const item = document.createElement('div');
+                item.className = 'email-list-item rounded-lg border border-gray-700 hover:border-gray-600 transition-all cursor-pointer';
+                item.setAttribute('data-timestamp', email.timestamp);
+                item.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-sm font-semibold text-white truncate flex-1 mr-2">${escapeHtml(displaySender)}</span>
+                        <span class="text-xs text-gray-400 email-time whitespace-nowrap">${formatTime(email.timestamp)}</span>
+                    </div>
+                    <div class="text-sm font-medium text-gray-200 mb-2 truncate">${escapeHtml(email.subject)}</div>
+                    <div class="text-xs text-gray-400 email-preview">${escapeHtml(previewText)}</div>
+                `;
+                item.addEventListener('click', function() { viewEmail(email, item); });
+                fragment.appendChild(item);
+            });
+            
+            list.appendChild(fragment);
+        }
+    })
+    .catch(err => {
+        if (err.name === 'AbortError') {
+            console.log('Email fetch aborted');
+            return;
+        }
+        console.error('Error loading emails:', err);
+        handleApiError(err, 'Failed to load emails');
+        
+        list.innerHTML = '<div class="text-center py-8 text-gray-300"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>';
+    })
+    .finally(function() {
+        loader.style.display = 'none';
+        window.emailFetchController = null;
+    });
+}
+
 function loadDomains() {
     return fetch(API_URL + '/api/domains')
     .then(res => {
@@ -959,8 +942,8 @@ function createEmail(customName) {
         document.getElementById('end-session-btn').classList.remove('hidden');
 
         // Reset email view to placeholder
-        document.getElementById('email-placeholder').style.display = 'flex';
-        document.getElementById('email-content').classList.add('hidden');
+        document.getElementById('desktop-email-placeholder').style.display = 'flex';
+        document.getElementById('desktop-email-content-inner').classList.add('hidden');
         
         showNotification('✅ Email created: ' + data.email, 'success');
         
@@ -1055,8 +1038,6 @@ window.addEventListener('resize', function() {
     }
 });
 
-
-
 function updateLastEmailTime() {
     const savedSession = localStorage.getItem('tempMailSession');
     if (savedSession && currentEmail) {
@@ -1121,161 +1102,41 @@ function viewEmail(email, itemEl) {
     }
 }
 
+function showEmailContent() {
+    document.getElementById('email-list-view').classList.add('hidden');
+    document.getElementById('email-content-view').classList.remove('hidden');
+    document.getElementById('header-title').textContent = 'Email';
+    document.getElementById('back-to-list').classList.remove('hidden');
+}
+
+function showEmailList() {
+    document.getElementById('email-list-view').classList.remove('hidden');
+    document.getElementById('email-content-view').classList.add('hidden');
+    document.getElementById('header-title').textContent = 'Inbox';
+    document.getElementById('back-to-list').classList.add('hidden');
+}
 
 // Email Content Processing Functions
-function extractCleanEmailBody(rawBody) {
-    // First, try to decode quoted-printable encoding
-    const decodedBody = decodeQuotedPrintable(rawBody);
-    
-    // Try to extract HTML content if present
-    const htmlContent = extractHTMLContent(decodedBody);
-    if (htmlContent) {
-        return sanitizeHTML(htmlContent);
-    }
-    
-    // Try to extract plain text content
-    const textContent = extractTextContent(decodedBody);
-    if (textContent) {
-        return formatTextContent(textContent);
-    }
-    
-    // Fallback: return a cleaned version of the raw body
-    return formatTextContent(cleanRawBody(decodedBody));
-}
-
-function decodeQuotedPrintable(str) {
-    // Remove soft line breaks
-    str = str.replace(/=\r?\n/g, '');
-    
-    // Decode quoted-printable sequences
-    str = str.replace(/=([0-9A-F]{2})/g, function(match, p1) {
-        return String.fromCharCode(parseInt(p1, 16));
-    });
-    
-    // Handle specific encoded characters
-    str = str.replace(/=3D/g, '=');
-    str = str.replace(/=20/g, ' ');
-    str = str.replace(/=2E/g, '.');
-    str = str.replace(/=E2=80=99/g, "'");
-    str = str.replace(/=C2=A0/g, ' ');
-    
-    return str;
-}
-
-function extractHTMLContent(body) {
-    // Look for HTML content
-    let htmlMatch = body.match(/<html[\s\S]*?<\/html>/i);
-    if (htmlMatch) return htmlMatch[0];
-    
-    htmlMatch = body.match(/<body[\s\S]*?<\/body>/i);
-    if (htmlMatch) return htmlMatch[0];
-    
-    htmlMatch = body.match(/<div[\s\S]*?<\/div>/i);
-    if (htmlMatch) return htmlMatch[0];
-    
-    // Look for content after the headers
-    const headerEnd = body.indexOf('Content-Type: text/html');
-    if (headerEnd !== -1) {
-        const contentStart = body.indexOf('>', headerEnd);
-        if (contentStart !== -1) {
-            return body.substring(contentStart + 1);
-        }
-    }
-    
-    return null;
-}
-
-function extractTextContent(body) {
-    // Remove email headers
-    const lines = body.split('\n');
-    let inBody = false;
-    const bodyLines = [];
-    
-    for (let i = 0; i < lines.length; i++) {
-        let line = lines[i].trim();
-        
-        // Skip empty lines at the beginning
-        if (!inBody && line === '') continue;
-        
-        // Skip technical headers
-        if (line.startsWith('Received:') || 
-            line.startsWith('DKIM-Signature:') ||
-            line.startsWith('ARC-') ||
-            line.startsWith('Content-') ||
-            line.startsWith('MIME-') ||
-            line.startsWith('Message-ID:') ||
-            line.startsWith('X-') ||
-            line.includes('boundary=') ||
-            line.includes('quoted-printable') ||
-            line.includes('base64') ||
-            line.includes('charset=') ||
-            line.includes('multipart/') ||
-            (line.startsWith('--') && line.endsWith('--'))) {
-            continue;
-        }
-        
-        // Look for the start of the actual message
-        if (!inBody && (
-            line.toLowerCase().includes('enter this temporary verification code') ||
-            line.toLowerCase().includes('verification code') ||
-            line.toLowerCase().includes('your chatgpt code is') ||
-            line.toLowerCase().includes('please ignore this email') ||
-            line.toLowerCase().includes('best,') ||
-            line.toLowerCase().includes('regards,') ||
-            (line.length > 0 && !line.includes(':') && !line.includes('='))
-        )) {
-            inBody = true;
-        }
-        
-        if (inBody) {
-            bodyLines.push(line);
-        }
-    }
-    
-    const text = bodyLines.join('\n').trim();
-    return text.length > 0 ? text : null;
-}
-
-function cleanRawBody(body) {
-    const lines = body.split('\n');
-    const cleanLines = [];
-    
-    for (let i = 0; i < lines.length; i++) {
-        let line = lines[i].trim();
-        
-        // Skip technical lines
-        if (line.startsWith('Received:') || 
-            line.startsWith('DKIM-Signature:') ||
-            line.startsWith('ARC-') ||
-            line.startsWith('Content-') ||
-            line.startsWith('MIME-') ||
-            line.startsWith('Message-ID:') ||
-            line.startsWith('X-') ||
-            line.includes('boundary=') ||
-            line.includes('quoted-printable') ||
-            line.includes('base64') ||
-            line.includes('charset=') ||
-            line.includes('multipart/') ||
-            (line.startsWith('--') && line.endsWith('--'))) {
-            continue;
-        }
-        
-        // Skip very long lines (likely encoded data)
-        if (line.length > 200) continue;
-        
-        cleanLines.push(line);
-    }
-    
-    return cleanLines.join('\n');
-}
-
-function formatTextContent(text) {
+function quickCleanEmailBody(rawBody) {
     // Extract verification code
-    const codeMatch = text.match(/\b\d{4,8}\b/);
+    const codeMatch = rawBody.match(/\b\d{4,8}\b/);
     const verificationCode = codeMatch ? codeMatch[0] : null;
     
+    // Remove HTML tags for simple display
+    let cleanBody = rawBody.replace(/<[^>]*>/g, '');
+    
+    // Decode HTML entities
+    cleanBody = cleanBody
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
+    
     // Split into paragraphs
-    const paragraphs = text.split(/\n\s*\n/);
+    const paragraphs = cleanBody.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+    
     let html = '';
     
     // Add verification code prominently if found
@@ -1283,78 +1144,36 @@ function formatTextContent(text) {
         html += '<div class="verification-code">' + verificationCode + '</div>';
     }
     
-    for (let i = 0; i < paragraphs.length; i++) {
-        let paragraph = paragraphs[i].trim();
-        if (paragraph.length === 0) continue;
+    paragraphs.forEach(paragraph => {
+        const trimmed = paragraph.trim();
+        if (trimmed.length === 0) return;
         
         // Skip the line that contains the verification code (already displayed)
-        if (verificationCode && paragraph.includes(verificationCode)) continue;
+        if (verificationCode && trimmed.includes(verificationCode)) return;
         
         // Skip technical lines
-        if (paragraph.includes('by cloudflare-email.net') ||
-            paragraph.includes('ARC-Seal:') ||
-            paragraph.includes('DKIM-Signature:') ||
-            paragraph.includes('Received:')) {
-            continue;
+        if (trimmed.includes('by cloudflare-email.net') ||
+            trimmed.includes('ARC-Seal:') ||
+            trimmed.includes('DKIM-Signature:') ||
+            trimmed.includes('Received:')) {
+            return;
         }
         
         // Format specific message parts
-        if (paragraph.toLowerCase().includes('enter this temporary verification code')) {
-            html += '<div class="email-header"><p>' + escapeHtml(paragraph) + '</p></div>';
-        } else if (paragraph.toLowerCase().includes('please ignore this email')) {
-            html += '<div class="email-meta"><p>' + escapeHtml(paragraph) + '</p></div>';
-        } else if (paragraph.toLowerCase().includes('best,') || 
-                   paragraph.toLowerCase().includes('regards,') ||
-                   paragraph.toLowerCase().includes('the chatgpt team')) {
-            html += '<div class="email-header"><p>' + escapeHtml(paragraph) + '</p></div>';
+        if (trimmed.toLowerCase().includes('enter this temporary verification code')) {
+            html += '<div class="email-header"><p>' + escapeHtml(trimmed) + '</p></div>';
+        } else if (trimmed.toLowerCase().includes('please ignore this email')) {
+            html += '<div class="email-meta"><p>' + escapeHtml(trimmed) + '</p></div>';
+        } else if (trimmed.toLowerCase().includes('best,') || 
+                   trimmed.toLowerCase().includes('regards,') ||
+                   trimmed.toLowerCase().includes('the chatgpt team')) {
+            html += '<div class="email-header"><p>' + escapeHtml(trimmed) + '</p></div>';
         } else {
-            html += '<p>' + escapeHtml(paragraph) + '</p>';
+            html += '<p>' + escapeHtml(trimmed) + '</p>';
         }
-    }
+    });
     
     return html || '<p>No readable content found in this email.</p>';
-}
-
-function sanitizeHTML(html) {
-    const temp = document.createElement('div');
-    temp.innerHTML = html;
-    
-    // Remove potentially dangerous tags
-    const dangerousTags = ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'form', 'input', 'button'];
-    dangerousTags.forEach(tag => {
-        const elements = temp.querySelectorAll(tag);
-        elements.forEach(el => el.remove());
-    });
-    
-    // Remove dangerous attributes
-    const allElements = temp.querySelectorAll('*');
-    allElements.forEach(el => {
-        const attributes = el.attributes;
-        for (let i = attributes.length - 1; i >= 0; i--) {
-            const attr = attributes[i];
-            if (attr.name.startsWith('on') || 
-                (attr.name === 'href' && attr.value.startsWith('javascript:')) ||
-                (attr.name === 'src' && attr.value.startsWith('javascript:'))) {
-                el.removeAttribute(attr.name);
-            }
-        }
-    });
-    
-    return temp.innerHTML;
-}
-
-function extractTextFromHTML(html) {
-    const temp = document.createElement('div');
-    temp.innerHTML = html;
-    const scripts = temp.querySelectorAll('script, style, link, meta');
-    scripts.forEach(el => el.remove());
-    let text = temp.textContent || temp.innerText || '';
-    text = text.replace(/\s+/g, ' ').replace(/\n+/g, '\n').trim();
-    if (text.length < 50) {
-        const paragraphs = temp.querySelectorAll('p, div, td');
-        text = Array.from(paragraphs).map(el => el.textContent).join('\n').replace(/\s+/g, ' ').trim();
-    }
-    return text || 'No readable content found';
 }
 
 // Auto-refresh functions
@@ -1435,6 +1254,7 @@ function endSession() {
         }, 1000);
     }
 }
+
 // Admin Mode Functions
 function toggleAdminMode() {
     if (!isAdminMode) {
@@ -1498,7 +1318,7 @@ async function verifyAdminPassword() {
     }
     
     try {
-        const response = await fetch('/api/admin/login', {
+        const response = await fetch('/api/verify-admin', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             credentials: 'include',
@@ -1575,53 +1395,6 @@ function deactivateAdminMode() {
     }, 1000);
 }
 
-// Reset on page load
-window.addEventListener('load', function() {
-    // Check if we're coming from an admin session and clear it
-    const savedSession = localStorage.getItem('tempMailSession');
-    if (savedSession) {
-        try {
-            const session = JSON.parse(savedSession);
-            // If the email contains blacklisted usernames like 'ammz', clear it
-            if (session.email && (session.email.includes('ammz@') || session.email.includes('admin@'))) {
-                console.log('🔄 Clearing admin session from page load');
-                clearSession();
-                return;
-            }
-        } catch (e) {
-            // If there's any error parsing, clear the session
-            clearSession();
-        }
-    }
-    
-    // Always deactivate admin mode on page load
-    if (isAdminMode) {
-        deactivateAdminMode();
-    }
-});
-    // Auto-logout when page is closed/refreshed
-window.addEventListener('beforeunload', function() {
-    if (isAdminMode) {
-        // Send logout request (may not complete due to page unload, but we try)
-        fetch('/api/admin/logout', {
-            method: 'POST',
-            credentials: 'include',
-            keepalive: true // This helps the request complete during page unload
-        });
-    }
-});
-
-// Also logout if user navigates away
-window.addEventListener('unload', function() {
-    if (isAdminMode) {
-        fetch('/api/admin/logout', {
-            method: 'POST',
-            credentials: 'include',
-            keepalive: true
-        });
-    }
-});
-
 function validateCurrentSession() {
     if (!currentEmail || !sessionToken) return false;
     
@@ -1638,16 +1411,6 @@ function validateCurrentSession() {
     return true;
 }
 
-// Update your loadEmails function to check session first
-function loadEmails() {
-    if (!validateCurrentSession()) {
-        console.log('No valid session to load emails');
-        return;
-    }
-    
-    // ... rest of your existing loadEmails code
-}
-    
 // Email creation from input
 function createEmailFromInput() {
     const username = document.getElementById('username-input').value.trim();
@@ -1766,15 +1529,31 @@ window.addEventListener('load', function() {
     }
 });
 
+// Auto-logout when page is closed/refreshed
+window.addEventListener('beforeunload', function() {
+    if (isAdminMode) {
+        // Send logout request (may not complete due to page unload, but we try)
+        fetch('/api/admin/logout', {
+            method: 'POST',
+            credentials: 'include',
+            keepalive: true // This helps the request complete during page unload
+        });
+    }
+});
+
+// Also logout if user navigates away
+window.addEventListener('unload', function() {
+    if (isAdminMode) {
+        fetch('/api/admin/logout', {
+            method: 'POST',
+            credentials: 'include',
+            keepalive: true
+        });
+    }
+});
+
 // Start the app
 initApp();
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
