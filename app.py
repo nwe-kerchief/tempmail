@@ -572,6 +572,7 @@ cleanup_thread = Thread(target=cleanup_expired_sessions, daemon=True)
 cleanup_thread.start()
 
 # Admin routes
+
 @app.route('/admin')
 def admin_panel():
     return render_template('admin.html')
@@ -585,6 +586,27 @@ def admin_login():
         session['admin_authenticated'] = True
         return jsonify({'success': True})
     return jsonify({'success': False}), 401
+
+@app.route('/api/verify-admin', methods=['POST'])
+def verify_admin():
+    """Alternative endpoint for frontend admin verification"""
+    try:
+        data = request.get_json() or {}
+        password = data.get('password', '')
+        
+        if password == APP_PASSWORD:
+            session['admin_authenticated'] = True
+            return jsonify({'success': True})
+        return jsonify({'success': False, 'error': 'Invalid password'}), 401
+        
+    except Exception as e:
+        logger.error(f"Admin verification error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/status', methods=['GET'])
+def admin_status():
+    """Check if user is admin authenticated"""
+    return jsonify({'authenticated': session.get('admin_authenticated', False)})
 
 @app.route('/api/admin/logout', methods=['POST'])
 @admin_required
@@ -885,5 +907,6 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
 
 
