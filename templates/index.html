@@ -327,6 +327,8 @@ class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 <script>
 var API_URL = window.location.origin;
 var currentEmail = '';
+var sessionToken = ''; 
+var autoRefreshInterval = null;
 var autoRefreshInterval = null;
 var timeUpdateInterval = null;
 var lastEmailCount = 0;
@@ -360,6 +362,8 @@ function loadSession() {
         if (sessionValid && session.email) {
             currentEmail = session.email;
             sessionStartTime = session.createdAt;
+            sessionToken = session.sessionToken || '';
+
             
             // Wait for domains to load before restoring
             if (domainsLoaded) {
@@ -410,11 +414,13 @@ function saveSession() {
     
     const session = {
         email: currentEmail,
+        sessionToken: sessionToken, // ADD THIS LINE
         createdAt: sessionStartTime || Date.now(),
         lastEmailTime: Date.now()
     };
     localStorage.setItem('tempMailSession', JSON.stringify(session));
 }
+
 
 // Update last email time in session
 function updateLastEmailTime() {
@@ -513,7 +519,10 @@ function createEmail(customName) {
         }
         
         currentEmail = data.email;
+        sessionToken = data.session_token;  
         sessionStartTime = Date.now();
+        saveSession();
+
         
         var parts = currentEmail.split('@');
         
@@ -626,11 +635,11 @@ function loadEmails() {
     
     // Security: Include session ID and security key in request
     fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail), {
-        headers: {
-            'X-Session-ID': sessionId,
-            'X-Security-Key': emailSecurityKey
-        }
-    })
+      headers: {
+         'X-Session-Token': sessionToken
+      }
+  })
+
     .then(res => {
         if (!res.ok) {
             if (res.status === 404) {
