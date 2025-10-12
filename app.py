@@ -1,1095 +1,569 @@
-<!DOCTYPE html>
-<html lang="en" class="dark">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TempMail - AMMZ</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📧</text></svg>">
-<style>
-body {
-font-family: 'Inter', sans-serif;
-background: linear-gradient(135deg, #1e3a8a 0%, #7e22ce 100%);
-min-height: 100vh;
-}
-.glass-effect {
-background: rgba(255, 255, 255, 0.15);
-backdrop-filter: blur(12px);
-border: 1px solid rgba(255, 255, 255, 0.2);
-}
-.email-item {
-transition: all 0.2s ease;
-cursor: pointer;
-}
-.email-item:hover {
-background: rgba(255, 255, 255, 0.2);
-transform: translateY(-1px);
-}
-.email-item.active {
-background: rgba(168, 85, 247, 0.3);
-}
-#loader {
-border: 3px solid rgba(255, 255, 255, 0.3);
-border-top: 3px solid #fff;
-border-radius: 50%;
-width: 25px;
-height: 25px;
-animation: spin 1s linear infinite;
-}
-@keyframes spin {
-0% { transform: rotate(0deg); }
-100% { transform: rotate(360deg); }
-}
-.fade-in {
-animation: fadeIn 0.5s ease-in;
-}
-@keyframes fadeIn {
-from { opacity: 0; transform: translateY(10px); }
-to { opacity: 1; transform: translateY(0); }
-}
+from flask import Flask, request, jsonify, render_template, session
+from flask_cors import CORS
+import os
+import random
+import string
+from datetime import datetime, timedelta
+import email
+from email import policy
+from functools import wraps
+import secrets
+from threading import Thread
+import time
 
+# PostgreSQL support
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
-.email-content-container {
-background: rgba(255, 255, 255, 0.05);
-border-radius: 12px;
-padding: 20px;
-overflow-y: auto;
-}
-.email-content-text {
-line-height: 1.6;
-font-size: 14px;
-color: #e5e7eb;
-}
-.email-content-text p {
-margin-bottom: 1rem;
-}
-.email-content-text code {
-background: rgba(255, 255, 255, 0.1);
-padding: 2px 6px;
-border-radius: 4px;
-font-family: monospace;
-}
-.email-content-text pre {
-background: rgba(0, 0, 0, 0.3);
-padding: 12px;
-border-radius: 6px;
-overflow-x: auto;
-margin: 1rem 0;
-}
-.email-content-text a {
-color: #60a5fa;
-text-decoration: underline;
-}
-.email-content-text ul, .email-content-text ol {
-padding-left: 1.5rem;
-margin-bottom: 1rem;
-}
-.email-content-text li {
-margin-bottom: 0.5rem;
-}
-.email-content-text h1, .email-content-text h2, .email-content-text h3 {
-color: white;
-margin-top: 1.5rem;
-margin-bottom: 0.75rem;
-}
-.email-content-text h1 {
-font-size: 1.5rem;
-}
-.email-content-text h2 {
-font-size: 1.3rem;
-}
-.email-content-text h3 {
-font-size: 1.1rem;
-}
-.email-content-text blockquote {
-border-left: 4px solid rgba(255, 255, 255, 0.3);
-padding-left: 1rem;
-margin: 1rem 0;
-font-style: italic;
-}
-.verification-code {
-background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-color: white;
-font-size: 1.5rem;
-font-weight: bold;
-padding: 15px;
-border-radius: 8px;
-text-align: center;
-margin: 20px 0;
-letter-spacing: 5px;
-box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-.email-header {
-background: rgba(0, 0, 0, 0.2);
-padding: 12px;
-border-radius: 8px;
-margin-bottom: 15px;
-}
-.email-meta {
-background: rgba(0, 0, 0, 0.1);
-padding: 10px;
-border-radius: 6px;
-margin-bottom: 15px;
-font-size: 12px;
-color: #9ca3af;
-}
+MALE_NAMES = ['james', 'john', 'robert', 'michael', 'william', 'david', 'richard', 'joseph', 'thomas', 'charles', 
+              'daniel', 'matthew', 'anthony', 'mark', 'paul', 'steven', 'andrew', 'joshua', 'kevin', 'brian',
+              'george', 'kenneth', 'edward', 'ryan', 'jacob', 'nicholas', 'tyler', 'samuel', 'benjamin', 'alexander']
 
-/* Improved inbox list styling */
-#email-list-container {
-height: calc(100% - 60px);
-overflow-y: auto;
-}
-.email-list-item {
-padding: 12px;
-border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-transition: all 0.2s ease;
-cursor: pointer;
-}
-.email-list-item:hover {
-background: rgba(255, 255, 255, 0.1);
-}
-.email-list-item.active {
-background: rgba(168, 85, 247, 0.3);
-}
-.email-preview {
-display: -webkit-box;
--webkit-line-clamp: 2;
--webkit-box-orient: vertical;
-overflow: hidden;
-}
+FEMALE_NAMES = ['mary', 'patricia', 'jennifer', 'linda', 'elizabeth', 'barbara', 'susan', 'jessica', 'sarah', 'karen',
+                'nancy', 'lisa', 'betty', 'margaret', 'sandra', 'ashley', 'kimberly', 'emily', 'donna', 'michelle',
+                'dorothy', 'carol', 'amanda', 'melissa', 'deborah', 'stephanie', 'rebecca', 'sharon', 'laura', 'grace']
 
-@media (max-width: 768px) {
-.mobile-stack { flex-direction: column; }
-.mobile-full { width: 100%; }
-.mobile-text-center { text-align: center; }
-.mobile-inbox-container { flex-direction: column; height: auto; }
-.mobile-inbox-list { height: 300px; max-height: 300px; }
-.mobile-email-content { height: 400px; max-height: 400px; }
-}
+app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', secrets.token_urlsafe(32))
+CORS(app)
 
-@media (min-width: 768px) {
-#email-content-container {
-height: 550px;
-max-height: 550px;
-}
-#email-body {
-height: 350px;
-max-height: 350px;
-}
-}
-/* Email content fixes using existing classes */
-#email-content-container {
-height: 500px;
-max-height: 500px;
-overflow: hidden;
-}
-#email-body {
-height: 300px;
-max-height: 300px;
-overflow-y: auto;
-overflow-x: hidden;
-}
-#email-body * {
-max-width: 100%;
-word-wrap: break-word;
-}
-</style>
-</head>
-<body class="text-gray-100 min-h-screen p-2 md:p-4">
+APP_PASSWORD = os.getenv('APP_PASSWORD', 'admin123')
+DOMAIN = os.getenv('DOMAIN', 'aungmyomyatzaw.online')
+DATABASE_URL = os.getenv('DATABASE_URL')
 
-<div class="h-fit mb-2">
-<div class="bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 text-white py-2 px-4 rounded-lg shadow-lg">
-<marquee class="text-sm md:text-base font-medium">
-✨ This website was created by <b class="text-yellow-300">Aung Myo Myat Zaw </b>✨
-</marquee>
-</div>
-</div>
+# Database connection helper
+def get_db():
+    return psycopg2.connect(DATABASE_URL, sslmode='require')
 
-<div class="w-full max-w-6xl mx-auto">
-<header class="text-center mb-4 md:mb-8 fade-in">
-<div class="flex items-center justify-center mb-2 md:mb-4">
-<i class="fas fa-envelope text-xl md:text-3xl text-white mr-2 md:mr-3"></i>
-<h1 class="text-xl md:text-4xl lg:text-5xl font-bold text-white">Secure Temp Mail By AMMZ</h1>
-</div>
-<p class="text-gray-300 text-sm md:text-lg font-medium">Disposable email addresses</p>
-</header>
+def init_db():
+    conn = get_db()
+    c = conn.cursor()
+    
+    # Sessions table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS sessions (
+            session_token TEXT PRIMARY KEY,
+            email_address TEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            last_activity TIMESTAMP NOT NULL
+        )
+    ''')
+    
+    # Emails table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS emails (
+            id SERIAL PRIMARY KEY,
+            recipient TEXT NOT NULL,
+            sender TEXT NOT NULL,
+            subject TEXT,
+            body TEXT,
+            timestamp TEXT,
+            received_at TIMESTAMP NOT NULL,
+            session_token TEXT NOT NULL,
+            FOREIGN KEY (session_token) REFERENCES sessions(session_token) ON DELETE CASCADE
+        )
+    ''')
+    
+    # Indexes for performance
+    c.execute('CREATE INDEX IF NOT EXISTS idx_recipient ON emails(recipient)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_session ON emails(session_token)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_received_at ON emails(received_at)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_email_address ON sessions(email_address)')
+    
+    conn.commit()
+    conn.close()
+    print("✅ Database initialized")
 
-<main class="glass-effect rounded-2xl shadow-2xl p-3 md:p-6 lg:p-8 w-full fade-in">
-<div class="mb-4 md:mb-8 text-center">
-<button id="big-random-btn" class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 md:py-4 px-6 md:px-8 rounded-2xl transition-all transform hover:scale-105 shadow-lg text-base md:text-xl w-full max-w-md mx-auto flex items-center justify-center">
-<i class="fas fa-random mr-2 md:mr-3 text-lg md:text-xl"></i>
-Generate Random Email
-</button>
-<p class="text-gray-300 text-xs md:text-sm mt-2 font-medium">One click to create a random email instantly</p>
-</div>
+init_db()
 
-<div class="mb-4 md:mb-8">
-<div class="flex flex-col gap-2 mb-3 md:mb-6">
-<div class="flex flex-col sm:flex-row gap-2 w-full">
-<div class="flex-1">
-<input type="text" id="username-input" placeholder="Enter username"
-class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white rounded-xl px-4 py-3 text-base md:text-lg focus:outline-none focus:border-blue-500 transition-colors">
-</div>
-<div class="w-full sm:w-auto sm:min-w-[200px]">
-<select id="domain-select" class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white rounded-xl px-4 py-3 text-base md:text-lg focus:outline-none focus:border-blue-500 transition-colors">
-<option value="">Select domain</option>
-</select>
-</div>
-</div>
-
-<!-- Buttons row -->
-<div class="flex gap-2 w-full">
-<button id="create-btn" class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 text-base">
-<i class="fas fa-plus mr-2"></i>Create
-</button>
-<button id="copy-btn" class="bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-semibold py-3 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 text-base">
-<i class="fas fa-copy mr-2"></i>Copy
-</button>
-</div>
-</div>
-
-<div id="email-display" class="hidden text-center p-2 md:p-4 bg-gray-900 rounded-xl mb-2 md:mb-4 border border-gray-700">
-<div class="flex items-center justify-center">
-<i class="fas fa-envelope text-blue-400 mr-2 text-sm md:text-xl"></i>
-<span id="current-email" class="text-white font-mono text-xs md:text-lg font-semibold break-all"></span>
-</div>
-</div>
-</div>
-
-<div id="notification" class="hidden text-center mb-2 md:mb-4 p-2 md:p-4 rounded-xl text-white font-medium text-sm md:text-base">
-<i class="fas fa-check-circle mr-2"></i>
-<span id="notification-text"></span>
-</div>
-
-<!-- Improved Inbox Section -->
-<div class="flex flex-col md:flex-row gap-3 md:gap-6 mobile-inbox-container">
-<!-- Inbox List - Improved -->
-<div class="w-full md:w-2/5 glass-effect rounded-xl p-2 md:p-4 overflow-y-auto mobile-full mobile-inbox-list mobile-scroll">
-<div class="flex justify-between items-center mb-2 md:mb-4">
-<h2 class="text-base md:text-xl font-semibold text-white">
-<i class="fas fa-inbox mr-1 md:mr-2"></i>Inbox
-</h2>
-<div class="flex items-center gap-2">
-<span id="email-count" class="text-xs text-gray-300 font-medium bg-gray-800 px-2 py-1 rounded">0 emails</span>
-<button id="refresh-btn" class="p-2 rounded-lg hover:bg-gray-700 transition-colors text-white">
-<i class="fas fa-sync-alt text-sm"></i>
-</button>
-</div>
-</div>
-<div id="email-list-container" class=""h-full overflow-y-auto smooth-transition">
-<div id="no-emails-default" class="text-center py-6 md:py-10 text-gray-300 flex flex-col items-center justify-center">
-<i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i>
-<p class="text-sm md:text-lg font-medium">No emails yet</p>
-<p class="text-xs mt-1 font-medium">Your inbox is ready for messages</p>
-</div>
-<div id="inbox-loader" style="display:none;" class="flex justify-center items-center py-8">
-<div id="loader"></div>
-</div>
-<div id="email-list" class="space-y-2"></div>
-</div>
-</div>
-
-<!-- Email Content - Improved -->
-<div id="email-content-container" class="w-full md:w-3/5 glass-effect rounded-xl p-3 md:p-6 overflow-y-auto mobile-email-content">
-<div id="email-placeholder" class="flex flex-col items-center justify-center h-full text-gray-300 py-8">
-<i class="fas fa-envelope-open text-4xl md:text-5xl mb-4 opacity-60"></i>
-<p class="text-lg md:text-xl font-medium text-center">Select an email to read</p>
-<p class="text-sm mt-2 text-gray-400 text-center">Choose a message from your inbox to view its contents</p>
-</div>
-<div id="email-content" class="hidden h-full flex flex-col">
-<div class="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-6">
-<h2 id="email-subject" class="text-lg md:text-2xl font-bold text-white mb-1 md:mb-0 break-words"></h2>
-<span id="email-date" class="text-xs text-gray-300 bg-gray-800 px-3 py-1 rounded-lg font-medium whitespace-nowrap"></span>
-</div>
-<div class="flex items-center text-xs md:text-sm text-gray-300 mb-3 md:mb-6 border-b border-gray-700 pb-2 md:pb-4">
-<strong class="mr-2 text-white font-semibold flex items-center">
-<i class="fas fa-user mr-2"></i>From:
-</strong>
-<span id="email-from" class="font-mono font-medium break-all"></span>
-</div>
-<div id="email-body" class="email-content-container email-content-text flex-1"></div>
-</div>
-</div>
-</div>
-</main>
-</div>
-
-<div class="h-fit mt-2 md:mt-4">
-<div class="bg-gradient-to-r from-green-600 via-teal-600 to-blue-600 text-white py-2 px-4 rounded-lg shadow-lg border border-green-400">
-<marquee class="text-xs md:text-base font-medium">
-🔒 Secure & Private • All Rights Reserved by <b class="text-yellow-300">AMMZ</b> • Built with Advanced AI Technology 🚀
-</marquee>
-</div>
-</div>
-
-<script>
-var API_URL = window.location.origin;
-var currentEmail = '';
-var sessionToken = ''; 
-var autoRefreshInterval = null;
-var autoRefreshInterval = null;
-var timeUpdateInterval = null;
-var lastEmailCount = 0;
-var sessionId = generateSessionId();
-var emailSecurityKey = generateSecurityKey();
-var sessionStartTime = null;
-var domainsLoaded = false;
-
-// Generate a unique session ID for security
-function generateSessionId() {
-    return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
-}
-
-// Generate a security key for email requests
-function generateSecurityKey() {
-    return 'key_' + Math.random().toString(36).substr(2, 16);
-}
-
-// Load session from localStorage
-function loadSession() {
-    const savedSession = localStorage.getItem('tempMailSession');
-    if (savedSession) {
-        const session = JSON.parse(savedSession);
-        const now = Date.now();
-        const sessionAge = now - session.createdAt;
-        
-        // Session expires after 1 hour OR if no emails received for 1 hour
-        const hasRecentEmail = session.lastEmailTime && (now - session.lastEmailTime < 60 * 60 * 1000);
-        const sessionValid = sessionAge < 60 * 60 * 1000 && hasRecentEmail;
-        
-        if (sessionValid && session.email) {
-            currentEmail = session.email;
-            sessionStartTime = session.createdAt;
-            sessionToken = session.sessionToken || '';
-
+def parse_email_body(raw_body):
+    """Parse MIME email and extract clean HTML/text"""
+    try:
+        if 'Content-Type:' in raw_body:
+            msg = email.message_from_string(raw_body, policy=policy.default)
             
-            // Wait for domains to load before restoring
-            if (domainsLoaded) {
-                restoreSessionUI();
-            } else {
-                // If domains aren't loaded yet, wait for them
-                const checkDomains = setInterval(() => {
-                    if (domainsLoaded) {
-                        clearInterval(checkDomains);
-                        restoreSessionUI();
-                    }
-                }, 100);
-            }
-            return true;
-        } else {
-            // Session expired
-            localStorage.removeItem('tempMailSession');
-            showNotification('🕒 Session expired', 'error');
-        }
-    }
-    return false;
-}
+            html_body = None
+            text_body = None
+            
+            if msg.is_multipart():
+                for part in msg.walk():
+                    content_type = part.get_content_type()
+                    content_disposition = str(part.get("Content-Disposition", ""))
+                    
+                    if "attachment" in content_disposition:
+                        continue
+                    
+                    try:
+                        body_content = part.get_payload(decode=True)
+                        if body_content:
+                            body_content = body_content.decode('utf-8', errors='ignore')
+                            
+                            if content_type == 'text/html':
+                                html_body = body_content
+                            elif content_type == 'text/plain':
+                                text_body = body_content
+                    except:
+                        continue
+            else:
+                body_content = msg.get_payload(decode=True)
+                if body_content:
+                    body_content = body_content.decode('utf-8', errors='ignore')
+                    if msg.get_content_type() == 'text/html':
+                        html_body = body_content
+                    else:
+                        text_body = body_content
+            
+            return html_body if html_body else text_body
+        
+        return raw_body
+        
+    except Exception as e:
+        print(f"Email parsing error: {e}")
+        return raw_body
 
-// Restore the session UI
-function restoreSessionUI() {
-    if (!currentEmail) return;
-    
-    var parts = currentEmail.split('@');
-    document.getElementById('username-input').value = parts[0];
-    document.getElementById('domain-select').value = parts[1];
-    
-    // Show the email display immediately
-    document.getElementById('current-email').textContent = currentEmail;
-    document.getElementById('email-display').classList.remove('hidden');
-    
-    showNotification('✅ Session restored', 'success');
-    
-    // Load emails immediately
-    loadEmails();
-    startAutoRefresh();
-    startTimeUpdate();
-    setupSessionExpiration();
-}
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('admin_authenticated'):
+            return jsonify({'error': 'Unauthorized'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
 
-// Save session to localStorage
-function saveSession() {
-    if (!currentEmail) return;
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/api/domains', methods=['GET'])
+def get_domains():
+    return jsonify({'domains': [DOMAIN]})
+
+@app.route('/api/create', methods=['POST'])
+def create_email():
+    data = request.get_json() or {}
+    custom_name = data.get('name', '').strip()
     
-    const session = {
-        email: currentEmail,
-        sessionToken: sessionToken, // ADD THIS LINE
-        createdAt: sessionStartTime || Date.now(),
-        lastEmailTime: Date.now()
-    };
-    localStorage.setItem('tempMailSession', JSON.stringify(session));
-}
-
-
-// Update last email time in session
-function updateLastEmailTime() {
-    const savedSession = localStorage.getItem('tempMailSession');
-    if (savedSession && currentEmail) {
-        const session = JSON.parse(savedSession);
-        session.lastEmailTime = Date.now();
-        localStorage.setItem('tempMailSession', JSON.stringify(session));
-    }
-}
-
-function loadDomains() {
-    return fetch(API_URL + '/api/domains')
-    .then(res => {
-        if (!res.ok) {
-            throw new Error('Failed to load domains');
-        }
-        return res.json();
-    })
-    .then(data => {
-        var select = document.getElementById('domain-select');
-        select.innerHTML = '<option value="">Select domain</option>';
-        if (data.domains && data.domains.length > 0) {
-            data.domains.forEach(function(d) {
-                select.innerHTML += '<option value="' + d + '">' + d + '</option>';
-            });
-        } else {
-            // Fallback domain
-            select.innerHTML += '<option value="aungmyomyatzaw.online">aungmyomyatzaw.online</option>';
-        }
-        domainsLoaded = true;
-    })
-    .catch(err => {
-        console.error('Error loading domains:', err);
-        // Set default domain if API fails
-        var select = document.getElementById('domain-select');
-        select.innerHTML = '<option value="">Select domain</option>';
-        select.innerHTML += '<option value="aungmyomyatzaw.online">aungmyomyatzaw.online</option>';
-        domainsLoaded = true;
-    });
-}
-
-document.getElementById('big-random-btn').addEventListener('click', function() {
-    document.getElementById('username-input').value = '';
-    createEmail('');
-});
-
-document.getElementById('create-btn').addEventListener('click', function() {
-    var username = document.getElementById('username-input').value.trim();
-    var domain = document.getElementById('domain-select').value;
+    if custom_name:
+        username = custom_name.lower()
+        username = ''.join(c for c in username if c.isalnum() or c in '-_')
+    else:
+        # Generate random name: malename + femalename + 3 digits
+        male_name = random.choice(MALE_NAMES)
+        female_name = random.choice(FEMALE_NAMES)
+        three_digits = ''.join(random.choices(string.digits, k=3))
+        username = f"{male_name}{female_name}{three_digits}"
     
-    if (!username) {
-        showNotification('❌ Please enter a username!', 'error');
-        return;
-    }
+    email_address = f"{username}@{DOMAIN}"
     
-    if (!domain) {
-        showNotification('❌ Please select a domain!', 'error');
-        return;
-    }
+    # Create session token
+    session_token = secrets.token_urlsafe(32)
+    created_at = datetime.now()
+    expires_at = created_at + timedelta(hours=1)
     
-    createEmail(username);
-});
-
-function createEmail(customName) {
-    var btn = document.getElementById('create-btn');
-    var originalText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
+    # Store session in PostgreSQL
+    conn = get_db()
+    c = conn.cursor()
     
-    // Security: Include session ID and security key in request
-    fetch(API_URL + '/api/create', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Session-ID': sessionId,
-            'X-Security-Key': emailSecurityKey
-        },
-        body: JSON.stringify({
-            name: customName,
-            sessionId: sessionId
+    try:
+        c.execute('''
+            INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity)
+            VALUES (%s, %s, %s, %s, %s)
+        ''', (session_token, email_address, created_at, expires_at, created_at))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'email': email_address,
+            'session_token': session_token,
+            'expires_at': expires_at.isoformat()
         })
-    })
-    .then(res => {
-        if (!res.ok) {
-            // If server error, try to parse the error message
-            return res.text().then(text => {
-                throw new Error(text || 'Server error: ' + res.status);
-            });
-        }
-        return res.json();
-    })
-    .then(data => {
-        if (!data.email) {
-            throw new Error('No email returned from server');
-        }
-        
-        currentEmail = data.email;
-        sessionToken = data.session_token;  
-        sessionStartTime = Date.now();
-        saveSession();
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        print(f"❌ Error creating session: {e}")
+        return jsonify({'error': 'Failed to create session'}), 500
 
+@app.route('/api/emails/<email_address>', methods=['GET'])
+def get_emails(email_address):
+    session_token = request.headers.get('X-Session-Token')
+    
+    if not session_token:
+        return jsonify({'error': 'No session token'}), 401
+    
+    conn = get_db()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    
+    # Verify session
+    c.execute('''
+        SELECT email_address, expires_at 
+        FROM sessions 
+        WHERE session_token = %s AND email_address = %s
+    ''', (session_token, email_address))
+    
+    session_data = c.fetchone()
+    
+    if not session_data:
+        conn.close()
+        return jsonify({'error': 'Invalid session'}), 401
+    
+    # Check if expired
+    if datetime.now() > session_data['expires_at']:
+        conn.close()
+        return jsonify({'error': 'Session expired'}), 401
+    
+    # Update last activity
+    c.execute('''
+        UPDATE sessions 
+        SET last_activity = %s 
+        WHERE session_token = %s
+    ''', (datetime.now(), session_token))
+    conn.commit()
+    
+    # Get emails for this session only
+    c.execute('''
+        SELECT sender, subject, body, received_at, timestamp 
+        FROM emails 
+        WHERE recipient = %s AND session_token = %s
+        ORDER BY received_at DESC
+    ''', (email_address, session_token))
+    
+    emails = []
+    for row in c.fetchall():
+        display_timestamp = row['received_at'] if row['received_at'] else row['timestamp']
         
-        var parts = currentEmail.split('@');
-        
-        document.getElementById('username-input').value = parts[0];
-        document.getElementById('domain-select').value = parts[1];
-        document.getElementById('current-email').textContent = data.email;
-        document.getElementById('email-display').classList.remove('hidden');
-        
-        // Reset email view to placeholder
-        document.getElementById('email-placeholder').style.display = 'flex';
-        document.getElementById('email-content').classList.add('hidden');
-        
-        showNotification('✅ Email created: ' + data.email, 'success');
-        
-        // Save session and start timers
-        saveSession();
-        
-        // Wait a moment for the server to register the email, then load emails
-        setTimeout(() => {
-            loadEmails();
-        }, 1000);
-        
-        startAutoRefresh();
-        startTimeUpdate();
-        setupSessionExpiration();
-    })
-    .catch(err => {
-        console.error('Error creating email:', err);
-        showNotification('❌ Error creating email: ' + err.message, 'error');
-        
-        // Fallback: Create email locally if API fails
-        createEmailLocally(customName);
-    })
-    .finally(function() {
-        btn.disabled = false;
-        btn.innerHTML = originalText;
-    });
-}
+        emails.append({
+            'id': len(emails) + 1,
+            'sender': row['sender'],
+            'subject': row['subject'],
+            'body': row['body'],
+            'timestamp': display_timestamp.isoformat() if hasattr(display_timestamp, 'isoformat') else display_timestamp
+        })
+    
+    conn.close()
+    return jsonify({'emails': emails})
 
-// Fallback function to create email locally if API fails
-function createEmailLocally(customName) {
-    var domain = document.getElementById('domain-select').value;
-    if (!domain) {
-        domain = 'aungmyomyatzaw.online';
-        document.getElementById('domain-select').value = domain;
-    }
-    
-    var username = customName || generateRandomUsername();
-    currentEmail = username + '@' + domain;
-    sessionStartTime = Date.now();
-    
-    document.getElementById('username-input').value = username;
-    document.getElementById('domain-select').value = domain;
-    document.getElementById('current-email').textContent = currentEmail;
-    document.getElementById('email-display').classList.remove('hidden');
-    
-    showNotification('✅ Email created locally: ' + currentEmail, 'success');
-    
-    // Save session and start timers
-    saveSession();
-    
-    // Try to load emails anyway (might work if email exists on server)
-    loadEmails();
-    startAutoRefresh();
-    startTimeUpdate();
-    setupSessionExpiration();
-}
-
-function generateRandomUsername() {
-    return Math.random().toString(36).substring(2, 12);
-}
-
-document.getElementById('copy-btn').addEventListener('click', function() {
-    if (!currentEmail) {
-        showNotification('❌ Create an email first!', 'error');
-        return;
-    }
-    
-    navigator.clipboard.writeText(currentEmail).then(function() {
-        showNotification('📋 Copied: ' + currentEmail, 'success');
-    }).catch(function() {
-        // Fallback for older browsers
-        var textArea = document.createElement("textarea");
-        textArea.value = currentEmail;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textArea);
-        showNotification('📋 Copied: ' + currentEmail, 'success');
-    });
-});
-
-document.getElementById('refresh-btn').addEventListener('click', loadEmails);
-
-function loadEmails() {
-    if (!currentEmail) {
-        console.log('No current email to load');
-        return;
-    }
-    
-    console.log('Loading emails for:', currentEmail);
-    
-    var loader = document.getElementById('inbox-loader');
-    var list = document.getElementById('email-list');
-    var defaultMsg = document.getElementById('no-emails-default');
-    
-    loader.style.display = 'flex';
-    defaultMsg.style.display = 'none';
-    list.innerHTML = '';
-    
-    // Security: Include session ID and security key in request
-    fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail), {
-      headers: {
-         'X-Session-Token': sessionToken
-      }
-  })
-
-    .then(res => {
-        if (!res.ok) {
-            if (res.status === 404) {
-                // Email doesn't exist yet, that's fine
-                console.log('Email not found on server (404)');
-                return { emails: [] };
-            }
-            return res.text().then(text => {
-                throw new Error(text || 'Failed to fetch emails: ' + res.status);
-            });
-        }
-        return res.json();
-    })
-    .then(data => {
-        console.log('Emails loaded:', data);
+@app.route('/api/webhook/inbound', methods=['POST'])
+def webhook_inbound():
+    try:
+        json_data = request.get_json(force=True, silent=True)
         
-        var newCount = data.emails ? data.emails.length : 0;
-        document.getElementById('email-count').textContent = newCount + ' email' + (newCount !== 1 ? 's' : '');
-        document.title = newCount > 0 ? '(' + newCount + ') TempMail - AMMZ' : 'TempMail - AMMZ';
+        if not json_data:
+            return jsonify({'error': 'No JSON data'}), 400
         
-        if (newCount > lastEmailCount && lastEmailCount > 0) {
-            showNotification('🔔 ' + (newCount - lastEmailCount) + ' new email(s) received!', 'success');
-            updateLastEmailTime();
-        }
-        lastEmailCount = newCount;
+        print("=" * 50)
+        print("📧 INCOMING EMAIL")
         
-        list.innerHTML = '';
+        recipient = json_data.get('to', 'unknown@unknown.com')
+        sender = json_data.get('from', 'unknown')
+        subject = json_data.get('subject', 'No subject')
         
-        if (newCount === 0) {
-            list.innerHTML = '<div class="text-center py-8 text-gray-300"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>';
-        } else {
-            data.emails.forEach(function(email, idx) {
-                var displaySender = email.sender;
-                if (displaySender.includes('bounces+') || displaySender.includes('bounce-md')) {
-                    displaySender = 'ChatGPT';
-                } else if (displaySender.includes('<')) {
-                    displaySender = displaySender.substring(0, displaySender.indexOf('<')).trim() || displaySender.substring(displaySender.indexOf('<')+1, displaySender.indexOf('>')).trim();
-                }
+        # Clean sender
+        if '<' in sender and '>' in sender:
+            sender = sender[sender.find('<')+1:sender.find('>')]
+        
+        if 'bounce' in sender.lower():
+            if '@' in sender:
+                domain_part = sender.split('@')[1]
+                if 'openai.com' in domain_part or 'mandrillapp.com' in domain_part:
+                    sender = 'ChatGPT'
+                elif 'afraid.org' in domain_part:
+                    sender = 'FreeDNS'
+                else:
+                    sender = 'Notification'
+        
+        # Get body
+        body = json_data.get('html_body', None)
+        if not body or body.strip() == '':
+            body = json_data.get('plain_body', 'No content')
+        
+        recipient = recipient.strip()
+        sender = sender.strip()
+        subject = subject.strip()
+        body = body.strip()
+        
+        # Parse MIME if needed
+        if 'Content-Type:' in body and 'multipart' in body:
+            body = parse_email_body(body)
+        
+        # AGGRESSIVE HEADER REMOVAL
+        header_patterns = [
+            'Received:', 'Received-SPF:', 'ARC-Seal:', 'ARC-Message-Signature:', 
+            'ARC-Authentication-Results:', 'DKIM-Signature:', 'Authentication-Results:',
+            'Return-Path:', 'Delivered-To:', 'X-', 'Message-ID:', 'Date:', 
+            'MIME-Version:', 'Content-Type:', 'Content-Transfer-Encoding:',
+            'Content-ID:', 'Reply-To:', 'List-', 'Precedence:'
+        ]
+        
+        if any(body.startswith(pattern) or ('\n' + pattern in body[:1000]) for pattern in header_patterns):
+            lines = body.split('\n')
+            clean_lines = []
+            skip_mode = True
+            empty_line_count = 0
+            
+            for line in lines:
+                stripped = line.strip()
                 
-                // Extract clean preview text
-                var previewText = extractTextFromHTML(email.body);
-                if (previewText.length > 80) {
-                    previewText = previewText.substring(0, 80) + '...';
-                }
+                if stripped == '':
+                    empty_line_count += 1
+                    if empty_line_count >= 2:
+                        skip_mode = False
+                    continue
+                else:
+                    empty_line_count = 0
                 
-                var item = document.createElement('div');
-                item.className = 'email-list-item rounded-lg border border-gray-700 hover:border-gray-600 transition-all';
-                item.setAttribute('data-timestamp', email.timestamp);
-                item.innerHTML = `
-                    <div class="flex justify-between items-start mb-2">
-                        <span class="text-sm font-semibold text-white truncate flex-1 mr-2">${escapeHtml(displaySender)}</span>
-                        <span class="text-xs text-gray-400 email-time whitespace-nowrap">${formatTime(email.timestamp)}</span>
-                    </div>
-                    <div class="text-sm font-medium text-gray-200 mb-2 truncate">${escapeHtml(email.subject)}</div>
-                    <div class="text-xs text-gray-400 email-preview">${escapeHtml(previewText)}</div>
-                `;
-                item.addEventListener('click', function() { viewEmail(email, item); });
-                list.appendChild(item);
-            });
-        }
+                is_header = False
+                for pattern in header_patterns:
+                    if stripped.startswith(pattern) or (skip_mode and ':' in stripped[:50]):
+                        is_header = True
+                        break
+                
+                if skip_mode and (line.startswith(' ') or line.startswith('\t')):
+                    is_header = True
+                
+                if not is_header:
+                    skip_mode = False
+                
+                if not skip_mode and not is_header:
+                    clean_lines.append(line)
+            
+            body = '\n'.join(clean_lines).strip()
+        
+        if len(body) > 1000 and (body.count('=') > 50 or body.count('+') > 50):
+            plain = json_data.get('plain_body', '')
+            if plain and len(plain) < len(body) * 0.8:
+                body = plain
+        
+        print(f"  ✉️  From: {sender}")
+        print(f"  📬 To: {recipient}")
+        print(f"  📝 Subject: {subject}")
+        print(f"  📄 Body: {len(body)} chars")
+        print("=" * 50)
+        
+        # Store timestamps
+        received_at = datetime.now()
+        original_timestamp = json_data.get('timestamp', received_at.isoformat())
+        
+        # Find active session for this recipient
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('''
+            SELECT session_token 
+            FROM sessions 
+            WHERE email_address = %s AND expires_at > NOW()
+            ORDER BY created_at DESC 
+            LIMIT 1
+        ''', (recipient,))
+        
+        session_data = c.fetchone()
+        
+        if session_data:
+            session_token = session_data[0]
+            
+            # Store email
+            c.execute('''
+                INSERT INTO emails (recipient, sender, subject, body, timestamp, received_at, session_token)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ''', (recipient, sender, subject, body, original_timestamp, received_at, session_token))
+            
+            # Update session last_activity
+            c.execute('''
+                UPDATE sessions 
+                SET last_activity = %s 
+                WHERE session_token = %s
+            ''', (received_at, session_token))
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"✅ Email stored: {sender} → {recipient}")
+            return '', 204
+        else:
+            conn.close()
+            print(f"⚠️ No active session for {recipient}")
+            return '', 204
+        
+    except Exception as e:
+        print(f"❌ Webhook error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 400
+
+# Cleanup expired sessions
+def cleanup_expired_sessions():
+    while True:
+        time.sleep(300)  # Every 5 minutes
+        
+        try:
+            conn = get_db()
+            c = conn.cursor()
+            
+            # Delete expired sessions (CASCADE will delete emails too)
+            c.execute('''
+                DELETE FROM sessions 
+                WHERE expires_at < NOW()
+            ''')
+            
+            deleted = c.rowcount
+            conn.commit()
+            conn.close()
+            
+            if deleted > 0:
+                print(f"🧹 Cleaned up {deleted} expired sessions")
+        except Exception as e:
+            print(f"❌ Cleanup error: {e}")
+
+# Start cleanup thread
+cleanup_thread = Thread(target=cleanup_expired_sessions, daemon=True)
+cleanup_thread.start()
+
+# Admin routes
+@app.route('/admin')
+def admin_panel():
+    return render_template('admin.html')
+
+@app.route('/api/admin/login', methods=['POST'])
+def admin_login():
+    data = request.get_json() or {}
+    password = data.get('password', '')
+    
+    if password == APP_PASSWORD:
+        session['admin_authenticated'] = True
+        return jsonify({'success': True})
+    return jsonify({'success': False}), 401
+
+@app.route('/api/admin/logout', methods=['POST'])
+@admin_required
+def admin_logout():
+    session.clear()
+    return jsonify({'success': True})
+
+@app.route('/api/admin/stats', methods=['GET'])
+@admin_required
+def admin_stats():
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        
+        c.execute('SELECT COUNT(*) FROM emails')
+        total_emails = c.fetchone()[0]
+        
+        c.execute('SELECT COUNT(DISTINCT recipient) FROM emails')
+        total_addresses = c.fetchone()[0]
+        
+        c.execute('''
+            SELECT COUNT(*) FROM emails 
+            WHERE received_at > NOW() - INTERVAL '1 day'
+        ''')
+        recent_emails = c.fetchone()[0]
+        
+        conn.close()
+        
+        return jsonify({
+            'total_emails': total_emails,
+            'total_addresses': total_addresses,
+            'recent_emails': recent_emails
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/addresses', methods=['GET'])
+@admin_required
+def admin_addresses():
+    try:
+        conn = get_db()
+        c = conn.cursor(cursor_factory=RealDictCursor)
+        
+        c.execute('''
+            SELECT recipient, COUNT(*) as count, MAX(received_at) as last_email
+            FROM emails
+            GROUP BY recipient
+            ORDER BY last_email DESC
+        ''')
+        
+        addresses = []
+        for row in c.fetchall():
+            addresses.append({
+                'address': row['recipient'],
+                'count': row['count'],
+                'last_email': row['last_email'].isoformat() if row['last_email'] else None
+            })
+        
+        conn.close()
+        return jsonify({'addresses': addresses})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/emails/<email_address>', methods=['GET'])
+@admin_required
+def admin_get_emails(email_address):
+    try:
+        conn = get_db()
+        c = conn.cursor(cursor_factory=RealDictCursor)
+        
+        c.execute('''
+            SELECT id, sender, subject, body, received_at, timestamp 
+            FROM emails 
+            WHERE recipient = %s 
+            ORDER BY received_at DESC
+        ''', (email_address,))
+        
+        emails = []
+        for row in c.fetchall():
+            emails.append({
+                'id': row['id'],
+                'sender': row['sender'],
+                'subject': row['subject'],
+                'body': row['body'],
+                'received_at': row['received_at'].isoformat() if row['received_at'] else None,
+                'timestamp': row['timestamp']
+            })
+        
+        conn.close()
+        return jsonify({'emails': emails})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/delete/<int:email_id>', methods=['DELETE'])
+@admin_required
+def admin_delete_email(email_id):
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('DELETE FROM emails WHERE id = %s', (email_id,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/delete-address/<email_address>', methods=['DELETE'])
+@admin_required
+def admin_delete_address(email_address):
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('DELETE FROM emails WHERE recipient = %s', (email_address,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/health')
+def health():
+    return jsonify({
+        'status': 'healthy',
+        'domain': DOMAIN,
+        'timestamp': datetime.utcnow().isoformat()
     })
-    .catch(err => {
-        console.error('Error loading emails:', err);
-        
-        // Don't show error for 404 - it just means no emails yet
-        if (!err.message.includes('404')) {
-            showNotification('⚠️ Could not load emails: ' + err.message, 'error');
-        }
-        
-        list.innerHTML = '<div class="text-center py-8 text-gray-300"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>';
-    })
-    .finally(function() {
-        loader.style.display = 'none';
-    });
-}
 
-// Update email times automatically
-function updateEmailTimes() {
-    const emailItems = document.querySelectorAll('.email-list-item');
-    emailItems.forEach(item => {
-        const timestamp = item.getAttribute('data-timestamp');
-        const timeElement = item.querySelector('.email-time');
-        if (timeElement && timestamp) {
-            timeElement.textContent = formatTime(timestamp);
-        }
-    });
-    
-    // Also update the time in email content if an email is open
-    const emailDateElement = document.getElementById('email-date');
-    if (emailDateElement && emailDateElement.getAttribute('data-timestamp')) {
-        emailDateElement.textContent = formatTime(emailDateElement.getAttribute('data-timestamp'));
-    }
-}
-
-function viewEmail(email, itemEl) {
-    document.querySelectorAll('#email-list > div').forEach(el => el.classList.remove('bg-blue-600', 'border-blue-500'));
-    itemEl.classList.add('bg-blue-600', 'border-blue-500');
-    
-    document.getElementById('email-placeholder').style.display = 'none';
-    document.getElementById('email-content').classList.remove('hidden');
-    
-    document.getElementById('email-subject').textContent = email.subject;
-    document.getElementById('email-from').textContent = email.sender;
-    document.getElementById('email-date').textContent = formatTime(email.timestamp, email.id);
-    
-    var bodyEl = document.getElementById('email-body');
-    
-    // Process the email body to extract clean content
-    var cleanBody = extractCleanEmailBody(email.body);
-    bodyEl.innerHTML = cleanBody;
-}
-
-// Improved function to extract clean email body from raw email content
-function extractCleanEmailBody(rawBody) {
-    // First, try to decode quoted-printable encoding
-    var decodedBody = decodeQuotedPrintable(rawBody);
-    
-    // Try to extract HTML content if present
-    var htmlContent = extractHTMLContent(decodedBody);
-    if (htmlContent) {
-        return sanitizeHTML(htmlContent);
-    }
-    
-    // Try to extract plain text content
-    var textContent = extractTextContent(decodedBody);
-    if (textContent) {
-        return formatTextContent(textContent);
-    }
-    
-    // Fallback: return a cleaned version of the raw body
-    return formatTextContent(cleanRawBody(decodedBody));
-}
-
-// Decode quoted-printable encoding
-function decodeQuotedPrintable(str) {
-    // Remove soft line breaks
-    str = str.replace(/=\r?\n/g, '');
-    
-    // Decode quoted-printable sequences
-    str = str.replace(/=([0-9A-F]{2})/g, function(match, p1) {
-        return String.fromCharCode(parseInt(p1, 16));
-    });
-    
-    // Handle specific encoded characters
-    str = str.replace(/=3D/g, '=');
-    str = str.replace(/=20/g, ' ');
-    str = str.replace(/=2E/g, '.');
-    str = str.replace(/=E2=80=99/g, "'");
-    str = str.replace(/=C2=A0/g, ' ');
-    
-    return str;
-}
-
-// Extract HTML content from email body
-function extractHTMLContent(body) {
-    // Look for HTML content
-    var htmlMatch = body.match(/<html[\s\S]*?<\/html>/i);
-    if (htmlMatch) return htmlMatch[0];
-    
-    htmlMatch = body.match(/<body[\s\S]*?<\/body>/i);
-    if (htmlMatch) return htmlMatch[0];
-    
-    htmlMatch = body.match(/<div[\s\S]*?<\/div>/i);
-    if (htmlMatch) return htmlMatch[0];
-    
-    // Look for content after the headers
-    var headerEnd = body.indexOf('Content-Type: text/html');
-    if (headerEnd !== -1) {
-        var contentStart = body.indexOf('>', headerEnd);
-        if (contentStart !== -1) {
-            return body.substring(contentStart + 1);
-        }
-    }
-    
-    return null;
-}
-
-// Extract plain text content from email body
-function extractTextContent(body) {
-    // Remove email headers
-    var lines = body.split('\n');
-    var inBody = false;
-    var bodyLines = [];
-    
-    for (var i = 0; i < lines.length; i++) {
-        var line = lines[i].trim();
-        
-        // Skip empty lines at the beginning
-        if (!inBody && line === '') continue;
-        
-        // Skip technical headers
-        if (line.startsWith('Received:') || 
-            line.startsWith('DKIM-Signature:') ||
-            line.startsWith('ARC-') ||
-            line.startsWith('Content-') ||
-            line.startsWith('MIME-') ||
-            line.startsWith('Message-ID:') ||
-            line.startsWith('X-') ||
-            line.includes('boundary=') ||
-            line.includes('quoted-printable') ||
-            line.includes('base64') ||
-            line.includes('charset=') ||
-            line.includes('multipart/') ||
-            line.startsWith('--') && line.endsWith('--')) {
-            continue;
-        }
-        
-        // Look for the start of the actual message
-        if (!inBody && (
-            line.toLowerCase().includes('enter this temporary verification code') ||
-            line.toLowerCase().includes('verification code') ||
-            line.toLowerCase().includes('your chatgpt code is') ||
-            line.toLowerCase().includes('please ignore this email') ||
-            line.toLowerCase().includes('best,') ||
-            line.toLowerCase().includes('regards,') ||
-            (line.length > 0 && !line.includes(':') && !line.includes('='))
-        )) {
-            inBody = true;
-        }
-        
-        if (inBody) {
-            bodyLines.push(line);
-        }
-    }
-    
-    var text = bodyLines.join('\n').trim();
-    return text.length > 0 ? text : null;
-}
-
-// Clean raw body when no structured content found
-function cleanRawBody(body) {
-    var lines = body.split('\n');
-    var cleanLines = [];
-    
-    for (var i = 0; i < lines.length; i++) {
-        var line = lines[i].trim();
-        
-        // Skip technical lines
-        if (line.startsWith('Received:') || 
-            line.startsWith('DKIM-Signature:') ||
-            line.startsWith('ARC-') ||
-            line.startsWith('Content-') ||
-            line.startsWith('MIME-') ||
-            line.startsWith('Message-ID:') ||
-            line.startsWith('X-') ||
-            line.includes('boundary=') ||
-            line.includes('quoted-printable') ||
-            line.includes('base64') ||
-            line.includes('charset=') ||
-            line.includes('multipart/') ||
-            line.startsWith('--') && line.endsWith('--')) {
-            continue;
-        }
-        
-        // Skip very long lines (likely encoded data)
-        if (line.length > 200) continue;
-        
-        cleanLines.push(line);
-    }
-    
-    return cleanLines.join('\n');
-}
-
-// Format plain text content with proper HTML structure
-function formatTextContent(text) {
-    // Extract verification code
-    var codeMatch = text.match(/\b\d{4,8}\b/);
-    var verificationCode = codeMatch ? codeMatch[0] : null;
-    
-    // Split into paragraphs
-    var paragraphs = text.split(/\n\s*\n/);
-    var html = '';
-    
-    // Add verification code prominently if found
-    if (verificationCode) {
-        html += '<div class="verification-code">' + verificationCode + '</div>';
-    }
-    
-    for (var i = 0; i < paragraphs.length; i++) {
-        var paragraph = paragraphs[i].trim();
-        if (paragraph.length === 0) continue;
-        
-        // Skip the line that contains the verification code (already displayed)
-        if (verificationCode && paragraph.includes(verificationCode)) continue;
-        
-        // Skip technical lines
-        if (paragraph.includes('by cloudflare-email.net') ||
-            paragraph.includes('ARC-Seal:') ||
-            paragraph.includes('DKIM-Signature:') ||
-            paragraph.includes('Received:')) {
-            continue;
-        }
-        
-        // Format specific message parts
-        if (paragraph.toLowerCase().includes('enter this temporary verification code')) {
-            html += '<div class="email-header"><p>' + escapeHtml(paragraph) + '</p></div>';
-        } else if (paragraph.toLowerCase().includes('please ignore this email')) {
-            html += '<div class="email-meta"><p>' + escapeHtml(paragraph) + '</p></div>';
-        } else if (paragraph.toLowerCase().includes('best,') || 
-                   paragraph.toLowerCase().includes('regards,') ||
-                   paragraph.toLowerCase().includes('the chatgpt team')) {
-            html += '<div class="email-header"><p>' + escapeHtml(paragraph) + '</p></div>';
-        } else {
-            html += '<p>' + escapeHtml(paragraph) + '</p>';
-        }
-    }
-    
-    return html || '<p>No readable content found in this email.</p>';
-}
-
-// Sanitize HTML to prevent XSS attacks
-function sanitizeHTML(html) {
-    var temp = document.createElement('div');
-    temp.innerHTML = html;
-    
-    // Remove potentially dangerous tags
-    var dangerousTags = ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'form', 'input', 'button'];
-    dangerousTags.forEach(tag => {
-        var elements = temp.querySelectorAll(tag);
-        elements.forEach(el => el.remove());
-    });
-    
-    // Remove dangerous attributes
-    var allElements = temp.querySelectorAll('*');
-    allElements.forEach(el => {
-        var attributes = el.attributes;
-        for (var i = attributes.length - 1; i >= 0; i--) {
-            var attr = attributes[i];
-            if (attr.name.startsWith('on') || 
-                attr.name === 'href' && attr.value.startsWith('javascript:') ||
-                attr.name === 'src' && attr.value.startsWith('javascript:')) {
-                el.removeAttribute(attr.name);
-            }
-        }
-    });
-    
-    return temp.innerHTML;
-}
-
-function extractTextFromHTML(html) {
-    var temp = document.createElement('div');
-    temp.innerHTML = html;
-    var scripts = temp.querySelectorAll('script, style, link, meta');
-    scripts.forEach(el => el.remove());
-    var text = temp.textContent || temp.innerText || '';
-    text = text.replace(/\s+/g, ' ').replace(/\n+/g, '\n').trim();
-    if (text.length < 50) {
-        var paragraphs = temp.querySelectorAll('p, div, td');
-        text = Array.from(paragraphs).map(el => el.textContent).join('\n').replace(/\s+/g, ' ').trim();
-    }
-    return text || 'No readable content found';
-}
-
-function startAutoRefresh() {
-    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-    autoRefreshInterval = setInterval(loadEmails, 15000);
-}
-
-function startAutoRefresh() {
-    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-    autoRefreshInterval = setInterval(loadEmails, 5000); // Refresh every 5 seconds
-}
-
-function startTimeUpdate() {
-    if (timeUpdateInterval) clearInterval(timeUpdateInterval);
-    timeUpdateInterval = setInterval(updateEmailTimes, 1000); // Update times every second
-}
-
-function showNotification(message, type) {
-    var notif = document.getElementById('notification');
-    var text = document.getElementById('notification-text');
-    text.textContent = message;
-    notif.className = type === 'success' ? 
-        'text-center mb-2 md:mb-4 p-2 md:p-4 rounded-xl text-white font-medium text-sm md:text-base bg-green-600' :
-        'text-center mb-2 md:mb-4 p-2 md:p-4 rounded-xl text-white font-medium text-sm md:text-base bg-red-600';
-    notif.classList.remove('hidden');
-    setTimeout(() => notif.classList.add('hidden'), 3000);
-}
-
-function escapeHtml(text) {
-    var div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// Fixed time formatting function - NO PLURAL "s"
-function formatTime(timestamp) {
-    var date = new Date(timestamp);
-    var now = new Date();
-    var diff = now - date;
-    var seconds = Math.floor(diff / 1000);
-    var minutes = Math.floor(seconds / 60);
-    var hours = Math.floor(minutes / 60);
-    var days = Math.floor(hours / 24);
-    
-    if (seconds < 10) return 'just now';
-    if (seconds < 60) return seconds + ' sec ago';
-    if (minutes < 60) return minutes + ' min ago';
-    if (hours < 24) return hours + ' hour ago';
-    if (days < 7) return days + ' day ago';
-    
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-}
-
-// Add session expiration
-function setupSessionExpiration() {
-    var sessionTimeout = 60 * 60 * 1000; // 1 hour in milliseconds
-    
-    setTimeout(function() {
-        showNotification('🕒 Session expired. Please create a new email address.', 'error');
-        currentEmail = '';
-        document.getElementById('email-display').classList.add('hidden');
-        document.getElementById('email-placeholder').style.display = 'flex';
-        document.getElementById('email-content').classList.add('hidden');
-        document.getElementById('email-list').innerHTML = '';
-        document.getElementById('email-count').textContent = '0 emails';
-        document.title = 'TempMail - AMMZ';
-        
-        localStorage.removeItem('tempMailSession');
-        
-        if (autoRefreshInterval) {
-            clearInterval(autoRefreshInterval);
-            autoRefreshInterval = null;
-        }
-        if (timeUpdateInterval) {
-            clearInterval(timeUpdateInterval);
-            timeUpdateInterval = null;
-        }
-    }, sessionTimeout);
-}
-
-// Initialize the app
-function initApp() {
-    loadDomains().then(() => {
-        // Try to load existing session after domains are loaded
-        if (!loadSession()) {
-            console.log('No valid session found, starting fresh');
-        }
-    }).catch(err => {
-        console.error('Error loading domains:', err);
-        // Even if domains fail, try to load session
-        if (!loadSession()) {
-            console.log('No valid session found, starting fresh');
-        }
-    });
-}
-
-// Start the app
-initApp();
-</script>
-</body>
-</html>
-
+if __name__ == '__main__':
+    port = int(os.getenv('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
