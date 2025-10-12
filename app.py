@@ -13,6 +13,7 @@ import time
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import logging
+import re
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -872,6 +873,55 @@ def admin_get_sessions():
         logger.error(f"❌ Error fetching sessions: {e}")
         return jsonify({'error': str(e)}), 500
 
+# Add these blacklist endpoints after the other admin routes
+@app.route('/api/admin/blacklist', methods=['GET'])
+@admin_required
+def get_blacklist():
+    """Get current blacklisted usernames"""
+    try:
+        # Static blacklist - you can store this in database later
+        BLACKLISTED_USERNAMES = ['ammz', 'admin', 'owner', 'root', 'system', 'az', 'c']
+        return jsonify({'blacklist': BLACKLISTED_USERNAMES})
+    except Exception as e:
+        logger.error(f"❌ Error getting blacklist: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/blacklist', methods=['POST'])
+@admin_required
+def add_to_blacklist():
+    """Add username to blacklist"""
+    try:
+        data = request.get_json() or {}
+        username = data.get('username', '').strip().lower()
+        
+        if not username:
+            return jsonify({'error': 'Username is required'}), 400
+        
+        if not re.match(r'^[a-zA-Z0-9-_]+$', username):
+            return jsonify({'error': 'Username can only contain letters, numbers, hyphens, and underscores'}), 400
+        
+        # For now, just log it. You can store in database later.
+        logger.info(f"✅ Would add to blacklist: {username}")
+        return jsonify({'success': True, 'message': f'Username {username} would be added to blacklist (static list for now)'})
+        
+    except Exception as e:
+        logger.error(f"❌ Error adding to blacklist: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/blacklist/<username>', methods=['DELETE'])
+@admin_required
+def remove_from_blacklist(username):
+    """Remove username from blacklist"""
+    try:
+        username = username.lower()
+        
+        # For now, just log it. You can store in database later.
+        logger.info(f"✅ Would remove from blacklist: {username}")
+        return jsonify({'success': True, 'message': f'Username {username} would be removed from blacklist (static list for now)'})
+        
+    except Exception as e:
+        logger.error(f"❌ Error removing from blacklist: {e}")
+        return jsonify({'error': str(e)}), 500
 # Error handlers
 @app.errorhandler(404)
 def not_found(error):
@@ -893,5 +943,6 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
 
 
