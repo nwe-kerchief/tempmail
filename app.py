@@ -1,14 +1,19 @@
 from flask import Flask, request, jsonify, render_template, session
 from flask_cors import CORS
-import sqlite3
 import os
 import random
 import string
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
 import email
 from email import policy
 from functools import wraps
-import re
+import secrets
+from threading import Thread
+import time
+
+# PostgreSQL support
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 MALE_NAMES = ['james', 'john', 'robert', 'michael', 'william', 'david', 'richard', 'joseph', 'thomas', 'charles', 
               'daniel', 'matthew', 'anthony', 'mark', 'paul', 'steven', 'andrew', 'joshua', 'kevin', 'brian',
@@ -19,28 +24,56 @@ FEMALE_NAMES = ['mary', 'patricia', 'jennifer', 'linda', 'elizabeth', 'barbara',
                 'dorothy', 'carol', 'amanda', 'melissa', 'deborah', 'stephanie', 'rebecca', 'sharon', 'laura', 'grace']
 
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'change-this-in-production')
+app.secret_key = os.getenv('SECRET_KEY', secrets.token_urlsafe(32))
 CORS(app)
 
 APP_PASSWORD = os.getenv('APP_PASSWORD', 'admin123')
 DOMAIN = os.getenv('DOMAIN', 'aungmyomyatzaw.online')
+DATABASE_URL = os.getenv('DATABASE_URL')
+
+# Database connection helper
+def get_db():
+    return psycopg2.connect(DATABASE_URL, sslmode='require')
 
 def init_db():
-    conn = sqlite3.connect('emails.db')
+    conn = get_db()
     c = conn.cursor()
+    
+    # Sessions table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS sessions (
+            session_token TEXT PRIMARY KEY,
+            email_address TEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            last_activity TIMESTAMP NOT NULL
+        )
+    ''')
+    
+    # Emails table
     c.execute('''
         CREATE TABLE IF NOT EXISTS emails (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             recipient TEXT NOT NULL,
             sender TEXT NOT NULL,
             subject TEXT,
             body TEXT,
             timestamp TEXT,
-            received_at TEXT
+            received_at TIMESTAMP NOT NULL,
+            session_token TEXT NOT NULL,
+            FOREIGN KEY (session_token) REFERENCES sessions(session_token) ON DELETE CASCADE
         )
     ''')
+    
+    # Indexes for performance
+    c.execute('CREATE INDEX IF NOT EXISTS idx_recipient ON emails(recipient)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_session ON emails(session_token)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_received_at ON emails(received_at)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_email_address ON sessions(email_address)')
+    
     conn.commit()
     conn.close()
+    print("✅ Database initialized")
 
 init_db()
 
@@ -121,32 +154,89 @@ def create_email():
         username = f"{male_name}{female_name}{three_digits}"
     
     email_address = f"{username}@{DOMAIN}"
-    return jsonify({'email': email_address})
-
+    
+    # Create session token
+    session_token = secrets.token_urlsafe(32)
+    created_at = datetime.now()
+    expires_at = created_at + timedelta(hours=1)
+    
+    # Store session in PostgreSQL
+    conn = get_db()
+    c = conn.cursor()
+    
+    try:
+        c.execute('''
+            INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity)
+            VALUES (%s, %s, %s, %s, %s)
+        ''', (session_token, email_address, created_at, expires_at, created_at))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'email': email_address,
+            'session_token': session_token,
+            'expires_at': expires_at.isoformat()
+        })
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        print(f"❌ Error creating session: {e}")
+        return jsonify({'error': 'Failed to create session'}), 500
 
 @app.route('/api/emails/<email_address>', methods=['GET'])
 def get_emails(email_address):
-    conn = sqlite3.connect('emails.db')
-    c = conn.cursor()
+    session_token = request.headers.get('X-Session-Token')
+    
+    if not session_token:
+        return jsonify({'error': 'No session token'}), 401
+    
+    conn = get_db()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    
+    # Verify session
+    c.execute('''
+        SELECT email_address, expires_at 
+        FROM sessions 
+        WHERE session_token = %s AND email_address = %s
+    ''', (session_token, email_address))
+    
+    session_data = c.fetchone()
+    
+    if not session_data:
+        conn.close()
+        return jsonify({'error': 'Invalid session'}), 401
+    
+    # Check if expired
+    if datetime.now() > session_data['expires_at']:
+        conn.close()
+        return jsonify({'error': 'Session expired'}), 401
+    
+    # Update last activity
+    c.execute('''
+        UPDATE sessions 
+        SET last_activity = %s 
+        WHERE session_token = %s
+    ''', (datetime.now(), session_token))
+    conn.commit()
+    
+    # Get emails for this session only
     c.execute('''
         SELECT sender, subject, body, received_at, timestamp 
         FROM emails 
-        WHERE recipient = ? 
+        WHERE recipient = %s AND session_token = %s
         ORDER BY received_at DESC
-    ''', (email_address,))
+    ''', (email_address, session_token))
     
     emails = []
     for row in c.fetchall():
-        # Use received_at timestamp for display (when email arrived at our server)
-        # Fallback to original timestamp if received_at is not available
-        display_timestamp = row[3] if row[3] else row[4]
+        display_timestamp = row['received_at'] if row['received_at'] else row['timestamp']
         
         emails.append({
-            'id': len(emails) + 1,  # Simple ID for frontend tracking
-            'sender': row[0],
-            'subject': row[1],
-            'body': row[2],
-            'timestamp': display_timestamp  # Use the correct timestamp for display
+            'id': len(emails) + 1,
+            'sender': row['sender'],
+            'subject': row['subject'],
+            'body': row['body'],
+            'timestamp': display_timestamp.isoformat() if hasattr(display_timestamp, 'isoformat') else display_timestamp
         })
     
     conn.close()
@@ -181,7 +271,7 @@ def webhook_inbound():
                 else:
                     sender = 'Notification'
         
-        # Get body - HTML first, then plain
+        # Get body
         body = json_data.get('html_body', None)
         if not body or body.strip() == '':
             body = json_data.get('plain_body', 'No content')
@@ -213,23 +303,20 @@ def webhook_inbound():
             for line in lines:
                 stripped = line.strip()
                 
-                # Count empty lines
                 if stripped == '':
                     empty_line_count += 1
-                    if empty_line_count >= 2:  # After 2 empty lines, assume body starts
+                    if empty_line_count >= 2:
                         skip_mode = False
                     continue
                 else:
                     empty_line_count = 0
                 
-                # Check if it's a header line
                 is_header = False
                 for pattern in header_patterns:
                     if stripped.startswith(pattern) or (skip_mode and ':' in stripped[:50]):
                         is_header = True
                         break
                 
-                # Check for continuation lines (indented)
                 if skip_mode and (line.startswith(' ') or line.startswith('\t')):
                     is_header = True
                 
@@ -241,7 +328,6 @@ def webhook_inbound():
             
             body = '\n'.join(clean_lines).strip()
         
-        # If body is still base64 encoded junk, try plain_body
         if len(body) > 1000 and (body.count('=') > 50 or body.count('+') > 50):
             plain = json_data.get('plain_body', '')
             if plain and len(plain) < len(body) * 0.8:
@@ -253,27 +339,82 @@ def webhook_inbound():
         print(f"  📄 Body: {len(body)} chars")
         print("=" * 50)
         
-        # Store BOTH timestamps
-        received_at = datetime.now(timezone.utc).isoformat()  # When email arrived at our server
-        original_timestamp = json_data.get('timestamp', received_at)  # Email's original timestamp
+        # Store timestamps
+        received_at = datetime.now()
+        original_timestamp = json_data.get('timestamp', received_at.isoformat())
         
-        conn = sqlite3.connect('emails.db')
+        # Find active session for this recipient
+        conn = get_db()
         c = conn.cursor()
         c.execute('''
-            INSERT INTO emails (recipient, sender, subject, body, timestamp, received_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (recipient, sender, subject, body, original_timestamp, received_at))
-        conn.commit()
-        conn.close()
+            SELECT session_token 
+            FROM sessions 
+            WHERE email_address = %s AND expires_at > NOW()
+            ORDER BY created_at DESC 
+            LIMIT 1
+        ''', (recipient,))
         
-        print(f"✅ Email stored: {sender} → {recipient} at {received_at}")
-        return '', 204
+        session_data = c.fetchone()
+        
+        if session_data:
+            session_token = session_data[0]
+            
+            # Store email
+            c.execute('''
+                INSERT INTO emails (recipient, sender, subject, body, timestamp, received_at, session_token)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ''', (recipient, sender, subject, body, original_timestamp, received_at, session_token))
+            
+            # Update session last_activity
+            c.execute('''
+                UPDATE sessions 
+                SET last_activity = %s 
+                WHERE session_token = %s
+            ''', (received_at, session_token))
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"✅ Email stored: {sender} → {recipient}")
+            return '', 204
+        else:
+            conn.close()
+            print(f"⚠️ No active session for {recipient}")
+            return '', 204
         
     except Exception as e:
         print(f"❌ Webhook error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 400
+
+# Cleanup expired sessions
+def cleanup_expired_sessions():
+    while True:
+        time.sleep(300)  # Every 5 minutes
+        
+        try:
+            conn = get_db()
+            c = conn.cursor()
+            
+            # Delete expired sessions (CASCADE will delete emails too)
+            c.execute('''
+                DELETE FROM sessions 
+                WHERE expires_at < NOW()
+            ''')
+            
+            deleted = c.rowcount
+            conn.commit()
+            conn.close()
+            
+            if deleted > 0:
+                print(f"🧹 Cleaned up {deleted} expired sessions")
+        except Exception as e:
+            print(f"❌ Cleanup error: {e}")
+
+# Start cleanup thread
+cleanup_thread = Thread(target=cleanup_expired_sessions, daemon=True)
+cleanup_thread.start()
 
 # Admin routes
 @app.route('/admin')
@@ -300,7 +441,7 @@ def admin_logout():
 @admin_required
 def admin_stats():
     try:
-        conn = sqlite3.connect('emails.db')
+        conn = get_db()
         c = conn.cursor()
         
         c.execute('SELECT COUNT(*) FROM emails')
@@ -311,7 +452,7 @@ def admin_stats():
         
         c.execute('''
             SELECT COUNT(*) FROM emails 
-            WHERE datetime(received_at) > datetime('now', '-1 day')
+            WHERE received_at > NOW() - INTERVAL '1 day'
         ''')
         recent_emails = c.fetchone()[0]
         
@@ -330,8 +471,8 @@ def admin_stats():
 @admin_required
 def admin_addresses():
     try:
-        conn = sqlite3.connect('emails.db')
-        c = conn.cursor()
+        conn = get_db()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         
         c.execute('''
             SELECT recipient, COUNT(*) as count, MAX(received_at) as last_email
@@ -343,9 +484,9 @@ def admin_addresses():
         addresses = []
         for row in c.fetchall():
             addresses.append({
-                'address': row[0],
-                'count': row[1],
-                'last_email': row[2]
+                'address': row['recipient'],
+                'count': row['count'],
+                'last_email': row['last_email'].isoformat() if row['last_email'] else None
             })
         
         conn.close()
@@ -358,25 +499,25 @@ def admin_addresses():
 @admin_required
 def admin_get_emails(email_address):
     try:
-        conn = sqlite3.connect('emails.db')
-        c = conn.cursor()
+        conn = get_db()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         
         c.execute('''
             SELECT id, sender, subject, body, received_at, timestamp 
             FROM emails 
-            WHERE recipient = ? 
+            WHERE recipient = %s 
             ORDER BY received_at DESC
         ''', (email_address,))
         
         emails = []
         for row in c.fetchall():
             emails.append({
-                'id': row[0],
-                'sender': row[1],
-                'subject': row[2],
-                'body': row[3],
-                'received_at': row[4],
-                'timestamp': row[5]
+                'id': row['id'],
+                'sender': row['sender'],
+                'subject': row['subject'],
+                'body': row['body'],
+                'received_at': row['received_at'].isoformat() if row['received_at'] else None,
+                'timestamp': row['timestamp']
             })
         
         conn.close()
@@ -389,9 +530,9 @@ def admin_get_emails(email_address):
 @admin_required
 def admin_delete_email(email_id):
     try:
-        conn = sqlite3.connect('emails.db')
+        conn = get_db()
         c = conn.cursor()
-        c.execute('DELETE FROM emails WHERE id = ?', (email_id,))
+        c.execute('DELETE FROM emails WHERE id = %s', (email_id,))
         conn.commit()
         conn.close()
         
@@ -404,9 +545,9 @@ def admin_delete_email(email_id):
 @admin_required
 def admin_delete_address(email_address):
     try:
-        conn = sqlite3.connect('emails.db')
+        conn = get_db()
         c = conn.cursor()
-        c.execute('DELETE FROM emails WHERE recipient = ?', (email_address,))
+        c.execute('DELETE FROM emails WHERE recipient = %s', (email_address,))
         conn.commit()
         conn.close()
         
@@ -426,6 +567,3 @@ def health():
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
-
-
