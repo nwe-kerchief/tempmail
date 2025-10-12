@@ -423,6 +423,58 @@ def end_session():
         logger.error(f"❌ Error ending session: {e}")
         return jsonify({'error': 'Failed to end session'}), 500
 
+@app.route('/api/emails/<email_address>', methods=['GET'])
+def get_emails(email_address):
+    """Get emails for a specific email address"""
+    try:
+        session_token = request.headers.get('X-Session-Token', '')
+        
+        conn = get_db()
+        c = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Check if session is valid and belongs to this email
+        c.execute('''
+            SELECT session_token FROM sessions 
+            WHERE email_address = %s AND expires_at > NOW() AND is_active = TRUE
+            ORDER BY created_at DESC 
+            LIMIT 1
+        ''', (email_address,))
+        
+        session_data = c.fetchone()
+        
+        if not session_data:
+            return jsonify({'error': 'Session not found or expired'}), 404
+        
+        # Verify session token matches
+        if session_token != session_data['session_token']:
+            return jsonify({'error': 'Invalid session token'}), 403
+        
+        # Get emails for this session
+        c.execute('''
+            SELECT id, sender, subject, body, timestamp, received_at
+            FROM emails 
+            WHERE session_token = %s 
+            ORDER BY received_at DESC
+        ''', (session_data['session_token'],))
+        
+        emails = []
+        for row in c.fetchall():
+            emails.append({
+                'id': row['id'],
+                'sender': row['sender'],
+                'subject': row['subject'],
+                'body': row['body'],
+                'timestamp': row['timestamp'],
+                'received_at': row['received_at'].isoformat() if row['received_at'] else None
+            })
+        
+        conn.close()
+        return jsonify({'emails': emails})
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting emails: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/webhook/inbound', methods=['POST'])
 def webhook_inbound():
     try:
@@ -918,6 +970,7 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
 
 
 
