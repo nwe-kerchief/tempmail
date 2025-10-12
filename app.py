@@ -425,14 +425,25 @@ def get_emails(email_address):
         
         emails = []
         for row in c.fetchall():
-            display_timestamp = row['received_at'] if row['received_at'] else row['timestamp']
+            # Use received_at if available, otherwise use timestamp
+            if row['received_at']:
+                display_timestamp = row['received_at']
+            else:
+                display_timestamp = row['timestamp']
+            
+            # Convert to proper datetime object if it's a string
+            if isinstance(display_timestamp, str):
+                try:
+                    display_timestamp = datetime.fromisoformat(display_timestamp.replace('Z', '+00:00'))
+                except:
+                    display_timestamp = datetime.now()
             
             emails.append({
                 'id': len(emails) + 1,
                 'sender': row['sender'],
                 'subject': row['subject'],
                 'body': row['body'],
-                'timestamp': display_timestamp.isoformat() if hasattr(display_timestamp, 'isoformat') else display_timestamp
+                'timestamp': display_timestamp.isoformat() if hasattr(display_timestamp, 'isoformat') else str(display_timestamp)
             })
         
         conn.close()
@@ -441,7 +452,7 @@ def get_emails(email_address):
     except Exception as e:
         logger.error(f"❌ Error fetching emails: {e}")
         return jsonify({'error': 'Failed to fetch emails'}), 500
-
+      
 @app.route('/api/session/end', methods=['POST'])
 def end_session():
     try:
@@ -808,4 +819,5 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
 
