@@ -420,7 +420,40 @@ function loadStats() {
     })
     .catch(err => console.error('Error loading stats:', err));
 }
-
+function formatTime(timestamp) {
+    if (!timestamp) return 'never';
+    
+    try {
+        var date;
+        if (typeof timestamp === 'string') {
+            date = new Date(timestamp);
+        } else if (timestamp instanceof Date) {
+            date = timestamp;
+        } else {
+            date = new Date(timestamp);
+        }
+        
+        // Apply timezone correction (add 6 hours to compensate for server UTC)
+        var correctedDate = new Date(date.getTime() + (6 * 60 * 60 * 1000));
+        
+        var now = new Date();
+        var diff = now - correctedDate;
+        var seconds = Math.floor(diff / 1000);
+        var minutes = Math.floor(seconds / 60);
+        var hours = Math.floor(minutes / 60);
+        var days = Math.floor(hours / 24);
+        
+        if (seconds < 10) return 'just now';
+        if (seconds < 60) return seconds + ' sec ago';
+        if (minutes < 60) return minutes + ' min ago';
+        if (hours < 24) return hours + ' hour ago';
+        if (days < 7) return days + ' day ago';
+        
+        return correctedDate.toLocaleDateString() + ' ' + correctedDate.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    } catch (e) {
+        return 'unknown';
+    }
+}
 // Load addresses
 function loadAddresses() {
     fetch(API_URL + '/api/admin/addresses')
