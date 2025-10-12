@@ -318,14 +318,14 @@ def create_email():
         existing_session = c.fetchone()
         
         if existing_session:
-    session_is_active = True
-    if len(existing_session) > 1:
-        session_is_active = existing_session[1]
+            session_is_active = True
+        if len(existing_session) > 1:
+            session_is_active = existing_session[1]
     
-    current_user_session = data.get('session_token')
+        current_user_session = data.get('session_token')
     
-    if session_is_active:
-        if existing_session[0] == current_user_session:
+        if session_is_active:
+            if existing_session[0] == current_user_session:
             # It's the same user - tell them they're already using it
             conn.close()
             return jsonify({
@@ -1008,6 +1008,7 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
 
 
 
