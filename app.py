@@ -384,7 +384,19 @@ def end_session():
         conn = get_db()
         c = conn.cursor()
         
-        # Check if is_active column exists
+        # First check if session exists
+        c.execute('''
+            SELECT session_token FROM sessions 
+            WHERE session_token = %s AND email_address = %s
+        ''', (session_token, email_address))
+        
+        session_exists = c.fetchone()
+        
+        if not session_exists:
+            conn.close()
+            return jsonify({'error': 'Session not found'}), 404
+        
+        # Try to update is_active if column exists
         try:
             c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
             has_is_active = c.fetchone() is not None
@@ -402,27 +414,22 @@ def end_session():
                     WHERE session_token = %s AND email_address = %s
                 ''', (session_token, email_address))
         except Exception as e:
-            logger.warning(f"Error ending session: {e}")
-            # Fallback to deletion
+            logger.warning(f"Error in session end logic: {e}")
+            # Fallback to simple deletion
             c.execute('''
                 DELETE FROM sessions 
                 WHERE session_token = %s AND email_address = %s
             ''', (session_token, email_address))
         
-        if c.rowcount == 0:
-            conn.close()
-            return jsonify({'error': 'Session not found'}), 404
-        
         conn.commit()
         conn.close()
         
         logger.info(f"✅ Session ended for: {email_address}")
-        return jsonify({'success': True})
+        return jsonify({'success': True, 'message': 'Session ended successfully'})
         
     except Exception as e:
         logger.error(f"❌ Error ending session: {e}")
         return jsonify({'error': 'Failed to end session'}), 500
-
 @app.route('/api/emails/<email_address>', methods=['GET'])
 def get_emails(email_address):
     """Get emails for a specific email address"""
@@ -987,6 +994,7 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
 
 
 
