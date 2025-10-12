@@ -1357,14 +1357,27 @@ document.getElementById('end-session-btn').addEventListener('click', function() 
         endSession
     );
 });
-    function toggleAdminMode() {
+    async function toggleAdminMode() {
     if (!isAdminMode) {
         const password = prompt('🔐 Enter Admin Password:');
-        // Use the same password as admin panel
-        if (password === 'admin123') { // Same as APP_PASSWORD
-            activateAdminMode();
-        } else if (password) {
-            alert('❌ Invalid password');
+        if (password) {
+            // Verify with backend using same APP_PASSWORD
+            const response = await fetch('/api/verify-admin', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password: password})
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success) {
+                    activateAdminMode();
+                } else {
+                    alert('❌ Invalid password');
+                }
+            } else {
+                alert('❌ Verification failed');
+            }
         }
     } else {
         deactivateAdminMode();
@@ -1489,6 +1502,7 @@ initApp();
 </script>
 </body>
 </html>
+
 
 
 
