@@ -274,7 +274,12 @@ def create_email():
             username = ''.join(c for c in username if c.isalnum() or c in '-_')
             if not username:
                 return jsonify({'error': 'Invalid username', 'code': 'INVALID_USERNAME'}), 400
-            
+              
+            if not admin_mode and is_username_blacklisted(username):
+                return jsonify({
+                    'error': 'This username is reserved for the system owner. Please choose a different username.',
+                    'code': 'USERNAME_BLACKLISTED'
+                }), 403
             # Check against database blacklist
             if is_username_blacklisted(username):
                 return jsonify({
@@ -315,16 +320,27 @@ def create_email():
         existing_session = c.fetchone()
         
         if existing_session:
-            session_is_active = True
-            if len(existing_session) > 1:
-                session_is_active = existing_session[1]
-            
-            if session_is_active:
-                conn.close()
-                return jsonify({
-                    'error': 'This email address is currently in use by an active session. Please choose a different username or wait for the session to expire.',
-                    'code': 'EMAIL_IN_USE'
-                }), 409
+    session_is_active = True
+    if len(existing_session) > 1:
+        session_is_active = existing_session[1]
+    
+    current_user_session = data.get('session_token')  # ADD THIS
+    
+    if session_is_active:
+        if existing_session[0] == current_user_session:
+            # It's the same user
+            conn.close()
+            return jsonify({
+                'error': 'You are already using this email address in your current session.',
+                'code': 'EMAIL_SELF_USED'
+            }), 409
+        else:
+            # It's a different user
+            conn.close()
+            return jsonify({
+                'error': 'This email address is currently in use by another active session.',
+                'code': 'EMAIL_IN_USE'
+            }), 409
         
         # Create session token
         session_token = secrets.token_urlsafe(32)
@@ -986,3 +1002,4 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
