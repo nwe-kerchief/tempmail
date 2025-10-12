@@ -275,12 +275,15 @@ def create_email():
             if not username:
                 return jsonify({'error': 'Invalid username', 'code': 'INVALID_USERNAME'}), 400
             
-            # Check against database blacklist
-            if is_username_blacklisted(username):
+            admin_mode = data.get('admin_mode', False)
+    
+            # Skip blacklist check if admin mode is enabled
+            if not admin_mode and is_username_blacklisted(username):
                 return jsonify({
                     'error': 'This username is reserved for the system owner. Please choose a different username.',
                     'code': 'USERNAME_BLACKLISTED'
                 }), 403
+            
         else:
             # Generate random name
             male_name = random.choice(MALE_NAMES)
@@ -995,4 +998,5 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
 
