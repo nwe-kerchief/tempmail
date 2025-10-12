@@ -26,6 +26,8 @@ FEMALE_NAMES = ['mary', 'patricia', 'jennifer', 'linda', 'elizabeth', 'barbara',
                 'nancy', 'lisa', 'betty', 'margaret', 'sandra', 'ashley', 'kimberly', 'emily', 'donna', 'michelle',
                 'dorothy', 'carol', 'amanda', 'melissa', 'deborah', 'stephanie', 'rebecca', 'sharon', 'laura', 'grace']
 
+BLACKLISTED_USERNAMES = ['ammz', 'admin', 'owner', 'root', 'system']
+
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', secrets.token_urlsafe(32))
 CORS(app, origins=[os.getenv('FRONTEND_URL', '*')], supports_credentials=True)
@@ -240,6 +242,11 @@ def create_email():
             username = ''.join(c for c in username if c.isalnum() or c in '-_')
             if not username:
                 return jsonify({'error': 'Invalid username', 'code': 'INVALID_USERNAME'}), 400
+            if username in BLACKLISTED_USERNAMES:
+                return jsonify({
+                    'error': 'This username is reserved for the system owner. Please choose a different username.',
+                    'code': 'USERNAME_BLACKLISTED'
+                }), 403
         else:
             # Generate random name: malename + femalename + 3 digits
             male_name = random.choice(MALE_NAMES)
@@ -443,8 +450,8 @@ def get_emails(email_address):
                 except:
                     display_timestamp = datetime.now()
             
-            # Convert to local timezone (subtract 6 hours for your timezone)
-            local_timestamp = display_timestamp - timedelta(hours=6)
+            
+            local_timestamp = display_timestamp + timedelta(hours=6)
             
             emails.append({
                 'id': len(emails) + 1,
@@ -889,4 +896,5 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
 
