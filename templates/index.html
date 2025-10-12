@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TempMail - AMMZ</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📧</text></svg>">
@@ -505,6 +505,122 @@ let sessionStartTime = null;
 let domainsLoaded = false;
 let isAdminMode = false;
 
+// State variables
+let currentEmail = '';
+let sessionToken = ''; 
+let autoRefreshInterval = null;
+let timeUpdateInterval = null;
+let lastEmailCount = 0;
+let sessionId = generateSessionId();
+let emailSecurityKey = generateSecurityKey();
+let sessionStartTime = null;
+let domainsLoaded = false;
+let isAdminMode = false;
+
+// MOVE loadEmails FUNCTION TO HERE - RIGHT AFTER STATE VARIABLES
+function loadEmails() {
+    if (!currentEmail) {
+        console.log('No current email to load');
+        return;
+    }
+    
+    console.log('Loading emails for:', currentEmail);
+    
+    const loader = document.getElementById('inbox-loader');
+    const list = document.getElementById('email-list');
+    const defaultMsg = document.getElementById('no-emails-default');
+    
+    loader.style.display = 'flex';
+    defaultMsg.style.display = 'none';
+    list.innerHTML = '';
+    
+    // Use AbortController to prevent multiple simultaneous requests
+    if (window.emailFetchController) {
+        window.emailFetchController.abort();
+    }
+    window.emailFetchController = new AbortController();
+    
+    fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail), {
+        headers: {
+            'X-Session-Token': sessionToken
+        },
+        signal: window.emailFetchController.signal
+    })
+    .then(res => {
+        if (!res.ok) {
+            if (res.status === 404) {
+                return { emails: [] };
+            }
+            throw new Error('Failed to fetch emails: ' + res.status);
+        }
+        return res.json();
+    })
+    .then(data => {
+        console.log('Emails loaded:', data.emails?.length || 0);
+        
+        const newCount = data.emails ? data.emails.length : 0;
+        document.getElementById('email-count').textContent = newCount + ' email' + (newCount !== 1 ? 's' : '');
+        document.title = newCount > 0 ? '(' + newCount + ') TempMail - AMMZ' : 'TempMail - AMMZ';
+        
+        // Show new email notification
+        if (newCount > lastEmailCount && lastEmailCount > 0) {
+            showNotification('🔔 ' + (newCount - lastEmailCount) + ' new email(s) received!', 'success');
+        }
+        lastEmailCount = newCount;
+        
+        list.innerHTML = '';
+        
+        if (newCount === 0) {
+            list.innerHTML = '<div class="text-center py-8 text-gray-300 h-full flex flex-col justify-center"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>';
+        } else {
+            // Use document fragment for better performance
+            const fragment = document.createDocumentFragment();
+            
+            data.emails.forEach(function(email, idx) {
+                let displaySender = email.sender;
+                if (displaySender.includes('bounces+') || displaySender.includes('bounce-md')) {
+                    displaySender = 'ChatGPT';
+                } else if (displaySender.includes('<')) {
+                    displaySender = displaySender.substring(0, displaySender.indexOf('<')).trim() || displaySender.substring(displaySender.indexOf('<')+1, displaySender.indexOf('>')).trim();
+                }
+                
+                // Simple preview text extraction (faster)
+                let previewText = email.body.replace(/<[^>]*>/g, '').substring(0, 80);
+                if (previewText.length === 80) previewText += '...';
+                
+                const item = document.createElement('div');
+                item.className = 'email-list-item rounded-lg border border-gray-700 hover:border-gray-600 transition-all cursor-pointer';
+                item.setAttribute('data-timestamp', email.timestamp);
+                item.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-sm font-semibold text-white truncate flex-1 mr-2">${escapeHtml(displaySender)}</span>
+                        <span class="text-xs text-gray-400 email-time whitespace-nowrap">${formatTime(email.timestamp)}</span>
+                    </div>
+                    <div class="text-sm font-medium text-gray-200 mb-2 truncate">${escapeHtml(email.subject)}</div>
+                    <div class="text-xs text-gray-400 email-preview">${escapeHtml(previewText)}</div>
+                `;
+                item.addEventListener('click', function() { viewEmail(email, item); });
+                fragment.appendChild(item);
+            });
+            
+            list.appendChild(fragment);
+        }
+    })
+    .catch(err => {
+        if (err.name === 'AbortError') {
+            console.log('Email fetch aborted');
+            return;
+        }
+        console.error('Error loading emails:', err);
+        handleApiError(err, 'Failed to load emails');
+        
+        list.innerHTML = '<div class="text-center py-8 text-gray-300"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>';
+    })
+    .finally(function() {
+        loader.style.display = 'none';
+        window.emailFetchController = null;
+    });
+}
 // Utility Functions
 function generateSessionId() {
     return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
@@ -1595,6 +1711,7 @@ initApp();
 </script>
 </body>
 </html>
+
 
 
 
