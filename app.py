@@ -51,11 +51,10 @@ def init_db():
         c.execute('''
             CREATE TABLE IF NOT EXISTS sessions (
                 session_token TEXT PRIMARY KEY,
-                email_address TEXT NOT NULL UNIQUE,
+                email_address TEXT NOT NULL,
                 created_at TIMESTAMP NOT NULL,
                 expires_at TIMESTAMP NOT NULL,
-                last_activity TIMESTAMP NOT NULL,
-                is_active BOOLEAN DEFAULT TRUE
+                last_activity TIMESTAMP NOT NULL
             )
         ''')
         
@@ -74,6 +73,13 @@ def init_db():
             )
         ''')
         
+        # Check if is_active column exists, if not add it
+        try:
+            c.execute("SELECT is_active FROM sessions LIMIT 1")
+        except psycopg2.Error:
+            logger.info("Adding is_active column to sessions table...")
+            c.execute('ALTER TABLE sessions ADD COLUMN is_active BOOLEAN DEFAULT TRUE')
+        
         # Indexes for performance
         c.execute('CREATE INDEX IF NOT EXISTS idx_recipient ON emails(recipient)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_session ON emails(session_token)')
@@ -86,6 +92,7 @@ def init_db():
         logger.info("✅ Database initialized successfully")
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
+        # Try to continue even if initialization fails
 
 init_db()
 
@@ -234,37 +241,58 @@ def create_email():
         # Check if email already has an active session
         conn = get_db()
         c = conn.cursor()
-        c.execute('''
-            SELECT session_token, is_active 
-            FROM sessions 
-            WHERE email_address = %s AND expires_at > NOW()
-            ORDER BY created_at DESC 
-            LIMIT 1
-        ''', (email_address,))
+        
+        # Check if is_active column exists and handle accordingly
+        try:
+            c.execute('''
+                SELECT session_token, is_active 
+                FROM sessions 
+                WHERE email_address = %s AND expires_at > NOW()
+                ORDER BY created_at DESC 
+                LIMIT 1
+            ''', (email_address,))
+        except psycopg2.Error:
+            # If is_active column doesn't exist, use old logic
+            c.execute('''
+                SELECT session_token
+                FROM sessions 
+                WHERE email_address = %s AND expires_at > NOW()
+                ORDER BY created_at DESC 
+                LIMIT 1
+            ''', (email_address,))
         
         existing_session = c.fetchone()
         
-        if existing_session and existing_session[1]:  # is_active is True
-            conn.close()
-            return jsonify({'error': 'Email address is already in use by another session'}), 409
+        if existing_session:
+            # Check if session is active (if is_active column exists)
+            if len(existing_session) > 1 and existing_session[1] is False:
+                # Session exists but is inactive, we can proceed
+                pass
+            elif len(existing_session) > 1 and existing_session[1]:  # is_active is True
+                conn.close()
+                return jsonify({'error': 'Email address is already in use by another session'}), 409
+            else:
+                # No is_active column, but session exists
+                conn.close()
+                return jsonify({'error': 'Email address is already in use by another session'}), 409
         
         # Create session token
         session_token = secrets.token_urlsafe(32)
         created_at = datetime.now()
         expires_at = created_at + timedelta(hours=1)
         
-        # Deactivate any old sessions for this email
-        c.execute('''
-            UPDATE sessions 
-            SET is_active = FALSE 
-            WHERE email_address = %s
-        ''', (email_address,))
-        
-        # Store new session in PostgreSQL
-        c.execute('''
-            INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity, is_active)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        ''', (session_token, email_address, created_at, expires_at, created_at, True))
+        try:
+            # Try to insert with is_active column
+            c.execute('''
+                INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity, is_active)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            ''', (session_token, email_address, created_at, expires_at, created_at, True))
+        except psycopg2.Error:
+            # If is_active column doesn't exist, insert without it
+            c.execute('''
+                INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity)
+                VALUES (%s, %s, %s, %s, %s)
+            ''', (session_token, email_address, created_at, expires_at, created_at))
         
         conn.commit()
         conn.close()
@@ -292,12 +320,20 @@ def get_emails(email_address):
         conn = get_db()
         c = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Verify session is active
-        c.execute('''
-            SELECT email_address, expires_at, is_active
-            FROM sessions 
-            WHERE session_token = %s AND email_address = %s
-        ''', (session_token, email_address))
+        # Verify session is active - handle with or without is_active column
+        try:
+            c.execute('''
+                SELECT email_address, expires_at, is_active
+                FROM sessions 
+                WHERE session_token = %s AND email_address = %s
+            ''', (session_token, email_address))
+        except psycopg2.Error:
+            # If is_active column doesn't exist, use old query
+            c.execute('''
+                SELECT email_address, expires_at
+                FROM sessions 
+                WHERE session_token = %s AND email_address = %s
+            ''', (session_token, email_address))
         
         session_data = c.fetchone()
         
@@ -307,14 +343,17 @@ def get_emails(email_address):
         
         # Check if expired
         if datetime.now() > session_data['expires_at']:
-            # Mark session as inactive
-            c.execute('UPDATE sessions SET is_active = FALSE WHERE session_token = %s', (session_token,))
+            # Try to mark session as inactive if column exists
+            try:
+                c.execute('UPDATE sessions SET is_active = FALSE WHERE session_token = %s', (session_token,))
+            except psycopg2.Error:
+                pass  # Ignore if is_active column doesn't exist
             conn.commit()
             conn.close()
             return jsonify({'error': 'Session expired'}), 401
         
-        # Check if session is active
-        if not session_data['is_active']:
+        # Check if session is active (if is_active column exists)
+        if 'is_active' in session_data and not session_data['is_active']:
             conn.close()
             return jsonify({'error': 'Session has been ended'}), 401
         
@@ -366,12 +405,19 @@ def end_session():
         conn = get_db()
         c = conn.cursor()
         
-        # Verify and end session
-        c.execute('''
-            UPDATE sessions 
-            SET is_active = FALSE 
-            WHERE session_token = %s AND email_address = %s
-        ''', (session_token, email_address))
+        # Try to end session with is_active column, fallback to deletion
+        try:
+            c.execute('''
+                UPDATE sessions 
+                SET is_active = FALSE 
+                WHERE session_token = %s AND email_address = %s
+            ''', (session_token, email_address))
+        except psycopg2.Error:
+            # If is_active column doesn't exist, delete the session
+            c.execute('''
+                DELETE FROM sessions 
+                WHERE session_token = %s AND email_address = %s
+            ''', (session_token, email_address))
         
         if c.rowcount == 0:
             conn.close()
@@ -440,16 +486,27 @@ def webhook_inbound():
         received_at = datetime.now()
         original_timestamp = json_data.get('timestamp', received_at.isoformat())
         
-        # Find active session for this recipient
+        # Find active session for this recipient - handle with or without is_active column
         conn = get_db()
         c = conn.cursor()
-        c.execute('''
-            SELECT session_token 
-            FROM sessions 
-            WHERE email_address = %s AND expires_at > NOW() AND is_active = TRUE
-            ORDER BY created_at DESC 
-            LIMIT 1
-        ''', (recipient,))
+        
+        try:
+            c.execute('''
+                SELECT session_token 
+                FROM sessions 
+                WHERE email_address = %s AND expires_at > NOW() AND is_active = TRUE
+                ORDER BY created_at DESC 
+                LIMIT 1
+            ''', (recipient,))
+        except psycopg2.Error:
+            # If is_active column doesn't exist, use old query
+            c.execute('''
+                SELECT session_token 
+                FROM sessions 
+                WHERE email_address = %s AND expires_at > NOW()
+                ORDER BY created_at DESC 
+                LIMIT 1
+            ''', (recipient,))
         
         session_data = c.fetchone()
         
