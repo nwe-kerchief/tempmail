@@ -10,10 +10,13 @@ from functools import wraps
 import secrets
 from threading import Thread
 import time
-
-# PostgreSQL support
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 MALE_NAMES = ['james', 'john', 'robert', 'michael', 'william', 'david', 'richard', 'joseph', 'thomas', 'charles', 
               'daniel', 'matthew', 'anthony', 'mark', 'paul', 'steven', 'andrew', 'joshua', 'kevin', 'brian',
@@ -25,7 +28,7 @@ FEMALE_NAMES = ['mary', 'patricia', 'jennifer', 'linda', 'elizabeth', 'barbara',
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', secrets.token_urlsafe(32))
-CORS(app)
+CORS(app, origins=[os.getenv('FRONTEND_URL', '*')], supports_credentials=True)
 
 APP_PASSWORD = os.getenv('APP_PASSWORD', 'admin123')
 DOMAIN = os.getenv('DOMAIN', 'aungmyomyatzaw.online')
@@ -33,94 +36,155 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 
 # Database connection helper
 def get_db():
-    return psycopg2.connect(DATABASE_URL, sslmode='require')
+    try:
+        return psycopg2.connect(DATABASE_URL, sslmode='require')
+    except Exception as e:
+        logger.error(f"Database connection error: {e}")
+        raise
 
 def init_db():
-    conn = get_db()
-    c = conn.cursor()
-    
-    # Sessions table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS sessions (
-            session_token TEXT PRIMARY KEY,
-            email_address TEXT NOT NULL,
-            created_at TIMESTAMP NOT NULL,
-            expires_at TIMESTAMP NOT NULL,
-            last_activity TIMESTAMP NOT NULL
-        )
-    ''')
-    
-    # Emails table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS emails (
-            id SERIAL PRIMARY KEY,
-            recipient TEXT NOT NULL,
-            sender TEXT NOT NULL,
-            subject TEXT,
-            body TEXT,
-            timestamp TEXT,
-            received_at TIMESTAMP NOT NULL,
-            session_token TEXT NOT NULL,
-            FOREIGN KEY (session_token) REFERENCES sessions(session_token) ON DELETE CASCADE
-        )
-    ''')
-    
-    # Indexes for performance
-    c.execute('CREATE INDEX IF NOT EXISTS idx_recipient ON emails(recipient)')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_session ON emails(session_token)')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_received_at ON emails(received_at)')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_email_address ON sessions(email_address)')
-    
-    conn.commit()
-    conn.close()
-    print("✅ Database initialized")
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Sessions table
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS sessions (
+                session_token TEXT PRIMARY KEY,
+                email_address TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                last_activity TIMESTAMP NOT NULL
+            )
+        ''')
+        
+        # Emails table
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS emails (
+                id SERIAL PRIMARY KEY,
+                recipient TEXT NOT NULL,
+                sender TEXT NOT NULL,
+                subject TEXT,
+                body TEXT,
+                timestamp TEXT,
+                received_at TIMESTAMP NOT NULL,
+                session_token TEXT NOT NULL,
+                FOREIGN KEY (session_token) REFERENCES sessions(session_token) ON DELETE CASCADE
+            )
+        ''')
+        
+        # Indexes for performance
+        c.execute('CREATE INDEX IF NOT EXISTS idx_recipient ON emails(recipient)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_session ON emails(session_token)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_received_at ON emails(received_at)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_email_address ON sessions(email_address)')
+        
+        conn.commit()
+        conn.close()
+        logger.info("✅ Database initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed: {e}")
 
 init_db()
+
+def extract_content_from_mime(msg):
+    """Extract content from MIME message"""
+    html_content = None
+    text_content = None
+    
+    if msg.is_multipart():
+        for part in msg.walk():
+            content_type = part.get_content_type()
+            content_disposition = str(part.get("Content-Disposition", ""))
+            
+            # Skip attachments
+            if "attachment" in content_disposition:
+                continue
+            
+            try:
+                payload = part.get_payload(decode=True)
+                if payload:
+                    decoded = payload.decode('utf-8', errors='ignore')
+                    
+                    if content_type == 'text/html' and not html_content:
+                        html_content = decoded
+                    elif content_type == 'text/plain' and not text_content:
+                        text_content = decoded
+            except Exception as e:
+                logger.warning(f"Failed to decode part: {e}")
+                continue
+    else:
+        payload = msg.get_payload(decode=True)
+        if payload:
+            decoded = payload.decode('utf-8', errors='ignore')
+            if msg.get_content_type() == 'text/html':
+                html_content = decoded
+            else:
+                text_content = decoded
+    
+    return html_content or text_content
+
+def clean_raw_email(raw_body):
+    """Clean raw email body by removing headers"""
+    header_patterns = [
+        'Received:', 'Received-SPF:', 'ARC-Seal:', 'ARC-Message-Signature:', 
+        'ARC-Authentication-Results:', 'DKIM-Signature:', 'Authentication-Results:',
+        'Return-Path:', 'Delivered-To:', 'X-', 'Message-ID:', 'Date:', 
+        'MIME-Version:', 'Content-Type:', 'Content-Transfer-Encoding:',
+        'Content-ID:', 'Reply-To:', 'List-', 'Precedence:'
+    ]
+    
+    lines = raw_body.split('\n')
+    clean_lines = []
+    skip_mode = True
+    empty_line_count = 0
+    
+    for line in lines:
+        stripped = line.strip()
+        
+        if stripped == '':
+            empty_line_count += 1
+            if empty_line_count >= 2:
+                skip_mode = False
+            continue
+        else:
+            empty_line_count = 0
+        
+        is_header = False
+        for pattern in header_patterns:
+            if stripped.startswith(pattern) or (skip_mode and ':' in stripped[:50]):
+                is_header = True
+                break
+        
+        if skip_mode and (line.startswith(' ') or line.startswith('\t')):
+            is_header = True
+        
+        if not is_header:
+            skip_mode = False
+        
+        if not skip_mode and not is_header:
+            clean_lines.append(line)
+    
+    return '\n'.join(clean_lines).strip()
 
 def parse_email_body(raw_body):
     """Parse MIME email and extract clean HTML/text"""
     try:
+        # If it's already clean HTML/text, return as is
+        if '<html' in raw_body.lower() or '<body' in raw_body.lower():
+            return raw_body
+        
         if 'Content-Type:' in raw_body:
             msg = email.message_from_string(raw_body, policy=policy.default)
-            
-            html_body = None
-            text_body = None
-            
-            if msg.is_multipart():
-                for part in msg.walk():
-                    content_type = part.get_content_type()
-                    content_disposition = str(part.get("Content-Disposition", ""))
-                    
-                    if "attachment" in content_disposition:
-                        continue
-                    
-                    try:
-                        body_content = part.get_payload(decode=True)
-                        if body_content:
-                            body_content = body_content.decode('utf-8', errors='ignore')
-                            
-                            if content_type == 'text/html':
-                                html_body = body_content
-                            elif content_type == 'text/plain':
-                                text_body = body_content
-                    except:
-                        continue
-            else:
-                body_content = msg.get_payload(decode=True)
-                if body_content:
-                    body_content = body_content.decode('utf-8', errors='ignore')
-                    if msg.get_content_type() == 'text/html':
-                        html_body = body_content
-                    else:
-                        text_body = body_content
-            
-            return html_body if html_body else text_body
+            content = extract_content_from_mime(msg)
+            if content:
+                return content
         
-        return raw_body
+        return clean_raw_email(raw_body)
         
     except Exception as e:
-        print(f"Email parsing error: {e}")
-        return raw_body
+        logger.error(f"Email parsing error: {e}")
+        return clean_raw_email(raw_body)
 
 def admin_required(f):
     @wraps(f)
@@ -140,107 +204,123 @@ def get_domains():
 
 @app.route('/api/create', methods=['POST'])
 def create_email():
-    data = request.get_json() or {}
-    custom_name = data.get('name', '').strip()
-    
-    if custom_name:
-        username = custom_name.lower()
-        username = ''.join(c for c in username if c.isalnum() or c in '-_')
-    else:
-        # Generate random name: malename + femalename + 3 digits
-        male_name = random.choice(MALE_NAMES)
-        female_name = random.choice(FEMALE_NAMES)
-        three_digits = ''.join(random.choices(string.digits, k=3))
-        username = f"{male_name}{female_name}{three_digits}"
-    
-    email_address = f"{username}@{DOMAIN}"
-    
-    # Create session token
-    session_token = secrets.token_urlsafe(32)
-    created_at = datetime.now()
-    expires_at = created_at + timedelta(hours=1)
-    
-    # Store session in PostgreSQL
-    conn = get_db()
-    c = conn.cursor()
-    
     try:
+        data = request.get_json() or {}
+        custom_name = data.get('name', '').strip()
+        
+        # Validate security headers
+        session_id = request.headers.get('X-Session-ID')
+        security_key = request.headers.get('X-Security-Key')
+        
+        if not session_id or not security_key:
+            logger.warning("Missing security headers in create request")
+        
+        if custom_name:
+            username = custom_name.lower()
+            username = ''.join(c for c in username if c.isalnum() or c in '-_')
+            if not username:
+                return jsonify({'error': 'Invalid username'}), 400
+        else:
+            # Generate random name: malename + femalename + 3 digits
+            male_name = random.choice(MALE_NAMES)
+            female_name = random.choice(FEMALE_NAMES)
+            three_digits = ''.join(random.choices(string.digits, k=3))
+            username = f"{male_name}{female_name}{three_digits}"
+        
+        email_address = f"{username}@{DOMAIN}"
+        
+        # Create session token
+        session_token = secrets.token_urlsafe(32)
+        created_at = datetime.now()
+        expires_at = created_at + timedelta(hours=1)
+        
+        # Store session in PostgreSQL
+        conn = get_db()
+        c = conn.cursor()
+        
         c.execute('''
             INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity)
             VALUES (%s, %s, %s, %s, %s)
         ''', (session_token, email_address, created_at, expires_at, created_at))
+        
         conn.commit()
         conn.close()
+        
+        logger.info(f"✅ Created email: {email_address}")
         
         return jsonify({
             'email': email_address,
             'session_token': session_token,
             'expires_at': expires_at.isoformat()
         })
+        
     except Exception as e:
-        conn.rollback()
-        conn.close()
-        print(f"❌ Error creating session: {e}")
+        logger.error(f"❌ Error creating email: {e}")
         return jsonify({'error': 'Failed to create session'}), 500
 
 @app.route('/api/emails/<email_address>', methods=['GET'])
 def get_emails(email_address):
-    session_token = request.headers.get('X-Session-Token')
-    
-    if not session_token:
-        return jsonify({'error': 'No session token'}), 401
-    
-    conn = get_db()
-    c = conn.cursor(cursor_factory=RealDictCursor)
-    
-    # Verify session
-    c.execute('''
-        SELECT email_address, expires_at 
-        FROM sessions 
-        WHERE session_token = %s AND email_address = %s
-    ''', (session_token, email_address))
-    
-    session_data = c.fetchone()
-    
-    if not session_data:
-        conn.close()
-        return jsonify({'error': 'Invalid session'}), 401
-    
-    # Check if expired
-    if datetime.now() > session_data['expires_at']:
-        conn.close()
-        return jsonify({'error': 'Session expired'}), 401
-    
-    # Update last activity
-    c.execute('''
-        UPDATE sessions 
-        SET last_activity = %s 
-        WHERE session_token = %s
-    ''', (datetime.now(), session_token))
-    conn.commit()
-    
-    # Get emails for this session only
-    c.execute('''
-        SELECT sender, subject, body, received_at, timestamp 
-        FROM emails 
-        WHERE recipient = %s AND session_token = %s
-        ORDER BY received_at DESC
-    ''', (email_address, session_token))
-    
-    emails = []
-    for row in c.fetchall():
-        display_timestamp = row['received_at'] if row['received_at'] else row['timestamp']
+    try:
+        session_token = request.headers.get('X-Session-Token')
         
-        emails.append({
-            'id': len(emails) + 1,
-            'sender': row['sender'],
-            'subject': row['subject'],
-            'body': row['body'],
-            'timestamp': display_timestamp.isoformat() if hasattr(display_timestamp, 'isoformat') else display_timestamp
-        })
-    
-    conn.close()
-    return jsonify({'emails': emails})
+        if not session_token:
+            return jsonify({'error': 'No session token'}), 401
+        
+        conn = get_db()
+        c = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Verify session
+        c.execute('''
+            SELECT email_address, expires_at 
+            FROM sessions 
+            WHERE session_token = %s AND email_address = %s
+        ''', (session_token, email_address))
+        
+        session_data = c.fetchone()
+        
+        if not session_data:
+            conn.close()
+            return jsonify({'error': 'Invalid session'}), 401
+        
+        # Check if expired
+        if datetime.now() > session_data['expires_at']:
+            conn.close()
+            return jsonify({'error': 'Session expired'}), 401
+        
+        # Update last activity
+        c.execute('''
+            UPDATE sessions 
+            SET last_activity = %s 
+            WHERE session_token = %s
+        ''', (datetime.now(), session_token))
+        conn.commit()
+        
+        # Get emails for this session only
+        c.execute('''
+            SELECT sender, subject, body, received_at, timestamp 
+            FROM emails 
+            WHERE recipient = %s AND session_token = %s
+            ORDER BY received_at DESC
+        ''', (email_address, session_token))
+        
+        emails = []
+        for row in c.fetchall():
+            display_timestamp = row['received_at'] if row['received_at'] else row['timestamp']
+            
+            emails.append({
+                'id': len(emails) + 1,
+                'sender': row['sender'],
+                'subject': row['subject'],
+                'body': row['body'],
+                'timestamp': display_timestamp.isoformat() if hasattr(display_timestamp, 'isoformat') else display_timestamp
+            })
+        
+        conn.close()
+        return jsonify({'emails': emails})
+        
+    except Exception as e:
+        logger.error(f"❌ Error fetching emails: {e}")
+        return jsonify({'error': 'Failed to fetch emails'}), 500
 
 @app.route('/api/webhook/inbound', methods=['POST'])
 def webhook_inbound():
@@ -250,8 +330,7 @@ def webhook_inbound():
         if not json_data:
             return jsonify({'error': 'No JSON data'}), 400
         
-        print("=" * 50)
-        print("📧 INCOMING EMAIL")
+        logger.info("📧 INCOMING EMAIL")
         
         recipient = json_data.get('to', 'unknown@unknown.com')
         sender = json_data.get('from', 'unknown')
@@ -285,59 +364,12 @@ def webhook_inbound():
         if 'Content-Type:' in body and 'multipart' in body:
             body = parse_email_body(body)
         
-        # AGGRESSIVE HEADER REMOVAL
-        header_patterns = [
-            'Received:', 'Received-SPF:', 'ARC-Seal:', 'ARC-Message-Signature:', 
-            'ARC-Authentication-Results:', 'DKIM-Signature:', 'Authentication-Results:',
-            'Return-Path:', 'Delivered-To:', 'X-', 'Message-ID:', 'Date:', 
-            'MIME-Version:', 'Content-Type:', 'Content-Transfer-Encoding:',
-            'Content-ID:', 'Reply-To:', 'List-', 'Precedence:'
-        ]
+        # Clean headers
+        body = clean_raw_email(body)
         
-        if any(body.startswith(pattern) or ('\n' + pattern in body[:1000]) for pattern in header_patterns):
-            lines = body.split('\n')
-            clean_lines = []
-            skip_mode = True
-            empty_line_count = 0
-            
-            for line in lines:
-                stripped = line.strip()
-                
-                if stripped == '':
-                    empty_line_count += 1
-                    if empty_line_count >= 2:
-                        skip_mode = False
-                    continue
-                else:
-                    empty_line_count = 0
-                
-                is_header = False
-                for pattern in header_patterns:
-                    if stripped.startswith(pattern) or (skip_mode and ':' in stripped[:50]):
-                        is_header = True
-                        break
-                
-                if skip_mode and (line.startswith(' ') or line.startswith('\t')):
-                    is_header = True
-                
-                if not is_header:
-                    skip_mode = False
-                
-                if not skip_mode and not is_header:
-                    clean_lines.append(line)
-            
-            body = '\n'.join(clean_lines).strip()
-        
-        if len(body) > 1000 and (body.count('=') > 50 or body.count('+') > 50):
-            plain = json_data.get('plain_body', '')
-            if plain and len(plain) < len(body) * 0.8:
-                body = plain
-        
-        print(f"  ✉️  From: {sender}")
-        print(f"  📬 To: {recipient}")
-        print(f"  📝 Subject: {subject}")
-        print(f"  📄 Body: {len(body)} chars")
-        print("=" * 50)
+        logger.info(f"  ✉️  From: {sender} → {recipient}")
+        logger.info(f"  📝 Subject: {subject}")
+        logger.info(f"  📄 Body: {len(body)} chars")
         
         # Store timestamps
         received_at = datetime.now()
@@ -375,17 +407,15 @@ def webhook_inbound():
             conn.commit()
             conn.close()
             
-            print(f"✅ Email stored: {sender} → {recipient}")
+            logger.info(f"✅ Email stored: {sender} → {recipient}")
             return '', 204
         else:
             conn.close()
-            print(f"⚠️ No active session for {recipient}")
+            logger.warning(f"⚠️ No active session for {recipient}")
             return '', 204
         
     except Exception as e:
-        print(f"❌ Webhook error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"❌ Webhook error: {e}")
         return jsonify({'error': str(e)}), 400
 
 # Cleanup expired sessions
@@ -408,9 +438,9 @@ def cleanup_expired_sessions():
             conn.close()
             
             if deleted > 0:
-                print(f"🧹 Cleaned up {deleted} expired sessions")
+                logger.info(f"🧹 Cleaned up {deleted} expired sessions")
         except Exception as e:
-            print(f"❌ Cleanup error: {e}")
+            logger.error(f"❌ Cleanup error: {e}")
 
 # Start cleanup thread
 cleanup_thread = Thread(target=cleanup_expired_sessions, daemon=True)
@@ -465,6 +495,7 @@ def admin_stats():
         })
         
     except Exception as e:
+        logger.error(f"❌ Admin stats error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/addresses', methods=['GET'])
@@ -493,6 +524,7 @@ def admin_addresses():
         return jsonify({'addresses': addresses})
         
     except Exception as e:
+        logger.error(f"❌ Admin addresses error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/emails/<email_address>', methods=['GET'])
@@ -524,6 +556,7 @@ def admin_get_emails(email_address):
         return jsonify({'emails': emails})
         
     except Exception as e:
+        logger.error(f"❌ Admin get emails error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/delete/<int:email_id>', methods=['DELETE'])
@@ -539,6 +572,7 @@ def admin_delete_email(email_id):
         return jsonify({'success': True})
         
     except Exception as e:
+        logger.error(f"❌ Admin delete email error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/delete-address/<email_address>', methods=['DELETE'])
@@ -554,7 +588,17 @@ def admin_delete_address(email_address):
         return jsonify({'success': True})
         
     except Exception as e:
+        logger.error(f"❌ Admin delete address error: {e}")
         return jsonify({'error': str(e)}), 500
+
+# Error handlers
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Resource not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/health')
 def health():
@@ -566,4 +610,5 @@ def health():
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    debug = os.getenv('FLASK_ENV') == 'development'
+    app.run(host='0.0.0.0', port=port, debug=debug)
