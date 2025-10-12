@@ -291,26 +291,28 @@ background: rgba(255, 255, 255, 0.5);
 </div>
 </div>
 </div>
+<!-- Blacklist Management Section -->
+
+<div class="glass-effect rounded-xl p-6 fade-in mt-6">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold text-white">
+            <i class="fas fa-ban mr-2"></i>Blacklisted Usernames
+        </h2>
+        <div class="flex gap-2">
+            <input type="text" id="new-blacklist-username" placeholder="Enter username to blacklist" 
+                   class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none">
+            <button onclick="addToBlacklist()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105">
+                <i class="fas fa-plus mr-1"></i> Add
+            </button>
+        </div>
+    </div>
+    <div id="blacklist-list" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+        <p class="text-gray-400 text-center py-8">Loading blacklist...</p>
+    </div>
+</div>
 </div>
 
-<!-- Blacklist Management Section -->
-<div class="glass-effect rounded-xl p-6 fade-in mt-6">
-    <div class="flex justify-between items-center mb-4">
-        <h2 class="text-xl font-bold text-white">
-            <i class="fas fa-ban mr-2"></i>Blacklisted Usernames
-        </h2>
-        <div class="flex gap-2">
-            <input type="text" id="new-blacklist-username" placeholder="Enter username to blacklist" 
-                   class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none">
-            <button onclick="addToBlacklist()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105">
-                <i class="fas fa-plus mr-1"></i> Add
-            </button>
-        </div>
-    </div>
-    <div id="blacklist-list" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
-        <p class="text-gray-400 text-center py-8">Loading blacklist...</p>
-    </div>
-</div>
+
 
 <script>
 var API_URL = window.location.origin;
@@ -320,30 +322,47 @@ var DOMAIN = 'aungmyomyatzaw.online';
 
 // Blacklist management functions
 function loadBlacklist() {
-    // For now, we'll show the static blacklist. You can make this dynamic later.
-    var blacklistEl = document.getElementById('blacklist-list');
-    var blacklisted = ['ammz', 'admin', 'owner', 'root', 'system'];
-    
-    blacklistEl.innerHTML = '';
-    
-    if (blacklisted.length === 0) {
-        blacklistEl.innerHTML = '<p class="text-gray-400 text-center py-8">No blacklisted usernames</p>';
-        return;
-    }
-    
-    blacklisted.forEach(username => {
-        var item = document.createElement('div');
-        item.className = 'bg-gray-800 p-3 rounded-lg border border-gray-700 flex justify-between items-center';
-        item.innerHTML = `
-            <div>
-                <span class="text-white font-semibold">${escapeHtml(username)}</span>
-                <span class="text-xs text-gray-400 ml-2">@${DOMAIN}</span>
-            </div>
-            <button onclick="removeFromBlacklist('${escapeHtml(username)}')" class="text-green-400 hover:text-green-300 p-1 rounded transition-colors" title="Remove from blacklist">
-                <i class="fas fa-times"></i>
-            </button>
-        `;
-        blacklistEl.appendChild(item);
+    fetch(API_URL + '/api/admin/blacklist')
+    .then(res => {
+        if (res.status === 401) {
+            location.reload();
+            return;
+        }
+        return res.json();
+    })
+    .then(data => {
+        var blacklistEl = document.getElementById('blacklist-list');
+        
+        if (!data || data.error) {
+            blacklistEl.innerHTML = '<p class="text-red-400 text-center py-8">Error loading blacklist</p>';
+            return;
+        }
+        
+        if (!data.blacklist || data.blacklist.length === 0) {
+            blacklistEl.innerHTML = '<p class="text-gray-400 text-center py-8">No blacklisted usernames</p>';
+            return;
+        }
+        
+        blacklistEl.innerHTML = '';
+        
+        data.blacklist.forEach(username => {
+            var item = document.createElement('div');
+            item.className = 'bg-gray-800 p-3 rounded-lg border border-gray-700 flex justify-between items-center';
+            item.innerHTML = `
+                <div>
+                    <span class="text-white font-semibold">${escapeHtml(username)}</span>
+                    <span class="text-xs text-gray-400 ml-2">@${DOMAIN}</span>
+                </div>
+                <button onclick="removeFromBlacklist('${escapeHtml(username)}')" class="text-green-400 hover:text-green-300 p-1 rounded transition-colors" title="Remove from blacklist">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
+            blacklistEl.appendChild(item);
+        });
+    })
+    .catch(err => {
+        console.error('Error loading blacklist:', err);
+        document.getElementById('blacklist-list').innerHTML = '<p class="text-red-400 text-center py-8">Failed to load blacklist</p>';
     });
 }
 
@@ -365,10 +384,25 @@ function addToBlacklist() {
         'Add to Blacklist',
         `Are you sure you want to blacklist the username "<strong>${escapeHtml(username)}</strong>"?<br><br>This will prevent all users from using this username.`,
         function() {
-            // For now, just show a message. You can implement backend API later.
-            showNotification(`✅ Username "${username}" would be blacklisted (backend integration needed)`, 'success');
-            usernameInput.value = '';
-            loadBlacklist();
+            fetch(API_URL + '/api/admin/blacklist', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: username})
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(`✅ ${data.message}`, 'success');
+                    usernameInput.value = '';
+                    loadBlacklist();
+                } else {
+                    showNotification(`❌ ${data.error || 'Failed to add to blacklist'}`, 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error adding to blacklist:', err);
+                showNotification('❌ Error adding to blacklist', 'error');
+            });
         }
     );
 }
@@ -378,447 +412,459 @@ function removeFromBlacklist(username) {
         'Remove from Blacklist',
         `Are you sure you want to remove "<strong>${escapeHtml(username)}</strong>" from the blacklist?<br><br>Users will be able to use this username again.`,
         function() {
-            // For now, just show a message. You can implement backend API later.
-            showNotification(`✅ Username "${username}" would be removed from blacklist (backend integration needed)`, 'success');
-            loadBlacklist();
+            fetch(API_URL + '/api/admin/blacklist/' + encodeURIComponent(username), {
+                method: 'DELETE'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(`✅ ${data.message}`, 'success');
+                    loadBlacklist();
+                } else {
+                    showNotification(`❌ ${data.error || 'Failed to remove from blacklist'}`, 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error removing from blacklist:', err);
+                showNotification('❌ Error removing from blacklist', 'error');
+            });
         }
     );
 }
-
 // Update the startAutoRefresh to include blacklist
 function startAutoRefresh() {
-    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-    autoRefreshInterval = setInterval(() => {
-        loadStats();
-        loadAddresses();
-        loadActiveSessions();
-        loadBlacklist();
-        if (selectedAddress) viewEmails(selectedAddress);
-    }, 10000);
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    autoRefreshInterval = setInterval(() => {
+        loadStats();
+        loadAddresses();
+        loadActiveSessions();
+        loadBlacklist();
+        if (selectedAddress) viewEmails(selectedAddress);
+    }, 10000);
 }
 
 // Custom Modal Functions
 function showModal(title, message, confirmCallback) {
-    const modal = document.getElementById('custom-modal');
-    const modalTitle = document.getElementById('modal-title');
-    const modalMessage = document.getElementById('modal-message');
-    const modalConfirm = document.getElementById('modal-confirm');
-    const modalCancel = document.getElementById('modal-cancel');
-    
-    modalTitle.textContent = title;
-    modalMessage.textContent = message;
-    modal.classList.remove('hidden');
-    
-    // Remove previous event listeners
-    const newConfirm = modalConfirm.cloneNode(true);
-    const newCancel = modalCancel.cloneNode(true);
-    modalConfirm.parentNode.replaceChild(newConfirm, modalConfirm);
-    modalCancel.parentNode.replaceChild(newCancel, modalCancel);
-    
-    // Add new event listeners
-    document.getElementById('modal-confirm').onclick = function() {
-        modal.classList.add('hidden');
-        if (confirmCallback) confirmCallback();
-    };
-    
-    document.getElementById('modal-cancel').onclick = function() {
-        modal.classList.add('hidden');
-    };
+    const modal = document.getElementById('custom-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalMessage = document.getElementById('modal-message');
+    const modalConfirm = document.getElementById('modal-confirm');
+    const modalCancel = document.getElementById('modal-cancel');
+    
+    modalTitle.textContent = title;
+    modalMessage.textContent = message;
+    modal.classList.remove('hidden');
+    
+    // Remove previous event listeners
+    const newConfirm = modalConfirm.cloneNode(true);
+    const newCancel = modalCancel.cloneNode(true);
+    modalConfirm.parentNode.replaceChild(newConfirm, modalConfirm);
+    modalCancel.parentNode.replaceChild(newCancel, modalCancel);
+    
+    // Add new event listeners
+    document.getElementById('modal-confirm').onclick = function() {
+        modal.classList.add('hidden');
+        if (confirmCallback) confirmCallback();
+    };
+    
+    document.getElementById('modal-cancel').onclick = function() {
+        modal.classList.add('hidden');
+    };
 }
 
 // Login handler
 document.getElementById('admin-login-btn').addEventListener('click', adminLogin);
 document.getElementById('admin-password').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') adminLogin();
+    if (e.key === 'Enter') adminLogin();
 });
 
 function adminLogin() {
-    var password = document.getElementById('admin-password').value;
-    var errorEl = document.getElementById('admin-login-error');
-    var btn = document.getElementById('admin-login-btn');
-    
-    if (!password) {
-        errorEl.textContent = '❌ Please enter password';
-        errorEl.style.display = 'block';
-        return;
-    }
-    
-    // Show loading state
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Logging in...';
-    btn.disabled = true;
-    
-    fetch(API_URL + '/api/admin/login', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({password: password})
-    })
-    .then(res => {
-        if (!res.ok) {
-            throw new Error('Login failed');
-        }
-        return res.json();
-    })
-    .then(data => {
-                if (data.success) {
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('admin-dashboard').style.display = 'block';
-            loadStats();
-            loadAddresses();
-            loadActiveSessions();
-            loadBlacklist();
-            startAutoRefresh();
-            showNotification('✅ Successfully logged in', 'success');
-        } else {
-            throw new Error('Invalid password');
-        }
-    })
-    .catch(err => {
-        errorEl.textContent = '❌ ' + (err.message || 'Login failed');
-        errorEl.style.display = 'block';
-        setTimeout(() => errorEl.style.display = 'none', 3000);
-    })
-    .finally(() => {
-        // Reset button state
-        btn.innerHTML = '<i class="fas fa-sign-in-alt mr-2"></i>Login';
-        btn.disabled = false;
-    });
+    var password = document.getElementById('admin-password').value;
+    var errorEl = document.getElementById('admin-login-error');
+    var btn = document.getElementById('admin-login-btn');
+    
+    if (!password) {
+        errorEl.textContent = '❌ Please enter password';
+        errorEl.style.display = 'block';
+        return;
+    }
+    
+    // Show loading state
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Logging in...';
+    btn.disabled = true;
+    
+    fetch(API_URL + '/api/admin/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({password: password})
+    })
+    .then(res => {
+        if (!res.ok) {
+            throw new Error('Login failed');
+        }
+        return res.json();
+    })
+    .then(data => {
+                if (data.success) {
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('admin-dashboard').style.display = 'block';
+            loadStats();
+            loadAddresses();
+            loadActiveSessions();
+            loadBlacklist();
+            startAutoRefresh();
+            showNotification('✅ Successfully logged in', 'success');
+        } else {
+            throw new Error('Invalid password');
+        }
+    })
+    .catch(err => {
+        errorEl.textContent = '❌ ' + (err.message || 'Login failed');
+        errorEl.style.display = 'block';
+        setTimeout(() => errorEl.style.display = 'none', 3000);
+    })
+    .finally(() => {
+        // Reset button state
+        btn.innerHTML = '<i class="fas fa-sign-in-alt mr-2"></i>Login';
+        btn.disabled = false;
+    });
 }
 
 // Logout handler
 document.getElementById('logout-btn').addEventListener('click', function() {
-    showModal(
-        'Confirm Logout',
-        'Are you sure you want to logout from the admin panel?',
-        function() {
-            fetch(API_URL + '/api/admin/logout', {method: 'POST'})
-            .then(() => {
-                location.reload();
-            })
-            .catch(() => {
-                location.reload();
-            });
-        }
-    );
+    showModal(
+        'Confirm Logout',
+        'Are you sure you want to logout from the admin panel?',
+        function() {
+            fetch(API_URL + '/api/admin/logout', {method: 'POST'})
+            .then(() => {
+                location.reload();
+            })
+            .catch(() => {
+                location.reload();
+            });
+        }
+    );
 });
 
 // Load stats
 function loadStats() {
-    fetch(API_URL + '/api/admin/stats')
-    .then(res => {
-        if (res.status === 401) {
-            location.reload();
-            return;
-        }
-        return res.json();
-    })
-    .then(data => {
-        if (data && !data.error) {
-            document.getElementById('stat-emails').textContent = data.total_emails || 0;
-            document.getElementById('stat-addresses').textContent = data.total_addresses || 0;
-            document.getElementById('stat-recent').textContent = data.recent_emails || 0;
-        }
-    })
-    .catch(err => console.error('Error loading stats:', err));
+    fetch(API_URL + '/api/admin/stats')
+    .then(res => {
+        if (res.status === 401) {
+            location.reload();
+            return;
+        }
+        return res.json();
+    })
+    .then(data => {
+        if (data && !data.error) {
+            document.getElementById('stat-emails').textContent = data.total_emails || 0;
+            document.getElementById('stat-addresses').textContent = data.total_addresses || 0;
+            document.getElementById('stat-recent').textContent = data.recent_emails || 0;
+        }
+    })
+    .catch(err => console.error('Error loading stats:', err));
 }
 
 // Load addresses
 function loadAddresses() {
-    fetch(API_URL + '/api/admin/addresses')
-    .then(res => {
-        if (res.status === 401) {
-            location.reload();
-            return;
-        }
-        return res.json();
-    })
-    .then(data => {
-        if (!data || data.error) {
-            document.getElementById('address-list').innerHTML = '<p class="text-red-400 text-center py-8">Error loading addresses</p>';
-            return;
-        }
-        
-        var list = document.getElementById('address-list');
-        list.innerHTML = '';
-        
-        if (!data.addresses || data.addresses.length === 0) {
-            list.innerHTML = '<p class="text-gray-400 text-center py-8">No email addresses yet</p>';
-            return;
-        }
-        
-        data.addresses.forEach(addr => {
-            var item = document.createElement('div');
-            item.className = 'address-item bg-gray-800 p-4 rounded-lg border border-gray-700 hover:border-gray-600';
-            item.innerHTML = `
-                <div class="flex justify-between items-center">
-                    <div class="flex-1">
-                        <p class="text-white font-semibold truncate text-sm">${escapeHtml(addr.address)}</p>
-                        <p class="text-xs text-gray-400 mt-1">
-                            ${addr.count || 0} email${(addr.count || 0) !== 1 ? 's' : ''} • 
-                            ${formatTime(addr.last_email)}
-                        </p>
-                    </div>
-                    <div class="flex gap-1">
-                        <button onclick="viewEmails('${escapeHtml(addr.address)}')" class="text-blue-400 hover:text-blue-300 p-2 rounded transition-colors" title="View emails">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                        <button onclick="deleteAddress('${escapeHtml(addr.address)}')" class="text-red-400 hover:text-red-300 p-2 rounded transition-colors" title="Delete all emails">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </div>
-            `;
-            list.appendChild(item);
-        });
-    })
-    .catch(err => {
-        console.error('Error loading addresses:', err);
-        document.getElementById('address-list').innerHTML = '<p class="text-red-400 text-center py-8">Failed to load addresses</p>';
-    });
+    fetch(API_URL + '/api/admin/addresses')
+    .then(res => {
+        if (res.status === 401) {
+            location.reload();
+            return;
+        }
+        return res.json();
+    })
+    .then(data => {
+        if (!data || data.error) {
+            document.getElementById('address-list').innerHTML = '<p class="text-red-400 text-center py-8">Error loading addresses</p>';
+            return;
+        }
+        
+        var list = document.getElementById('address-list');
+        list.innerHTML = '';
+        
+        if (!data.addresses || data.addresses.length === 0) {
+            list.innerHTML = '<p class="text-gray-400 text-center py-8">No email addresses yet</p>';
+            return;
+        }
+        
+        data.addresses.forEach(addr => {
+            var item = document.createElement('div');
+            item.className = 'address-item bg-gray-800 p-4 rounded-lg border border-gray-700 hover:border-gray-600';
+            item.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <div class="flex-1">
+                        <p class="text-white font-semibold truncate text-sm">${escapeHtml(addr.address)}</p>
+                        <p class="text-xs text-gray-400 mt-1">
+                            ${addr.count || 0} email${(addr.count || 0) !== 1 ? 's' : ''} • 
+                            ${formatTime(addr.last_email)}
+                        </p>
+                    </div>
+                    <div class="flex gap-1">
+                        <button onclick="viewEmails('${escapeHtml(addr.address)}')" class="text-blue-400 hover:text-blue-300 p-2 rounded transition-colors" title="View emails">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button onclick="deleteAddress('${escapeHtml(addr.address)}')" class="text-red-400 hover:text-red-300 p-2 rounded transition-colors" title="Delete all emails">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+            list.appendChild(item);
+        });
+    })
+    .catch(err => {
+        console.error('Error loading addresses:', err);
+        document.getElementById('address-list').innerHTML = '<p class="text-red-400 text-center py-8">Failed to load addresses</p>';
+    });
 }
 
 // View emails for address
 function viewEmails(address) {
-    selectedAddress = address;
-    document.getElementById('selected-address').textContent = address;
-    
-    fetch(API_URL + '/api/admin/emails/' + encodeURIComponent(address))
-    .then(res => res.json())
-    .then(data => {
-        var details = document.getElementById('email-details');
-        var badge = document.getElementById('email-count-badge');
-        
-        if (!data || data.error) {
-            details.innerHTML = '<p class="text-red-400 text-center py-8">Error loading emails</p>';
-            badge.classList.add('hidden');
-            return;
-        }
-        
-        if (!data.emails || data.emails.length === 0) {
-            details.innerHTML = '<p class="text-gray-400 text-center py-8">No emails for this address</p>';
-            badge.textContent = '0 emails';
-            badge.classList.remove('hidden');
-            return;
-        }
-        
-        // Update badge
-        badge.textContent = data.emails.length + ' email' + (data.emails.length !== 1 ? 's' : '');
-        badge.classList.remove('hidden');
-        
-        details.innerHTML = '';
-        
-        data.emails.forEach(email => {
-            var item = document.createElement('div');
-            item.className = 'bg-gray-800 p-4 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors';
-            
-            // Clean and truncate body for preview
-            var cleanBody = email.body ? email.body.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() : 'No content';
-            var previewBody = cleanBody.length > 100 ? cleanBody.substring(0, 100) + '...' : cleanBody;
-            
-            item.innerHTML = `
-                <div class="flex justify-between items-start mb-2">
-                    <div class="flex-1">
-                        <p class="text-white font-semibold text-sm truncate">${escapeHtml(email.sender || 'Unknown')}</p>
-                        <p class="text-gray-300 text-sm font-medium mt-1">${escapeHtml(email.subject || 'No subject')}</p>
-                        <p class="text-xs text-gray-400 mt-1">${formatTime(email.timestamp)}</p>
-                    </div>
-                    <button onclick="deleteEmail(${email.id})" class="text-red-400 hover:text-red-300 p-2 rounded transition-colors ml-2" title="Delete email">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-                <p class="text-xs text-gray-400 mt-2">${escapeHtml(previewBody)}</p>
-            `;
-            details.appendChild(item);
-        });
-    })
-    .catch(err => {
-        console.error('Error loading emails:', err);
-        document.getElementById('email-details').innerHTML = '<p class="text-red-400 text-center py-8">Failed to load emails</p>';
-    });
+    selectedAddress = address;
+    document.getElementById('selected-address').textContent = address;
+    
+    fetch(API_URL + '/api/admin/emails/' + encodeURIComponent(address))
+    .then(res => res.json())
+    .then(data => {
+        var details = document.getElementById('email-details');
+        var badge = document.getElementById('email-count-badge');
+        
+        if (!data || data.error) {
+            details.innerHTML = '<p class="text-red-400 text-center py-8">Error loading emails</p>';
+            badge.classList.add('hidden');
+            return;
+        }
+        
+        if (!data.emails || data.emails.length === 0) {
+            details.innerHTML = '<p class="text-gray-400 text-center py-8">No emails for this address</p>';
+            badge.textContent = '0 emails';
+            badge.classList.remove('hidden');
+            return;
+        }
+        
+        // Update badge
+        badge.textContent = data.emails.length + ' email' + (data.emails.length !== 1 ? 's' : '');
+        badge.classList.remove('hidden');
+        
+        details.innerHTML = '';
+        
+        data.emails.forEach(email => {
+            var item = document.createElement('div');
+            item.className = 'bg-gray-800 p-4 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors';
+            
+            // Clean and truncate body for preview
+            var cleanBody = email.body ? email.body.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() : 'No content';
+            var previewBody = cleanBody.length > 100 ? cleanBody.substring(0, 100) + '...' : cleanBody;
+            
+            item.innerHTML = `
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex-1">
+                        <p class="text-white font-semibold text-sm truncate">${escapeHtml(email.sender || 'Unknown')}</p>
+                        <p class="text-gray-300 text-sm font-medium mt-1">${escapeHtml(email.subject || 'No subject')}</p>
+                        <p class="text-xs text-gray-400 mt-1">${formatTime(email.timestamp)}</p>
+                    </div>
+                    <button onclick="deleteEmail(${email.id})" class="text-red-400 hover:text-red-300 p-2 rounded transition-colors ml-2" title="Delete email">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+                <p class="text-xs text-gray-400 mt-2">${escapeHtml(previewBody)}</p>
+            `;
+            details.appendChild(item);
+        });
+    })
+    .catch(err => {
+        console.error('Error loading emails:', err);
+        document.getElementById('email-details').innerHTML = '<p class="text-red-400 text-center py-8">Failed to load emails</p>';
+    });
 }
 
 // Delete single email
 function deleteEmail(emailId) {
-    showModal(
-        'Delete Email',
-        'Are you sure you want to delete this email? This action cannot be undone.',
-        function() {
-            fetch(API_URL + '/api/admin/delete/' + emailId, {method: 'DELETE'})
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    if (selectedAddress) viewEmails(selectedAddress);
-                    loadStats();
-                    showNotification('✅ Email deleted successfully', 'success');
-                } else {
-                    showNotification('❌ Failed to delete email', 'error');
-                }
-            })
-            .catch(err => {
-                console.error('Error deleting email:', err);
-                showNotification('❌ Error deleting email', 'error');
-            });
-        }
-    );
+    showModal(
+        'Delete Email',
+        'Are you sure you want to delete this email? This action cannot be undone.',
+        function() {
+            fetch(API_URL + '/api/admin/delete/' + emailId, {method: 'DELETE'})
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    if (selectedAddress) viewEmails(selectedAddress);
+                    loadStats();
+                    showNotification('✅ Email deleted successfully', 'success');
+                } else {
+                    showNotification('❌ Failed to delete email', 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error deleting email:', err);
+                showNotification('❌ Error deleting email', 'error');
+            });
+        }
+    );
 }
 
 // Delete all emails for address
 function deleteAddress(address) {
-    showModal(
-        'Delete All Emails',
-        `Are you sure you want to delete ALL emails for <strong>${escapeHtml(address)}</strong>?<br><br>This action cannot be undone and will permanently remove all emails for this address.`,
-        function() {
-            fetch(API_URL + '/api/admin/delete-address/' + encodeURIComponent(address), {method: 'DELETE'})
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    loadAddresses();
-                    loadStats();
-                    document.getElementById('email-details').innerHTML = '<p class="text-gray-400 text-center py-8">Select an email address to view emails</p>';
-                    document.getElementById('selected-address').textContent = 'None selected';
-                    document.getElementById('email-count-badge').classList.add('hidden');
-                    showNotification('✅ All emails deleted for ' + address, 'success');
-                } else {
-                    showNotification('❌ Failed to delete emails', 'error');
-                }
-            })
-            .catch(err => {
-                console.error('Error deleting address:', err);
-                showNotification('❌ Error deleting emails', 'error');
-            });
-        }
-    );
+    showModal(
+        'Delete All Emails',
+        `Are you sure you want to delete ALL emails for <strong>${escapeHtml(address)}</strong>?<br><br>This action cannot be undone and will permanently remove all emails for this address.`,
+        function() {
+            fetch(API_URL + '/api/admin/delete-address/' + encodeURIComponent(address), {method: 'DELETE'})
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    loadAddresses();
+                    loadStats();
+                    document.getElementById('email-details').innerHTML = '<p class="text-gray-400 text-center py-8">Select an email address to view emails</p>';
+                    document.getElementById('selected-address').textContent = 'None selected';
+                    document.getElementById('email-count-badge').classList.add('hidden');
+                    showNotification('✅ All emails deleted for ' + address, 'success');
+                } else {
+                    showNotification('❌ Failed to delete emails', 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error deleting address:', err);
+                showNotification('❌ Error deleting emails', 'error');
+            });
+        }
+    );
 }
-    
+    
 
 // Load active sessions (you'll need to add this endpoint to your backend)
 function loadActiveSessions() {
-    // This is a placeholder - you'll need to implement this endpoint
-    var sessionsEl = document.getElementById('active-sessions');
-    sessionsEl.innerHTML = '<p class="text-gray-400 text-center py-8">Active sessions feature coming soon</p>';
+    // This is a placeholder - you'll need to implement this endpoint
+    var sessionsEl = document.getElementById('active-sessions');
+    sessionsEl.innerHTML = '<p class="text-gray-400 text-center py-8">Active sessions feature coming soon</p>';
 }
 // Load active sessions
 function loadActiveSessions() {
-    fetch(API_URL + '/api/admin/sessions')
-    .then(res => {
-        if (res.status === 401) {
-            location.reload();
-            return;
-        }
-        return res.json();
-    })
-    .then(data => {
-        var sessionsEl = document.getElementById('active-sessions');
-        
-        if (!data || data.error) {
-            sessionsEl.innerHTML = '<p class="text-red-400 text-center py-8">Error loading sessions</p>';
-            return;
-        }
-        
-        if (!data.sessions || data.sessions.length === 0) {
-            sessionsEl.innerHTML = '<p class="text-gray-400 text-center py-8">No active sessions</p>';
-            return;
-        }
-        
-        sessionsEl.innerHTML = '';
-        
-        data.sessions.forEach(session => {
-            var item = document.createElement('div');
-            item.className = 'address-item bg-gray-800 p-4 rounded-lg border border-gray-700 hover:border-gray-600';
-            item.innerHTML = `
-                <div class="flex justify-between items-start">
-                    <div class="flex-1">
-                        <p class="text-white font-semibold text-sm truncate">${escapeHtml(session.email)}</p>
-                        <div class="grid grid-cols-2 gap-2 mt-2 text-xs text-gray-400">
-                            <div>
-                                <i class="fas fa-play-circle mr-1"></i>
-                                ${session.session_age_minutes} min ago
-                            </div>
-                            <div>
-                                <i class="fas fa-clock mr-1"></i>
-                                ${session.time_remaining_minutes} min left
-                            </div>
-                        </div>
-                        <p class="text-xs text-gray-500 mt-1">
-                            Last active: ${formatTime(session.last_activity)}
-                        </p>
-                    </div>
-                </div>
-            `;
-            sessionsEl.appendChild(item);
-        });
-    })
-    .catch(err => {
-        console.error('Error loading sessions:', err);
-        document.getElementById('active-sessions').innerHTML = '<p class="text-red-400 text-center py-8">Failed to load sessions</p>';
-    });
+    fetch(API_URL + '/api/admin/sessions')
+    .then(res => {
+        if (res.status === 401) {
+            location.reload();
+            return;
+        }
+        return res.json();
+    })
+    .then(data => {
+        var sessionsEl = document.getElementById('active-sessions');
+        
+        if (!data || data.error) {
+            sessionsEl.innerHTML = '<p class="text-red-400 text-center py-8">Error loading sessions</p>';
+            return;
+        }
+        
+        if (!data.sessions || data.sessions.length === 0) {
+            sessionsEl.innerHTML = '<p class="text-gray-400 text-center py-8">No active sessions</p>';
+            return;
+        }
+        
+        sessionsEl.innerHTML = '';
+        
+        data.sessions.forEach(session => {
+            var item = document.createElement('div');
+            item.className = 'address-item bg-gray-800 p-4 rounded-lg border border-gray-700 hover:border-gray-600';
+            item.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <p class="text-white font-semibold text-sm truncate">${escapeHtml(session.email)}</p>
+                        <div class="grid grid-cols-2 gap-2 mt-2 text-xs text-gray-400">
+                            <div>
+                                <i class="fas fa-play-circle mr-1"></i>
+                                ${session.session_age_minutes} min ago
+                            </div>
+                            <div>
+                                <i class="fas fa-clock mr-1"></i>
+                                ${session.time_remaining_minutes} min left
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">
+                            Last active: ${formatTime(session.last_activity)}
+                        </p>
+                    </div>
+                </div>
+            `;
+            sessionsEl.appendChild(item);
+        });
+    })
+    .catch(err => {
+        console.error('Error loading sessions:', err);
+        document.getElementById('active-sessions').innerHTML = '<p class="text-red-400 text-center py-8">Failed to load sessions</p>';
+    });
 }
 
 // Utility functions
 function escapeHtml(text) {
-    if (!text) return '';
-    var div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    if (!text) return '';
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 function formatTime(timestamp) {
-    if (!timestamp) return 'never';
-    
-    try {
-        var date;
-        if (typeof timestamp === 'string') {
-            date = new Date(timestamp);
-        } else if (timestamp instanceof Date) {
-            date = timestamp;
-        } else {
-            date = new Date(timestamp);
-        }
-        
-        var now = new Date();
-        var diff = now - date;
-        var seconds = Math.floor(diff / 1000);
-        var minutes = Math.floor(seconds / 60);
-        var hours = Math.floor(minutes / 60);
-        var days = Math.floor(hours / 24);
-        
-        if (seconds < 10) return 'just now';
-        if (seconds < 60) return seconds + ' sec ago';
-        if (minutes < 60) return minutes + ' min ago';
-        if (hours < 24) return hours + ' hour ago';
-        if (days < 7) return days + ' day ago';
-        
-        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-    } catch (e) {
-        return 'unknown';
-    }
+    if (!timestamp) return 'never';
+    
+    try {
+        var date;
+        if (typeof timestamp === 'string') {
+            date = new Date(timestamp);
+        } else if (timestamp instanceof Date) {
+            date = timestamp;
+        } else {
+            date = new Date(timestamp);
+        }
+        
+        var now = new Date();
+        var diff = now - date;
+        var seconds = Math.floor(diff / 1000);
+        var minutes = Math.floor(seconds / 60);
+        var hours = Math.floor(minutes / 60);
+        var days = Math.floor(hours / 24);
+        
+        if (seconds < 10) return 'just now';
+        if (seconds < 60) return seconds + ' sec ago';
+        if (minutes < 60) return minutes + ' min ago';
+        if (hours < 24) return hours + ' hour ago';
+        if (days < 7) return days + ' day ago';
+        
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    } catch (e) {
+        return 'unknown';
+    }
 }
 
 function showNotification(message, type) {
-    var bgColor = type === 'success' ? 'bg-green-600' : 'bg-red-600';
-    var icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
-    
-    var notification = document.createElement('div');
-    notification.className = `fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50 fade-in flex items-center`;
-    notification.innerHTML = `<i class="fas ${icon} mr-2"></i>${message}`;
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.classList.add('opacity-0');
-        notification.classList.add('transition-opacity');
-        setTimeout(() => {
-            notification.remove();
-        }, 300);
-    }, 3000);
+    var bgColor = type === 'success' ? 'bg-green-600' : 'bg-red-600';
+    var icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+    
+    var notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50 fade-in flex items-center`;
+    notification.innerHTML = `<i class="fas ${icon} mr-2"></i>${message}`;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.classList.add('opacity-0');
+        notification.classList.add('transition-opacity');
+        setTimeout(() => {
+            notification.remove();
+        }, 300);
+    }, 3000);
 }
 
 function startAutoRefresh() {
-    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-    autoRefreshInterval = setInterval(() => {
-        loadStats();
-        loadAddresses();
-        loadActiveSessions();
-        if (selectedAddress) viewEmails(selectedAddress);
-    }, 8000); // Refresh every 10 seconds
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    autoRefreshInterval = setInterval(() => {
+        loadStats();
+        loadAddresses();
+        loadActiveSessions();
+        if (selectedAddress) viewEmails(selectedAddress);
+    }, 8000); // Refresh every 10 seconds
 }
 </script>
 </body>
