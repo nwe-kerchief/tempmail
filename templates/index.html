@@ -51,13 +51,11 @@ to { opacity: 1; transform: translateY(0); }
 }
 
 
-/* Improved email content styling */
 .email-content-container {
 background: rgba(255, 255, 255, 0.05);
 border-radius: 12px;
-padding: 16px;
+padding: 20px;
 overflow-y: auto;
-height: 100%;
 }
 .email-content-text {
 line-height: 1.6;
@@ -65,7 +63,7 @@ font-size: 14px;
 color: #e5e7eb;
 }
 .email-content-text p {
-margin-bottom: 1px;
+margin-bottom: 1rem;
 }
 .email-content-text code {
 background: rgba(255, 255, 255, 0.1);
@@ -163,55 +161,39 @@ overflow: hidden;
 }
 
 @media (max-width: 768px) {
-    .mobile-inbox-container {
-        flex-direction: column !important;
-        height: auto !important;
-    }
-    .mobile-inbox-list {
-        height: 300px !important;
-        min-height: 300px !important;
-        max-height: 300px !important;
-    }
-    .mobile-email-content {
-        height: 400px !important;
-        min-height: 400px !important;
-        max-height: 400px !important;
-    }
+.mobile-stack { flex-direction: column; }
+.mobile-full { width: 100%; }
+.mobile-text-center { text-align: center; }
+.mobile-inbox-container { flex-direction: column; height: auto; }
+.mobile-inbox-list { height: 300px; max-height: 300px; }
+.mobile-email-content { height: 400px; max-height: 400px; }
 }
 
-/* Email content fixes using existing classes */
+@media (min-width: 768px) {
+#email-content-container {
+height: 550px;
+max-height: 550px;
+}
 #email-body {
-    white-space: pre-wrap !important;
-    word-wrap: break-word !important;
+height: 350px;
+max-height: 350px;
 }
-
-.email-content-text {
-    all: initial !important;
-    font-family: 'Inter', sans-serif !important;
-    font-size: 14px !important;
-    line-height: 1.4 !important;
-    color: #e5e7eb !important;
-    max-width: 100% !important;
-    overflow-wrap: break-word !important;
-    word-break: break-word !important;
 }
-
-.email-content-text * {
-    all: revert !important;
-    font-family: 'Inter', sans-serif !important;
-    font-size: 14px !important;
-    line-height: 1.4 !important;
-    margin: 1px 0 !important;
-    padding: 1px 0 !important;
-    color: #e5e7eb !important;
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
+/* Email content fixes using existing classes */
+#email-content-container {
+height: 500px;
+max-height: 500px;
+overflow: hidden;
 }
-
-.email-content-container {
-    max-width: 100% !important;
-    overflow: hidden !important;
+#email-body {
+height: 300px;
+max-height: 300px;
+overflow-y: auto;
+overflow-x: hidden;
+}
+#email-body * {
+max-width: 100%;
+word-wrap: break-word;
 }
 </style>
 </head>
@@ -310,18 +292,18 @@ class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 </div>
 
 <!-- Email Content - Improved -->
-<div class="w-full md:w-3/5 glass-effect rounded-xl p-4 mobile-email-content">
+<div id="email-content-container" class="w-full md:w-3/5 glass-effect rounded-xl p-3 md:p-6 overflow-y-auto mobile-email-content">
 <div id="email-placeholder" class="flex flex-col items-center justify-center h-full text-gray-300 py-8">
 <i class="fas fa-envelope-open text-4xl md:text-5xl mb-4 opacity-60"></i>
 <p class="text-lg md:text-xl font-medium text-center">Select an email to read</p>
 <p class="text-sm mt-2 text-gray-400 text-center">Choose a message from your inbox to view its contents</p>
 </div>
 <div id="email-content" class="hidden h-full flex flex-col">
-<div class="flex flex-col md:flex-row justify-between items-start mb-4 gap-2">
-<h2 id="email-subject" class="text-xl md:text-2xl font-bold text-white break-words flex-1"></h2>
+<div class="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-6">
+<h2 id="email-subject" class="text-lg md:text-2xl font-bold text-white mb-1 md:mb-0 break-words"></h2>
 <span id="email-date" class="text-xs text-gray-300 bg-gray-800 px-3 py-1 rounded-lg font-medium whitespace-nowrap"></span>
 </div>
-<div class="flex items-center text-sm text-gray-300 mb-4 border-b border-gray-700 pb-3">
+<div class="flex items-center text-xs md:text-sm text-gray-300 mb-3 md:mb-6 border-b border-gray-700 pb-2 md:pb-4">
 <strong class="mr-2 text-white font-semibold flex items-center">
 <i class="fas fa-user mr-2"></i>From:
 </strong>
