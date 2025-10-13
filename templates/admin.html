@@ -179,6 +179,37 @@ max-height: 350px;
 }
 }
 /* Email content fixes using existing classes */
+/* Email Viewer - Match index.html */
+.verification-code {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 12px;
+    font-size: 28px;
+    font-weight: bold;
+    text-align: center;
+    letter-spacing: 4px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.email-content-container {
+    background: rgba(31, 41, 55, 0.3);
+    border-radius: 12px;
+    padding: 20px;
+    line-height: 1.6;
+    color: #e5e7eb;
+}
+
+.email-content-container p {
+    margin-bottom: 1rem;
+}
+
+#admin-inbox-container {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+
 #email-content-container {
 height: 500px;
 max-height: 500px;
@@ -366,22 +397,62 @@ transform: translateY(-1px);
                 </div>
             </div>
 
-            <!-- Email Details -->
-            <div class="glass-effect rounded-xl p-4 md:p-6 fade-in mobile-full">
-                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
-                    <h2 class="text-lg md:text-xl font-bold text-white">
-                        <i class="fas fa-envelope-open mr-2"></i>Emails for: 
-                        <span id="selected-address" class="text-blue-400 text-sm md:text-base">None selected</span>
-                    </h2>
-                    <div id="email-count-badge" class="bg-blue-600 text-white px-3 py-1 rounded-full text-xs md:text-sm font-medium hidden">
-                        0 emails
-                    </div>
-                </div>
-                <div id="email-details" class="space-y-2 max-h-96 overflow-y-auto custom-scrollbar mobile-email-content">
-                    <p class="text-gray-400 text-center py-8">Select an address to view emails</p>
-                </div>
+            <!-- Email Details - NEW MOBILE-STYLE INBOX -->
+<div class="glass-effect rounded-xl p-4 md:p-6 fade-in mobile-full">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+        <h2 class="text-lg md:text-xl font-bold text-white">
+            <i class="fas fa-envelope-open mr-2"></i>Emails for: 
+            <span id="selected-address" class="text-blue-400 text-sm md:text-base">None selected</span>
+        </h2>
+        <div id="email-count-badge" class="bg-blue-600 text-white px-3 py-1 rounded-full text-xs md:text-sm font-medium hidden">
+            0 emails
+        </div>
+    </div>
+    
+    <!-- Single Container for List and Content View -->
+    <div id="admin-inbox-container" class="w-full bg-gray-900 rounded-xl p-3 overflow-y-auto" style="height: 500px;">
+        
+        <!-- Email List View -->
+        <div id="admin-email-list-view" class="h-full">
+            <div id="email-details" class="space-y-2 h-full overflow-y-auto custom-scrollbar">
+                <p class="text-gray-400 text-center py-8">Select an address to view emails</p>
             </div>
         </div>
+        
+        <!-- Email Content View (Hidden by default) -->
+        <div id="admin-email-content-view" class="hidden h-full flex flex-col">
+            <!-- Back Button -->
+            <button id="admin-back-btn" onclick="showAdminEmailList()" 
+                    class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg mb-4 transition-all text-sm flex items-center">
+                <i class="fas fa-arrow-left mr-2"></i>Back to List
+            </button>
+            
+            <!-- Email Header -->
+            <div class="border-b border-gray-700 pb-4 mb-4">
+                <h2 id="admin-email-subject" class="text-lg md:text-xl font-bold text-white mb-2 break-words"></h2>
+                <div class="flex items-center text-xs md:text-sm text-gray-300 mb-2">
+                    <strong class="mr-2 text-white font-semibold flex items-center">
+                        <i class="fas fa-user mr-2"></i>From:
+                    </strong>
+                    <span id="admin-email-from" class="font-mono font-medium break-all"></span>
+                </div>
+                <span id="admin-email-date" class="text-xs text-gray-400"></span>
+            </div>
+            
+            <!-- Email Body -->
+            <div id="admin-email-body" class="email-content-container flex-1 overflow-y-auto custom-scrollbar"></div>
+            
+            <!-- Delete Button -->
+            <div class="mt-4 pt-4 border-t border-gray-700">
+                <button id="admin-delete-email-btn" 
+                        class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all text-sm">
+                    <i class="fas fa-trash mr-2"></i>Delete Email
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 
         <!-- Active Sessions Section -->
         <div class="glass-effect rounded-xl p-4 md:p-6 fade-in mb-6">
@@ -697,25 +768,123 @@ document.getElementById('logout-btn').addEventListener('click', function() {
     );
 });
 
-// Load stats
-function loadStats() {
-    fetch(API_URL + '/api/admin/stats')
-    .then(res => {
-        if (res.status === 401) {
-            location.reload();
-            return;
+// Email cleaning function - Same as index.html
+function improvedCleanEmailBody(rawBody) {
+    const codeMatch = rawBody.match(/\b\d{4,8}\b/);
+    const verificationCode = codeMatch ? codeMatch[0] : null;
+    
+    let cleanBody = rawBody;
+    
+    cleanBody = cleanBody.replace(/<style[^>]*>.*?<\/style>/gis, '');
+    cleanBody = cleanBody.replace(/style="[^"]*"/gi, '');
+    cleanBody = cleanBody.replace(/class="[^"]*"/gi, '');
+    cleanBody = cleanBody.replace(/<!--.*?-->/gs, '');
+    cleanBody = cleanBody.replace(/<[^>]+>/g, ' ');
+    
+    cleanBody = cleanBody
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&#8217;/g, "'")
+        .replace(/&#160;/g, ' ')
+        .replace(/&copy;/g, '©')
+        .replace(/&reg;/g, '®');
+    
+    cleanBody = cleanBody
+        .replace(/=3D/g, '=')
+        .replace(/=20/g, ' ')
+        .replace(/=2E/g, '.')
+        .replace(/=\r?\n/g, '')
+        .replace(/=\?/g, '');
+    
+    cleanBody = cleanBody
+        .replace(/----==_mimepart_[^\s]*/g, '')
+        .replace(/Content-Type:[^\n]*/gi, '')
+        .replace(/Content-Transfer-Encoding:[^\n]*/gi, '')
+        .replace(/MIME-Version:[^\n]*/gi, '')
+        .replace(/charset=[^\s;]*/gi, '')
+        .replace(/boundary=[^\s;]*/gi, '');
+    
+    const linesToRemove = [
+        /^From:.*/gmi, /^To:.*/gmi, /^Subject:.*/gmi, /^Date:.*/gmi,
+        /^Received:.*/gmi, /^Return-Path:.*/gmi, /^Message-ID:.*/gmi,
+        /^DKIM-Signature:.*/gmi, /^ARC-.*:.*/gmi,
+        /by cloudflare-email\.net.*/gi, /@font-face.*/gi,
+        /font-family:.*/gi, /@media.*/gi, /\.ExternalClass.*/gi,
+        /outlook.*/gi, /-webkit-.*/gi, /-moz-.*/gi, /\*\s*!!!!?.*/g
+    ];
+    
+    linesToRemove.forEach(pattern => {
+        cleanBody = cleanBody.replace(pattern, '');
+    });
+    
+    cleanBody = cleanBody.replace(/\s+/g, ' ').replace(/\s*\.\s*/g, '. ').trim();
+    
+    const sentences = cleanBody.split(/\.\s+/).map(s => s.trim()).filter(s => {
+        if (s.length < 10) return false;
+        const junk = ['charset', 'utf-8', 'helvetica', 'arial', 'sans-serif', 
+                      'margin', 'padding', 'border', 'font-size', 'color',
+                      'text-align', 'display', 'width', 'height'];
+        return !junk.some(j => s.toLowerCase().includes(j));
+    });
+    
+    let html = '';
+    
+    if (verificationCode) {
+        html += `<div class="verification-code">${verificationCode}</div>`;
+    }
+    
+    if (sentences.length > 0) {
+        sentences.forEach(sentence => {
+            if (verificationCode && sentence.includes(verificationCode)) return;
+            html += `<p class="mb-3 leading-relaxed text-gray-200">${escapeHtml(sentence)}.</p>`;
+        });
+    } else {
+        if (cleanBody.length > 20) {
+            html += `<p class="mb-3 leading-relaxed text-gray-200">${escapeHtml(cleanBody)}</p>`;
+        } else {
+            html += '<p class="text-gray-400">No readable content found in this email.</p>';
         }
-        return res.json();
-    })
-    .then(data => {
-        if (data && !data.error) {
-            document.getElementById('stat-emails').textContent = data.total_emails || 0;
-            document.getElementById('stat-addresses').textContent = data.total_addresses || 0;
-            document.getElementById('stat-recent').textContent = data.recent_emails || 0;
-        }
-    })
-    .catch(err => console.error('Error loading stats:', err));
+    }
+    
+    return html;
 }
+
+// View full email in admin panel
+var currentViewingEmail = null;
+
+function viewFullAdminEmail(email) {
+    currentViewingEmail = email;
+    
+    // Hide list, show content
+    document.getElementById('admin-email-list-view').classList.add('hidden');
+    document.getElementById('admin-email-content-view').classList.remove('hidden');
+    
+    // Populate email details
+    document.getElementById('admin-email-subject').textContent = email.subject || 'No subject';
+    document.getElementById('admin-email-from').textContent = email.sender || 'Unknown';
+    document.getElementById('admin-email-date').textContent = formatTime(email.timestamp);
+    
+    // Clean and display body
+    const cleanBody = improvedCleanEmailBody(email.body || 'No content');
+    document.getElementById('admin-email-body').innerHTML = cleanBody;
+    
+    // Set up delete button
+    document.getElementById('admin-delete-email-btn').onclick = function() {
+        deleteEmail(email.id);
+    };
+}
+
+// Show email list
+function showAdminEmailList() {
+    document.getElementById('admin-email-list-view').classList.remove('hidden');
+    document.getElementById('admin-email-content-view').classList.add('hidden');
+    currentViewingEmail = null;
+}
+
 
 // Load addresses
 function loadAddresses() {
