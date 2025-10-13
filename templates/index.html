@@ -509,16 +509,28 @@ let sessionStartTime = null;
 let domainsLoaded = false;
 let isAdminMode = false;
 
-// Initialize functions when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
-    // FORCE clear admin mode on user page load
-    isAdminMode = false;
-    localStorage.removeItem('adminMode');
-    const banner = document.getElementById('admin-mode-banner');
-    if (banner) banner.classList.add('hidden');
+    // ✅ FORCE CLEAR ADMIN MODE ON USER PAGE
+    const isAdminPage = window.location.pathname.includes('/admin');
     
+    if (!isAdminPage) {
+        // Clear admin mode completely
+        isAdminMode = false;
+        localStorage.removeItem('adminMode');
+        localStorage.removeItem('admin_authenticated');
+        
+        // Hide admin banner
+        const adminBanner = document.getElementById('admin-mode-banner');
+        if (adminBanner) {
+            adminBanner.style.display = 'none';
+            adminBanner.classList.add('hidden');
+        }
+        
+        console.log('🚫 Admin mode cleared on user page');
+    }
+    
+    // ... rest of your existing DOMContentLoaded code
     initApp();
-
     setupEventListeners();
 });
 
