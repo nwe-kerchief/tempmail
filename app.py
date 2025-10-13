@@ -501,21 +501,6 @@ def get_emails(email_address):
     return jsonify({'emails': emails})
 
 
-@app.route('/api/session/end', methods=['POST'])
-def end_session():
-    session_token = request.headers.get('X-Session-Token')
-    if not session_token:
-        return jsonify({'error': 'No token'}), 400
-    
-    try:
-        with get_db() as conn:
-            c = conn.cursor()
-            c.execute('UPDATE sessions SET expires_at = NOW() WHERE session_token = %s', (session_token,))
-            conn.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/api/webhook/inbound', methods=['POST'])
 def webhook_inbound():
     """Handle incoming emails with improved error handling"""
@@ -1154,6 +1139,7 @@ if __name__ == '__main__':
     finally:
         if db_pool:
             db_pool.closeall()
+
 
 
 
