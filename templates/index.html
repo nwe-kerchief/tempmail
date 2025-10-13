@@ -618,6 +618,7 @@ function handleApiError(error, defaultMessage = 'An error occurred') {
     }
 }
 
+// FIXED: Clear session properly when switching from admin mode
 function clearSession() {
     currentEmail = '';
     sessionToken = '';
@@ -674,6 +675,16 @@ function loadSession() {
             const sessionValid = sessionAge < SESSION_TIMEOUT;
             
             if (sessionValid && session.email) {
+                // FIXED: Check if this is an admin username and clear session if so
+                const username = session.email.split('@')[0].toLowerCase();
+                const adminUsernames = ['ammz', 'admin', 'owner', 'root', 'system', 'az', 'c'];
+                
+                if (adminUsernames.includes(username)) {
+                    console.log('🔄 Clearing admin session');
+                    localStorage.removeItem('tempMailSession');
+                    return false;
+                }
+                
                 currentEmail = session.email;
                 sessionStartTime = session.createdAt;
                 sessionToken = session.sessionToken || '';
@@ -1083,9 +1094,9 @@ function viewEmail(email, itemEl) {
         document.getElementById('email-from').textContent = email.sender;
         document.getElementById('email-date').textContent = formatTime(email.timestamp);
         
-        // Simple body processing for mobile (faster)
+        // IMPROVED: Better email body processing
         const bodyEl = document.getElementById('email-body');
-        const cleanBody = quickCleanEmailBody(email.body);
+        const cleanBody = improvedCleanEmailBody(email.body);
         bodyEl.innerHTML = cleanBody;
     } else {
         // Desktop: Update desktop panel
@@ -1097,7 +1108,7 @@ function viewEmail(email, itemEl) {
         document.getElementById('desktop-email-date').textContent = formatTime(email.timestamp);
         
         const desktopBodyEl = document.getElementById('desktop-email-body');
-        const cleanBody = quickCleanEmailBody(email.body);
+        const cleanBody = improvedCleanEmailBody(email.body);
         desktopBodyEl.innerHTML = cleanBody;
     }
 }
@@ -1116,23 +1127,31 @@ function showEmailList() {
     document.getElementById('back-to-list').classList.add('hidden');
 }
 
-// Email Content Processing Functions
-function quickCleanEmailBody(rawBody) {
-    // Extract verification code
+// IMPROVED: Better email content processing
+function improvedCleanEmailBody(rawBody) {
+    // Extract verification code - improved pattern
     const codeMatch = rawBody.match(/\b\d{4,8}\b/);
     const verificationCode = codeMatch ? codeMatch[0] : null;
     
-    // Remove HTML tags for simple display
+    // Remove HTML tags and decode HTML entities
     let cleanBody = rawBody.replace(/<[^>]*>/g, '');
     
-    // Decode HTML entities
+    // Improved HTML entity decoding
     cleanBody = cleanBody
         .replace(/&nbsp;/g, ' ')
         .replace(/&amp;/g, '&')
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'");
+        .replace(/&#39;/g, "'")
+        .replace(/=E2=80=99/g, "'")
+        .replace(/=C2=A0/g, ' ')
+        .replace(/=3D/g, '=')
+        .replace(/=20/g, ' ')
+        .replace(/=2E/g, '.');
+    
+    // Remove quoted-printable line breaks
+    cleanBody = cleanBody.replace(/=\r?\n/g, '');
     
     // Split into paragraphs
     const paragraphs = cleanBody.split(/\n\s*\n/).filter(p => p.trim().length > 0);
@@ -1151,16 +1170,25 @@ function quickCleanEmailBody(rawBody) {
         // Skip the line that contains the verification code (already displayed)
         if (verificationCode && trimmed.includes(verificationCode)) return;
         
-        // Skip technical lines
+        // Skip technical lines and headers
         if (trimmed.includes('by cloudflare-email.net') ||
             trimmed.includes('ARC-Seal:') ||
             trimmed.includes('DKIM-Signature:') ||
-            trimmed.includes('Received:')) {
+            trimmed.includes('Received:') ||
+            trimmed.includes('Content-Type:') ||
+            trimmed.includes('MIME-Version:') ||
+            trimmed.includes('@font-face') ||
+            trimmed.includes('font-family') ||
+            trimmed.includes('.ExternalClass') ||
+            trimmed.includes('#outlook') ||
+            trimmed.includes('@media')) {
             return;
         }
         
         // Format specific message parts
-        if (trimmed.toLowerCase().includes('enter this temporary verification code')) {
+        if (trimmed.toLowerCase().includes('enter this temporary verification code') ||
+            trimmed.toLowerCase().includes('your chatgpt code is') ||
+            trimmed.toLowerCase().includes('verification code')) {
             html += '<div class="email-header"><p>' + escapeHtml(trimmed) + '</p></div>';
         } else if (trimmed.toLowerCase().includes('please ignore this email')) {
             html += '<div class="email-meta"><p>' + escapeHtml(trimmed) + '</p></div>';
@@ -1168,7 +1196,7 @@ function quickCleanEmailBody(rawBody) {
                    trimmed.toLowerCase().includes('regards,') ||
                    trimmed.toLowerCase().includes('the chatgpt team')) {
             html += '<div class="email-header"><p>' + escapeHtml(trimmed) + '</p></div>';
-        } else {
+        } else if (trimmed.length > 5) { // Only add non-empty paragraphs
             html += '<p>' + escapeHtml(trimmed) + '</p>';
         }
     });
@@ -1522,8 +1550,28 @@ document.getElementById('username-input').addEventListener('keypress', function(
     }
 });
 
-// Reset on page load
+// Reset on page load - FIXED: Clear admin sessions
 window.addEventListener('load', function() {
+    // Check if we have an admin session and clear it
+    const savedSession = localStorage.getItem('tempMailSession');
+    if (savedSession) {
+        try {
+            const session = JSON.parse(savedSession);
+            if (session.email) {
+                const username = session.email.split('@')[0].toLowerCase();
+                const adminUsernames = ['ammz', 'admin', 'owner', 'root', 'system', 'az', 'c'];
+                
+                if (adminUsernames.includes(username)) {
+                    console.log('🔄 Clearing admin session on page load');
+                    clearSession();
+                    return;
+                }
+            }
+        } catch (e) {
+            console.error('Error checking session on load:', e);
+        }
+    }
+    
     if (isAdminMode) {
         deactivateAdminMode();
     }
