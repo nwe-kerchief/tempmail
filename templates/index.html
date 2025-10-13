@@ -3066,6 +3066,62 @@ async function verifyAdminPassword() {
     }
 }
 
+// Add this at the beginning of your JavaScript, before DOMContentLoaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Hide the modal on page load
+    const modal = document.getElementById('custom-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+    
+    initApp();
+    setupEventListeners();
+});
+
+// Also fix the showModal function to ensure it works properly
+function showModal(title, message, confirmCallback) {
+    const modal = document.getElementById('custom-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalMessage = document.getElementById('modal-message');
+    
+    if (!modal || !modalTitle || !modalMessage) {
+        console.error('Modal elements not found');
+        if (confirmCallback) confirmCallback();
+        return;
+    }
+    
+    modalTitle.textContent = title;
+    modalMessage.textContent = message;
+    modal.classList.remove('hidden');
+    
+    // Remove any existing event listeners by cloning and replacing
+    const modalConfirm = document.getElementById('modal-confirm');
+    const modalCancel = document.getElementById('modal-cancel');
+    
+    const newConfirm = modalConfirm.cloneNode(true);
+    const newCancel = modalCancel.cloneNode(true);
+    
+    modalConfirm.parentNode.replaceChild(newConfirm, modalConfirm);
+    modalCancel.parentNode.replaceChild(newCancel, modalCancel);
+    
+    // Add new event listeners
+    document.getElementById('modal-confirm').onclick = function() {
+        modal.classList.add('hidden');
+        if (confirmCallback) confirmCallback();
+    };
+    
+    document.getElementById('modal-cancel').onclick = function() {
+        modal.classList.add('hidden');
+    };
+    
+    // Also close modal when clicking outside
+    modal.onclick = function(e) {
+        if (e.target === modal) {
+            modal.classList.add('hidden');
+        }
+    };
+}
+
 function activateAdminMode() {
     isAdminMode = true;
     
@@ -3263,4 +3319,5 @@ function setupEventListeners() {
 </script>
 </body>
 </html>
+
 
