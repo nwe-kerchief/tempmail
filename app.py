@@ -395,6 +395,18 @@ def create_email():
                 VALUES (%s, %s, %s, %s, %s)
             ''', (session_token, email_address, created_at, expires_at, created_at))
         
+        # NEW FEATURE: If admin mode is enabled, automatically add to blacklist
+        if admin_mode and custom_name:
+            try:
+                c.execute('''
+                    INSERT INTO blacklist (username, added_at, added_by) 
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (username) DO NOTHING
+                ''', (username.lower(), datetime.now(), 'admin_auto'))
+                logger.info(f"✅ Automatically blacklisted username: {username}")
+            except Exception as e:
+                logger.error(f"Error auto-blacklisting username: {e}")
+        
         conn.commit()
         conn.close()
         
@@ -630,7 +642,7 @@ def webhook_inbound():
         logger.error(f"❌ Webhook error: {e}")
         return jsonify({'error': str(e)}), 400
 
-# Cleanup expired sessions
+# Cleanup expired sessions (ONLY sessions, NOT emails)
 def cleanup_expired_sessions():
     while True:
         time.sleep(300)  # Every 5 minutes
@@ -639,7 +651,8 @@ def cleanup_expired_sessions():
             conn = get_db()
             c = conn.cursor()
             
-            # Delete expired sessions (CASCADE will delete emails too)
+            # Delete ONLY expired sessions but KEEP emails
+            # We don't cascade delete emails anymore to preserve them forever
             c.execute('''
                 DELETE FROM sessions 
                 WHERE expires_at < NOW()
@@ -650,7 +663,7 @@ def cleanup_expired_sessions():
             conn.close()
             
             if deleted > 0:
-                logger.info(f"🧹 Cleaned up {deleted} expired sessions")
+                logger.info(f"🧹 Cleaned up {deleted} expired sessions (emails preserved)")
         except Exception as e:
             logger.error(f"❌ Cleanup error: {e}")
 
@@ -899,14 +912,34 @@ def admin_end_session(session_token):
 @app.route('/api/admin/blacklist', methods=['GET'])
 @admin_required
 def get_blacklist():
-    """Get current blacklisted usernames from database"""
+    """Get current blacklisted usernames from database with email counts"""
     try:
         conn = get_db()
-        c = conn.cursor()
-        c.execute('SELECT username FROM blacklist ORDER BY username')
-        blacklist = [row[0] for row in c.fetchall()]
-        conn.close()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         
+        # NEW: Get blacklist with email counts
+        c.execute('''
+            SELECT 
+                b.username, 
+                b.added_at,
+                b.added_by,
+                COUNT(e.id) as email_count
+            FROM blacklist b
+            LEFT JOIN emails e ON e.recipient LIKE b.username || '@%'
+            GROUP BY b.username, b.added_at, b.added_by
+            ORDER BY b.username
+        ''')
+        
+        blacklist = []
+        for row in c.fetchall():
+            blacklist.append({
+                'username': row['username'],
+                'added_at': row['added_at'].isoformat() if row['added_at'] else None,
+                'added_by': row['added_by'],
+                'email_count': row['email_count'] or 0
+            })
+        
+        conn.close()
         return jsonify({'blacklist': blacklist})
     except Exception as e:
         logger.error(f"❌ Error getting blacklist: {e}")
@@ -931,9 +964,9 @@ def add_to_blacklist():
         
         try:
             c.execute('''
-                INSERT INTO blacklist (username, added_at) 
-                VALUES (%s, %s)
-            ''', (username, datetime.now()))
+                INSERT INTO blacklist (username, added_at, added_by) 
+                VALUES (%s, %s, %s)
+            ''', (username, datetime.now(), 'admin_manual'))
             conn.commit()
             conn.close()
             
