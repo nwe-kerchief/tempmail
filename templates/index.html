@@ -1343,6 +1343,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 function endSession() {
+    // Save token BEFORE clearing
+    const savedEmail = currentEmail;
+    const savedToken = sessionToken;
+    
     // Clear frontend state immediately
     currentEmail = '';
     sessionToken = '';
@@ -1370,16 +1374,17 @@ function endSession() {
         timeUpdateInterval = null;
     }
     
-    // Try to notify backend, but don't wait for it
-    if (currentEmail && sessionToken) {
+    // Send saved token to backend (FIXED)
+    if (savedEmail && savedToken) {
         fetch(API_URL + '/api/session/end', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'X-Session-Token': savedToken  // FIXED: Send saved token
             },
             body: JSON.stringify({
-                session_token: sessionToken,
-                email_address: currentEmail
+                session_token: savedToken,      // FIXED: Use saved values
+                email_address: savedEmail
             })
         })
         .then(res => {
@@ -1395,14 +1400,12 @@ function endSession() {
             console.log('❌ Backend session end error (ignoring):', err);
         })
         .finally(() => {
-            // Always show success and reload
             showNotification('✅ Session ended successfully', 'success');
             setTimeout(() => {
                 window.location.reload();
             }, 1000);
         });
     } else {
-        // No session data, just reload
         showNotification('✅ Session cleared', 'success');
         setTimeout(() => {
             window.location.reload();
@@ -1722,25 +1725,58 @@ function endSessionBackend() {
     });
     
 
-        // End session button - FIXED
-        document.getElementById('end-session-btn').addEventListener('click', function() {
-            document.getElementById('custom-modal').classList.remove('hidden');
-            
-            // Set modal content
-            document.getElementById('modal-title').textContent = 'End Session';
-            document.getElementById('modal-message').textContent = 'Are you sure you want to end this session? All emails will be cleared.';
-        });
+       // End session button - SHOW BEAUTIFUL MODAL
+document.getElementById('end-session-btn').addEventListener('click', function() {
+    // Show your beautiful custom modal
+    document.getElementById('custom-modal').classList.remove('hidden');
+    
+    // Set the warning text
+    document.getElementById('modal-title').textContent = 'End Session';
+    document.getElementById('modal-message').textContent = 'Are you sure you want to end this session? All emails will be cleared.';
+});
 
-        // Modal confirm button
-        document.getElementById('modal-confirm').addEventListener('click', function() {
-            document.getElementById('custom-modal').classList.add('hidden');
-            endSession();
-        });
+// Beautiful modal CONFIRM button
+document.getElementById('modal-confirm').addEventListener('click', function() {
+    // Hide modal
+    document.getElementById('custom-modal').classList.add('hidden');
+    
+    // Call endSession WITHOUT refresh inside
+    const savedEmail = currentEmail;
+    const savedToken = sessionToken;
+    
+    // Clear UI immediately
+    currentEmail = '';
+    sessionToken = '';
+    localStorage.removeItem('tempMailSession');
+    document.getElementById('email-display').classList.add('hidden');
+    document.getElementById('end-session-btn').classList.add('hidden');
+    
+    // Stop intervals
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    if (timeUpdateInterval) clearInterval(timeUpdateInterval);
+    
+    // Tell backend
+    if (savedEmail && savedToken) {
+        fetch(API_URL + '/api/session/end', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Session-Token': savedToken
+            },
+            body: JSON.stringify({
+                session_token: savedToken,
+                email_address: savedEmail
+            })
+        }).catch(err => console.log('Backend error:', err));
+    }
+    
+    showNotification('✅ Session ended', 'success');
+});
 
-        // Modal cancel button
-        document.getElementById('modal-cancel').addEventListener('click', function() {
-            document.getElementById('custom-modal').classList.add('hidden');
-        });
+// Beautiful modal CANCEL button
+document.getElementById('modal-cancel').addEventListener('click', function() {
+    document.getElementById('custom-modal').classList.add('hidden');
+});
 
 
 
