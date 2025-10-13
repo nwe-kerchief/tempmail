@@ -204,6 +204,57 @@ word-wrap: break-word;
     background-color: #1d4ed8;
 }
 
+/* Email Content Viewer - Match index.html */
+.verification-code {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 12px;
+    font-size: 32px;
+    font-weight: bold;
+    text-align: center;
+    letter-spacing: 4px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.email-viewer-container {
+    background: rgba(31, 41, 55, 0.5);
+    border-radius: 12px;
+    padding: 20px;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.email-header {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 15px;
+    margin-bottom: 20px;
+}
+
+.email-header-item {
+    margin-bottom: 10px;
+}
+
+.email-header-label {
+    color: #9ca3af;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.email-header-value {
+    color: #ffffff;
+    font-size: 14px;
+}
+
+.email-body-content {
+    color: #e5e7eb;
+    line-height: 1.6;
+}
+
+
 /* Session item styling */
 .session-item {
 transition: all 0.2s ease;
@@ -751,29 +802,42 @@ function viewEmails(address) {
         
         details.innerHTML = '';
         
-        data.emails.forEach(email => {
-            var item = document.createElement('div');
-            item.className = 'bg-gray-800 p-3 md:p-4 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors';
-            
-            // Clean and truncate body for preview
-            var cleanBody = email.body ? email.body.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() : 'No content';
-            var previewBody = cleanBody.length > 100 ? cleanBody.substring(0, 100) + '...' : cleanBody;
-            
-            item.innerHTML = `
-                <div class="flex justify-between items-start mb-2">
-                    <div class="flex-1">
-                        <p class="text-white font-semibold text-xs md:text-sm truncate">${escapeHtml(email.sender || 'Unknown')}</p>
-                        <p class="text-gray-300 text-xs md:text-sm font-medium mt-1">${escapeHtml(email.subject || 'No subject')}</p>
-                        <p class="text-xs text-gray-400 mt-1">${formatTime(email.timestamp)}</p>
-                    </div>
-                    <button onclick="deleteEmail(${email.id})" class="text-red-400 hover:text-red-300 p-1 md:p-2 rounded transition-colors ml-2" title="Delete email">
-                        <i class="fas fa-trash text-xs md:text-sm"></i>
-                    </button>
-                </div>
-                <p class="text-xs text-gray-400 mt-2">${escapeHtml(previewBody)}</p>
-            `;
-            details.appendChild(item);
-        });
+        // Inside viewEmails function, replace the data.emails.forEach section:
+data.emails.forEach(email => {
+    var item = document.createElement('div');
+    item.className = 'bg-gray-800 p-3 md:p-4 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors cursor-pointer';
+    
+    // Make entire card clickable
+    item.onclick = function() {
+        viewFullEmail(email);
+    };
+    
+    // Clean and truncate body for preview
+    var cleanBody = email.body ? email.body.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() : 'No content';
+    var previewBody = cleanBody.length > 100 ? cleanBody.substring(0, 100) + '...' : cleanBody;
+    
+    item.innerHTML = `
+        <div class="flex justify-between items-start mb-2">
+            <div class="flex-1">
+                <p class="text-white font-semibold text-xs md:text-sm truncate">${escapeHtml(email.sender || 'Unknown')}</p>
+                <p class="text-gray-300 text-xs md:text-sm font-medium mt-1">${escapeHtml(email.subject || 'No subject')}</p>
+                <p class="text-xs text-gray-400 mt-1">${formatTime(email.timestamp)}</p>
+            </div>
+            <button onclick="event.stopPropagation(); deleteEmail(${email.id})" 
+                    class="text-red-400 hover:text-red-300 p-1 md:p-2 rounded transition-colors ml-2" 
+                    title="Delete email">
+                <i class="fas fa-trash text-xs md:text-sm"></i>
+            </button>
+        </div>
+        <p class="text-xs text-gray-400 mt-2">${escapeHtml(previewBody)}</p>
+        <div class="mt-2 text-xs text-blue-400 hover:text-blue-300">
+            <i class="fas fa-eye mr-1"></i>Click to view full email
+        </div>
+    `;
+    
+    details.appendChild(item);
+});
+
     })
     .catch(err => {
         console.error('Error loading emails:', err);
