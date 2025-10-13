@@ -301,9 +301,38 @@ def create_email():
         custom_name = data.get('name', '').strip()
         admin_mode = data.get('admin_mode', False)
         
-        # ... existing code ...
+        # Validate security headers
+        session_id = request.headers.get('X-Session-ID')
+        security_key = request.headers.get('X-Security-Key')
+        
+        if not session_id or not security_key:
+            logger.warning("Missing security headers in create request")
+        
+        # 🚨 FIX: Define username variable at the start
+        username = ""
+        
+        if custom_name:
+            username = custom_name.lower()
+            username = ''.join(c for c in username if c.isalnum() or c in '-_')
+            if not username:
+                return jsonify({'error': 'Invalid username', 'code': 'INVALID_USERNAME'}), 400
+            
+            # Skip blacklist check if admin mode is enabled
+            if not admin_mode and is_username_blacklisted(username):
+                return jsonify({
+                    'error': 'This username is reserved for the system owner. Please choose a different username.',
+                    'code': 'USERNAME_BLACKLISTED'
+                }), 403
+        else:
+            # Generate random name
+            male_name = random.choice(MALE_NAMES)
+            female_name = random.choice(FEMALE_NAMES)
+            three_digits = ''.join(random.choices(string.digits, k=3))
+            username = f"{male_name}{female_name}{three_digits}"  # 🚨 This should work now
         
         email_address = f"{username}@{DOMAIN}"
+        
+        # ... rest of your create_email code ...
         
         conn = get_db()
         c = conn.cursor()
@@ -484,6 +513,45 @@ def get_emails(email_address):
         logger.error(f"❌ Error getting emails: {e}")
         return jsonify({'error': str(e)}), 500
     
+@app.route('/api/debug/create-test', methods=['POST'])
+def debug_create_test():
+    """Test the create function step by step"""
+    try:
+        data = request.get_json() or {}
+        custom_name = data.get('name', '').strip()
+        admin_mode = data.get('admin_mode', False)
+        
+        steps = []
+        
+        # Step 1: Check custom_name
+        steps.append(f"Step 1 - custom_name: '{custom_name}'")
+        
+        # Step 2: Generate username
+        username = ""
+        if custom_name:
+            username = custom_name.lower()
+            username = ''.join(c for c in username if c.isalnum() or c in '-_')
+            steps.append(f"Step 2 - custom username: '{username}'")
+        else:
+            male_name = random.choice(MALE_NAMES)
+            female_name = random.choice(FEMALE_NAMES)
+            three_digits = ''.join(random.choices(string.digits, k=3))
+            username = f"{male_name}{female_name}{three_digits}"
+            steps.append(f"Step 2 - random username: '{username}'")
+        
+        # Step 3: Create email
+        email_address = f"{username}@{DOMAIN}"
+        steps.append(f"Step 3 - email_address: '{email_address}'")
+        
+        return jsonify({
+            'success': True,
+            'steps': steps,
+            'username': username,
+            'email_address': email_address
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e), 'steps': steps}), 500
 
 @app.route('/api/debug/error-test', methods=['POST'])
 def debug_error_test():
