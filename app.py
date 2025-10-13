@@ -832,7 +832,7 @@ def admin_delete_address(email_address):
 @app.route('/api/admin/sessions', methods=['GET'])
 @admin_required
 def admin_get_sessions():
-    """Get active sessions - FIXED"""
+    """Get active sessions"""
     try:
         with get_db() as conn:
             c = conn.cursor(cursor_factory=RealDictCursor)
@@ -848,7 +848,7 @@ def admin_get_sessions():
             sessions = []
             for row in c.fetchall():
                 sessions.append({
-                    'session_token': row['session_token'][:20] + '...',
+                    'session_token': row['session_token'],  # FULL TOKEN (no truncation)
                     'email': row['email_address'],
                     'created_at': str(row['created_at']),
                     'expires_at': str(row['expires_at']),
@@ -863,39 +863,34 @@ def admin_get_sessions():
 
 
 
+
 @app.route('/api/admin/session/<session_token>/end', methods=['POST'])
 @admin_required
 def admin_end_session(session_token):
-    """End a user session from admin panel"""
+    """End a user session from admin panel - FIXED"""
     try:
         with get_db() as conn:
             c = conn.cursor()
             
-            # Mark session as inactive
-            try:
-                c.execute('''
-                    UPDATE sessions
-                    SET is_active = FALSE
-                    WHERE session_token = %s
-                ''', (session_token,))
-            except:
-                c.execute('''
-                    UPDATE sessions
-                    SET expires_at = NOW()
-                    WHERE session_token = %s
-                ''', (session_token,))
+            # FORCEFULLY expire the session (works always)
+            c.execute('''
+                UPDATE sessions
+                SET expires_at = CURRENT_TIMESTAMP - INTERVAL '1 hour'
+                WHERE session_token = %s
+            ''', (session_token,))
             
             if c.rowcount == 0:
                 return jsonify({'error': 'Session not found'}), 404
             
             conn.commit()
         
-        logger.info(f"✅ Admin ended session: {session_token}")
+        logger.info(f"✅ Admin ended session: {session_token[:10]}...")
         return jsonify({'success': True, 'message': 'Session ended successfully'})
         
     except Exception as e:
         logger.error(f"❌ Error ending session from admin: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 # Blacklist management
 @app.route('/api/admin/blacklist', methods=['GET'])
