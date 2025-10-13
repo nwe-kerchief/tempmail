@@ -19,15 +19,9 @@ import re
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-MALE_NAMES = ['james', 'john', 'robert', 'michael', 'william', 'david', 'richard', 'joseph', 'thomas', 'charles', 
-              'daniel', 'matthew', 'anthony', 'mark', 'paul', 'steven', 'andrew', 'joshua', 'kevin', 'brian',
-              'george', 'kenneth', 'edward', 'ryan', 'jacob', 'nicholas', 'tyler', 'samuel', 'benjamin', 'alexander']
-
-FEMALE_NAMES = ['mary', 'patricia', 'jennifer', 'linda', 'elizabeth', 'barbara', 'susan', 'jessica', 'sarah', 'karen',
-                'nancy', 'lisa', 'betty', 'margaret', 'sandra', 'ashley', 'kimberly', 'emily', 'donna', 'michelle',
-                'dorothy', 'carol', 'amanda', 'melissa', 'deborah', 'stephanie', 'rebecca', 'sharon', 'laura', 'grace']
-
-# Initial blacklist - will be stored in database
+# Configuration
+MALE_NAMES = ['james', 'john', 'robert', 'michael', 'william', 'david', 'richard', 'joseph', 'thomas', 'charles']
+FEMALE_NAMES = ['mary', 'patricia', 'jennifer', 'linda', 'elizabeth', 'barbara', 'susan', 'jessica', 'sarah', 'karen']
 INITIAL_BLACKLIST = ['ammz', 'admin', 'owner', 'root', 'system', 'az', 'c']
 
 app = Flask(__name__)
@@ -38,13 +32,9 @@ APP_PASSWORD = os.getenv('APP_PASSWORD', 'admin123')
 DOMAIN = os.getenv('DOMAIN', 'aungmyomyatzaw.online')
 DATABASE_URL = os.getenv('DATABASE_URL')
 
-# Database connection helper
+# Database connection
 def get_db():
-    try:
-        return psycopg2.connect(DATABASE_URL, sslmode='require')
-    except Exception as e:
-        logger.error(f"Database connection error: {e}")
-        raise
+    return psycopg2.connect(DATABASE_URL, sslmode='require')
 
 def init_db():
     try:
@@ -64,7 +54,8 @@ def init_db():
             )
         ''')
 
-        c.execute("""
+        # Emails table
+        c.execute('''
             CREATE TABLE IF NOT EXISTS emails (
                 id SERIAL PRIMARY KEY,
                 recipient TEXT NOT NULL,
@@ -75,7 +66,7 @@ def init_db():
                 received_at TIMESTAMP NOT NULL,
                 session_token TEXT
             )
-        """)
+        ''')
         
         # Blacklist table
         c.execute('''
@@ -98,28 +89,20 @@ def init_db():
             except Exception as e:
                 logger.warning(f"Could not insert blacklist user {username}: {e}")
         
-        # Indexes for performance
-        indexes = [
-            'CREATE INDEX IF NOT EXISTS idx_recipient ON emails(recipient)',
-            'CREATE INDEX IF NOT EXISTS idx_session ON emails(session_token)',
-            'CREATE INDEX IF NOT EXISTS idx_received_at ON emails(received_at)',
-            'CREATE INDEX IF NOT EXISTS idx_email_address ON sessions(email_address)',
-            'CREATE INDEX IF NOT EXISTS idx_is_active ON sessions(is_active)',
-            'CREATE INDEX IF NOT EXISTS idx_blacklist_username ON blacklist(username)'
-        ]
-        
-        for index_sql in indexes:
-            try:
-                c.execute(index_sql)
-            except Exception as e:
-                logger.warning(f"Could not create index: {e}")
+        # Create indexes
+        c.execute('CREATE INDEX IF NOT EXISTS idx_recipient ON emails(recipient)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_session ON emails(session_token)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_received_at ON emails(received_at)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_email_address ON sessions(email_address)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_is_active ON sessions(is_active)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_blacklist_username ON blacklist(username)')
         
         conn.close()
         logger.info("✅ Database initialized successfully")
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
 
-# Admin required decorator
+# Admin decorator
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -128,10 +111,11 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# Initialize database
 init_db()
 
 def is_username_blacklisted(username):
-    """Check if username is blacklisted in database"""
+    """Check if username is blacklisted"""
     try:
         conn = get_db()
         c = conn.cursor()
@@ -143,146 +127,67 @@ def is_username_blacklisted(username):
         logger.error(f"Error checking blacklist: {e}")
         return username.lower() in INITIAL_BLACKLIST
 
-def extract_content_from_mime(msg):
-    """Extract content from MIME message"""
-    html_content = None
-    text_content = None
-    
-    if msg.is_multipart():
-        for part in msg.walk():
-            content_type = part.get_content_type()
-            content_disposition = str(part.get("Content-Disposition", ""))
-            
-            # Skip attachments
-            if "attachment" in content_disposition:
-                continue
-            
-            try:
-                payload = part.get_payload(decode=True)
-                if payload:
-                    decoded = payload.decode('utf-8', errors='ignore')
-                    
-                    if content_type == 'text/html' and not html_content:
-                        html_content = decoded
-                    elif content_type == 'text/plain' and not text_content:
-                        text_content = decoded
-            except Exception as e:
-                logger.warning(f"Failed to decode part: {e}")
-                continue
-    else:
-        payload = msg.get_payload(decode=True)
-        if payload:
-            decoded = payload.decode('utf-8', errors='ignore')
-            if msg.get_content_type() == 'text/html':
-                html_content = decoded
-            else:
-                text_content = decoded
-    
-    return html_content or text_content
-
-def clean_raw_email(raw_body):
-    """Clean raw email body by removing headers"""
-    header_patterns = [
-        'Received:', 'Received-SPF:', 'ARC-Seal:', 'ARC-Message-Signature:', 
-        'ARC-Authentication-Results:', 'DKIM-Signature:', 'Authentication-Results:',
-        'Return-Path:', 'Delivered-To:', 'X-', 'Message-ID:', 'Date:', 
-        'MIME-Version:', 'Content-Type:', 'Content-Transfer-Encoding:',
-        'Content-ID:', 'Reply-To:', 'List-', 'Precedence:'
-    ]
-    
-    lines = raw_body.split('\n')
-    clean_lines = []
-    skip_mode = True
-    empty_line_count = 0
-    
-    for line in lines:
-        stripped = line.strip()
-        
-        if stripped == '':
-            empty_line_count += 1
-            if empty_line_count >= 2:
-                skip_mode = False
-            continue
-        else:
-            empty_line_count = 0
-        
-        is_header = False
-        for pattern in header_patterns:
-            if stripped.startswith(pattern) or (skip_mode and ':' in stripped[:50]):
-                is_header = True
-                break
-        
-        if skip_mode and (line.startswith(' ') or line.startswith('\t')):
-            is_header = True
-        
-        if not is_header:
-            skip_mode = False
-        
-        if not skip_mode and not is_header:
-            clean_lines.append(line)
-    
-    return '\n'.join(clean_lines).strip()
-
-def parse_email_body(raw_body):
-    """Parse MIME email and extract clean HTML/text"""
-    try:
-        # If it's already clean HTML/text, return as is
-        if '<html' in raw_body.lower() or '<body' in raw_body.lower():
-            return raw_body
-        
-        if 'Content-Type:' in raw_body:
-            msg = email.message_from_string(raw_body, policy=policy.default)
-            content = extract_content_from_mime(msg)
-            if content:
-                return content
-        
-        return clean_raw_email(raw_body)
-        
-    except Exception as e:
-        logger.error(f"Email parsing error: {e}")
-        return clean_raw_email(raw_body)
-
 def validate_session(email_address, session_token):
-    """Validate if session is valid - IMPROVED VERSION"""
+    """Validate session token"""
     try:
         conn = get_db()
         c = conn.cursor()
         
-        # Check if session exists and is active
         c.execute('''
-            SELECT session_token, expires_at 
-            FROM sessions 
+            SELECT session_token FROM sessions 
             WHERE email_address = %s AND session_token = %s 
-            AND expires_at > NOW()
+            AND expires_at > NOW() AND is_active = TRUE
         ''', (email_address, session_token))
         
         session_data = c.fetchone()
         conn.close()
         
         if not session_data:
-            logger.warning(f"❌ Invalid session for {email_address}")
             return False, "Invalid or expired session"
         
-        # Update last activity
-        try:
-            conn = get_db()
-            c = conn.cursor()
-            c.execute('''
-                UPDATE sessions 
-                SET last_activity = NOW() 
-                WHERE session_token = %s
-            ''', (session_token,))
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            logger.warning(f"Error updating session activity: {e}")
-        
         return True, "Valid session"
-        
     except Exception as e:
         logger.error(f"Session validation error: {e}")
         return False, str(e)
-      
+
+def clean_email_body(raw_body):
+    """Clean and extract email content"""
+    try:
+        # Remove headers and footers
+        lines = raw_body.split('\n')
+        clean_lines = []
+        in_body = False
+        
+        for line in lines:
+            stripped = line.strip()
+            
+            # Skip empty lines at start
+            if not in_body and not stripped:
+                continue
+                
+            # Start capturing after headers
+            if not in_body and (stripped.startswith('Content-') or '<html' in stripped.lower() or stripped and ':' not in stripped):
+                in_body = True
+                
+            if in_body:
+                clean_lines.append(line)
+        
+        clean_body = '\n'.join(clean_lines)
+        
+        # Remove HTML tags if present but keep content
+        if '<' in clean_body and '>' in clean_body:
+            clean_body = re.sub(r'<[^>]+>', ' ', clean_body)
+        
+        # Clean up whitespace
+        clean_body = re.sub(r'\s+', ' ', clean_body).strip()
+        
+        return clean_body if clean_body else "No readable content found"
+        
+    except Exception as e:
+        logger.error(f"Error cleaning email body: {e}")
+        return raw_body
+
+# Routes
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -295,32 +200,23 @@ def get_domains():
 def create_email():
     try:
         data = request.get_json() or {}
-        custom_name = data.get('name', '').strip()
+        custom_name = data.get('name', '').strip().lower()
         admin_mode = data.get('admin_mode', False)
         
-        # Validate security headers
-        session_id = request.headers.get('X-Session-ID')
-        security_key = request.headers.get('X-Security-Key')
-        
-        if not session_id or not security_key:
-            logger.warning("Missing security headers in create request")
-        
-        username = ""
-        
+        # Generate username
         if custom_name:
-            username = custom_name.lower()
-            username = ''.join(c for c in username if c.isalnum() or c in '-_')
+            username = ''.join(c for c in custom_name if c.isalnum() or c in '-_')
             if not username:
                 return jsonify({'error': 'Invalid username', 'code': 'INVALID_USERNAME'}), 400
             
-            # Skip blacklist check if admin mode is enabled
+            # Check blacklist unless admin mode
             if not admin_mode and is_username_blacklisted(username):
                 return jsonify({
-                    'error': 'This username is reserved for the system owner. Please choose a different username.',
+                    'error': 'This username is reserved. Please choose a different username.',
                     'code': 'USERNAME_BLACKLISTED'
                 }), 403
         else:
-            # Generate random name
+            # Generate random username
             male_name = random.choice(MALE_NAMES)
             female_name = random.choice(FEMALE_NAMES)
             three_digits = ''.join(random.choices(string.digits, k=3))
@@ -331,55 +227,35 @@ def create_email():
         conn = get_db()
         c = conn.cursor()
         
-        # 🚨 FORCE END ALL SESSIONS for this email (MORE AGGRESSIVE)
-        try:
-            # Method 1: Delete all sessions for this email
-            c.execute('DELETE FROM sessions WHERE email_address = %s', (email_address,))
-            
-            # Method 2: Set expires_at to past for any remaining
-            c.execute('''
-                UPDATE sessions 
-                SET expires_at = NOW() - INTERVAL '1 hour'
-                WHERE email_address = %s
-            ''', (email_address,))
-            
-        except Exception as e:
-            logger.warning(f"Error ending existing sessions: {e}")
+        # End any existing sessions for this email
+        c.execute('DELETE FROM sessions WHERE email_address = %s', (email_address,))
         
-        # Create session token
+        # Create new session
         session_token = secrets.token_urlsafe(32)
         created_at = datetime.now()
         expires_at = created_at + timedelta(hours=1)
         
-        # Insert new session
-        try:
-            c.execute('''
-                INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity, is_active)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            ''', (session_token, email_address, created_at, expires_at, created_at, True))
-        except Exception as e:
-            logger.warning(f"Error with is_active column, falling back: {e}")
-            c.execute('''
-                INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity)
-                VALUES (%s, %s, %s, %s, %s)
-            ''', (session_token, email_address, created_at, expires_at, created_at))
+        c.execute('''
+            INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity, is_active)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        ''', (session_token, email_address, created_at, expires_at, created_at, True))
         
-        # NEW FEATURE: If admin mode is enabled AND custom name is provided, add to blacklist
+        # Auto-blacklist if admin mode with custom name
         if admin_mode and custom_name:
             try:
                 c.execute('''
                     INSERT INTO blacklist (username, added_at, added_by) 
                     VALUES (%s, %s, %s)
                     ON CONFLICT (username) DO NOTHING
-                ''', (username.lower(), datetime.now(), 'admin_auto'))
-                logger.info(f"✅ Automatically blacklisted username: {username}")
+                ''', (username, datetime.now(), 'admin_auto'))
+                logger.info(f"✅ Auto-blacklisted: {username}")
             except Exception as e:
-                logger.error(f"Error auto-blacklisting username: {e}")
+                logger.error(f"Error auto-blacklisting: {e}")
         
         conn.commit()
         conn.close()
         
-        logger.info(f"✅ Created email: {email_address} (admin_mode: {admin_mode})")
+        logger.info(f"✅ Created email: {email_address}")
         
         return jsonify({
             'email': email_address,
@@ -390,7 +266,7 @@ def create_email():
     except Exception as e:
         logger.error(f"❌ Error creating email: {e}")
         return jsonify({'error': 'Failed to create session', 'code': 'SERVER_ERROR'}), 500
-      
+
 @app.route('/api/session/end', methods=['POST'])
 def end_session():
     try:
@@ -404,58 +280,25 @@ def end_session():
         conn = get_db()
         c = conn.cursor()
         
-        # First check if session exists
+        # Mark session as inactive
         c.execute('''
-            SELECT session_token FROM sessions 
+            UPDATE sessions 
+            SET is_active = FALSE 
             WHERE session_token = %s AND email_address = %s
         ''', (session_token, email_address))
-        
-        session_exists = c.fetchone()
-        
-        if not session_exists:
-            conn.close()
-            return jsonify({'error': 'Session not found'}), 404
-        
-        # FIX: Only mark session as inactive, NEVER delete emails
-        try:
-            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
-            has_is_active = c.fetchone() is not None
-            
-            if has_is_active:
-                c.execute('''
-                    UPDATE sessions 
-                    SET is_active = FALSE 
-                    WHERE session_token = %s AND email_address = %s
-                ''', (session_token, email_address))
-            else:
-                # If is_active column doesn't exist, just update expires_at to now
-                c.execute('''
-                    UPDATE sessions 
-                    SET expires_at = NOW()
-                    WHERE session_token = %s AND email_address = %s
-                ''', (session_token, email_address))
-        except Exception as e:
-            logger.warning(f"Error in session end logic: {e}")
-            # Fallback to updating expires_at
-            c.execute('''
-                UPDATE sessions 
-                SET expires_at = NOW()
-                WHERE session_token = %s AND email_address = %s
-            ''', (session_token, email_address))
         
         conn.commit()
         conn.close()
         
-        logger.info(f"✅ Session ended for: {email_address} (emails preserved)")
-        return jsonify({'success': True, 'message': 'Session ended successfully'})
+        logger.info(f"✅ Session ended: {email_address}")
+        return jsonify({'success': True, 'message': 'Session ended'})
         
     except Exception as e:
         logger.error(f"❌ Error ending session: {e}")
         return jsonify({'error': 'Failed to end session'}), 500
-    
+
 @app.route('/api/emails/<email_address>', methods=['GET'])
 def get_emails(email_address):
-    """Get emails for a specific email address"""
     try:
         session_token = request.headers.get('X-Session-Token', '')
         
@@ -467,7 +310,6 @@ def get_emails(email_address):
         conn = get_db()
         c = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Get emails for this session
         c.execute('''
             SELECT id, sender, subject, body, timestamp, received_at
             FROM emails 
@@ -481,7 +323,7 @@ def get_emails(email_address):
                 'id': row['id'],
                 'sender': row['sender'],
                 'subject': row['subject'],
-                'body': row['body'],
+                'body': clean_email_body(row['body']),
                 'timestamp': row['timestamp'],
                 'received_at': row['received_at'].isoformat() if row['received_at'] else None
             })
@@ -492,221 +334,62 @@ def get_emails(email_address):
     except Exception as e:
         logger.error(f"❌ Error getting emails: {e}")
         return jsonify({'error': str(e)}), 500
-    
-@app.route('/api/debug/create-test', methods=['POST'])
-def debug_create_test():
-    """Test the create function step by step"""
-    try:
-        data = request.get_json() or {}
-        custom_name = data.get('name', '').strip()
-        admin_mode = data.get('admin_mode', False)
-        
-        steps = []
-        
-        # Step 1: Check custom_name
-        steps.append(f"Step 1 - custom_name: '{custom_name}'")
-        
-        # Step 2: Generate username
-        username = ""
-        if custom_name:
-            username = custom_name.lower()
-            username = ''.join(c for c in username if c.isalnum() or c in '-_')
-            steps.append(f"Step 2 - custom username: '{username}'")
-        else:
-            male_name = random.choice(MALE_NAMES)
-            female_name = random.choice(FEMALE_NAMES)
-            three_digits = ''.join(random.choices(string.digits, k=3))
-            username = f"{male_name}{female_name}{three_digits}"
-            steps.append(f"Step 2 - random username: '{username}'")
-        
-        # Step 3: Create email
-        email_address = f"{username}@{DOMAIN}"
-        steps.append(f"Step 3 - email_address: '{email_address}'")
-        
-        return jsonify({
-            'success': True,
-            'steps': steps,
-            'username': username,
-            'email_address': email_address
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e), 'steps': steps}), 500
-
-@app.route('/api/debug/error-test', methods=['POST'])
-def debug_error_test():
-    """Test if create endpoint works"""
-    try:
-        # Test database connection
-        conn = get_db()
-        c = conn.cursor()
-        c.execute('SELECT 1')
-        conn.close()
-        
-        # Test session creation
-        session_token = secrets.token_urlsafe(32)
-        email_address = "test@aungmyomyatzaw.online"
-        
-        return jsonify({
-            'success': True,
-            'database': 'working',
-            'session_token': session_token,
-            'test_email': email_address
-        })
-        
-    except Exception as e:
-        logger.error(f"Debug error: {e}")
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/webhook/inbound', methods=['POST'])
 def webhook_inbound():
     try:
-        json_data = request.get_json(force=True, silent=True)
+        json_data = request.get_json(force=True, silent=True) or {}
         
-        if not json_data:
-            return jsonify({'error': 'No JSON data'}), 400
-        
-        logger.info("📧 INCOMING EMAIL")
-        
-        recipient = json_data.get('to', 'unknown@unknown.com')
-        sender = json_data.get('from', 'unknown')
+        recipient = json_data.get('to', '')
+        sender = json_data.get('from', 'Unknown')
         subject = json_data.get('subject', 'No subject')
+        body = json_data.get('html_body') or json_data.get('plain_body', 'No content')
         
         # Clean sender
         if '<' in sender and '>' in sender:
             sender = sender[sender.find('<')+1:sender.find('>')]
         
-        if 'bounce' in sender.lower():
-            if '@' in sender:
-                domain_part = sender.split('@')[1]
-                if 'openai.com' in domain_part or 'mandrillapp.com' in domain_part:
-                    sender = 'ChatGPT'
-                elif 'afraid.org' in domain_part:
-                    sender = 'FreeDNS'
-                else:
-                    sender = 'Notification'
+        logger.info(f"📧 Received email: {sender} → {recipient}")
         
-        # Get body
-        body = json_data.get('html_body', None)
-        if not body or body.strip() == '':
-            body = json_data.get('plain_body', 'No content')
-        
-        recipient = recipient.strip()
-        sender = sender.strip()
-        subject = subject.strip()
-        body = body.strip()
-        
-        # Parse MIME if needed
-        if 'Content-Type:' in body and 'multipart' in body:
-            body = parse_email_body(body)
-        
-        # Clean headers
-        body = clean_raw_email(body)
-        
-        logger.info(f"  ✉️  From: {sender} → {recipient}")
-        logger.info(f"  📝 Subject: {subject}")
-        logger.info(f"  📄 Body: {len(body)} chars")
-        
-        # Store timestamps
-        received_at = datetime.now()
-        original_timestamp = json_data.get('timestamp', received_at.isoformat())
-        
-        # Find active session for this recipient
+        # Find active session
         conn = get_db()
         c = conn.cursor()
         
-        # Check if is_active column exists
-        try:
-            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
-            has_is_active = c.fetchone() is not None
-            
-            if has_is_active:
-                c.execute('''
-                    SELECT session_token 
-                    FROM sessions 
-                    WHERE email_address = %s AND expires_at > NOW() AND is_active = TRUE
-                    ORDER BY created_at DESC 
-                    LIMIT 1
-                ''', (recipient,))
-            else:
-                c.execute('''
-                    SELECT session_token 
-                    FROM sessions 
-                    WHERE email_address = %s AND expires_at > NOW()
-                    ORDER BY created_at DESC 
-                    LIMIT 1
-                ''', (recipient,))
-        except Exception as e:
-            logger.warning(f"Error finding session: {e}")
-            c.execute('''
-                SELECT session_token 
-                FROM sessions 
-                WHERE email_address = %s AND expires_at > NOW()
-                ORDER BY created_at DESC 
-                LIMIT 1
-            ''', (recipient,))
+        c.execute('''
+            SELECT session_token 
+            FROM sessions 
+            WHERE email_address = %s AND expires_at > NOW() AND is_active = TRUE
+            LIMIT 1
+        ''', (recipient,))
         
         session_data = c.fetchone()
         
         if session_data:
             session_token = session_data[0]
+            received_at = datetime.now()
             
             # Store email
             c.execute('''
                 INSERT INTO emails (recipient, sender, subject, body, timestamp, received_at, session_token)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ''', (recipient, sender, subject, body, original_timestamp, received_at, session_token))
+            ''', (recipient, sender, subject, body, received_at.isoformat(), received_at, session_token))
             
-            # Update session last_activity
-            c.execute('''
-                UPDATE sessions 
-                SET last_activity = %s 
-                WHERE session_token = %s
-            ''', (received_at, session_token))
+            # Update session activity
+            c.execute('UPDATE sessions SET last_activity = %s WHERE session_token = %s', (received_at, session_token))
             
             conn.commit()
-            conn.close()
-            
-            logger.info(f"✅ Email stored: {sender} → {recipient}")
-            return '', 204
+            logger.info(f"✅ Email stored: {recipient}")
         else:
-            conn.close()
             logger.warning(f"⚠️ No active session for {recipient}")
-            return '', 204
+        
+        conn.close()
+        return '', 204
         
     except Exception as e:
         logger.error(f"❌ Webhook error: {e}")
         return jsonify({'error': str(e)}), 400
 
-def cleanup_expired_sessions():
-    while True:
-        time.sleep(300)  # Every 5 minutes
-        try:
-            conn = get_db()
-            c = conn.cursor()
-            
-            # ONLY clean sessions, NEVER touch emails
-            c.execute("""
-                UPDATE sessions 
-                SET is_active = FALSE 
-                WHERE expires_at < NOW() AND is_active = TRUE
-            """)
-            
-            deleted = c.rowcount
-            conn.commit()
-            conn.close()
-            
-            if deleted > 0:
-                logger.info(f"🔄 Deactivated {deleted} expired sessions (emails preserved)")
-        except Exception as e:
-            logger.error(f"Cleanup error: {e}")
-
-# Start cleanup thread
-cleanup_thread = Thread(target=cleanup_expired_sessions, daemon=True)
-cleanup_thread.start()
-
-# Admin routes
-
+# Admin Routes
 @app.route('/admin')
 def admin_panel():
     return render_template('admin.html')
@@ -720,27 +403,6 @@ def admin_login():
         session['admin_authenticated'] = True
         return jsonify({'success': True})
     return jsonify({'success': False}), 401
-
-@app.route('/api/verify-admin', methods=['POST'])
-def verify_admin():
-    """Alternative endpoint for frontend admin verification"""
-    try:
-        data = request.get_json() or {}
-        password = data.get('password', '')
-        
-        if password == APP_PASSWORD:
-            session['admin_authenticated'] = True
-            return jsonify({'success': True})
-        return jsonify({'success': False, 'error': 'Invalid password'}), 401
-        
-    except Exception as e:
-        logger.error(f"Admin verification error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/admin/status', methods=['GET'])
-def admin_status():
-    """Check if user is admin authenticated"""
-    return jsonify({'authenticated': session.get('admin_authenticated', False)})
 
 @app.route('/api/admin/logout', methods=['POST'])
 @admin_required
@@ -761,10 +423,7 @@ def admin_stats():
         c.execute('SELECT COUNT(DISTINCT recipient) FROM emails')
         total_addresses = c.fetchone()[0]
         
-        c.execute('''
-            SELECT COUNT(*) FROM emails 
-            WHERE received_at > NOW() - INTERVAL '1 day'
-        ''')
+        c.execute("SELECT COUNT(*) FROM emails WHERE received_at > NOW() - INTERVAL '1 day'")
         recent_emails = c.fetchone()[0]
         
         conn.close()
@@ -795,16 +454,10 @@ def admin_addresses():
         
         addresses = []
         for row in c.fetchall():
-            if row['last_email']:
-                local_time = row['last_email'] + timedelta(hours=6, minutes=30)
-                last_email_str = local_time.isoformat()
-            else:
-                last_email_str = None
-                
             addresses.append({
                 'address': row['address'],
                 'count': row['count'],
-                'last_email': last_email_str
+                'last_email': row['last_email'].isoformat() if row['last_email'] else None
             })
         
         conn.close()
@@ -834,7 +487,7 @@ def admin_get_emails(email_address):
                 'id': row['id'],
                 'sender': row['sender'],
                 'subject': row['subject'],
-                'body': row['body'],
+                'body': clean_email_body(row['body']),
                 'received_at': row['received_at'].isoformat() if row['received_at'] else None,
                 'timestamp': row['timestamp']
             })
@@ -852,16 +505,13 @@ def admin_delete_email(email_id):
     try:
         conn = get_db()
         c = conn.cursor()
-        c.execute('DELETE FROM emails WHERE id = %s', (email_id,))  # 🚨 DELETES EMAIL
+        c.execute('DELETE FROM emails WHERE id = %s', (email_id,))
         conn.commit()
         conn.close()
-        
         return jsonify({'success': True})
-        
     except Exception as e:
         logger.error(f"❌ Admin delete email error: {e}")
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/api/admin/delete-address/<email_address>', methods=['DELETE'])
 @admin_required
@@ -872,9 +522,7 @@ def admin_delete_address(email_address):
         c.execute('DELETE FROM emails WHERE recipient = %s', (email_address,))
         conn.commit()
         conn.close()
-        
         return jsonify({'success': True})
-        
     except Exception as e:
         logger.error(f"❌ Admin delete address error: {e}")
         return jsonify({'error': str(e)}), 500
@@ -882,7 +530,6 @@ def admin_delete_address(email_address):
 @app.route('/api/admin/sessions', methods=['GET'])
 @admin_required
 def admin_get_sessions():
-    """Get all active sessions"""
     try:
         conn = get_db()
         c = conn.cursor(cursor_factory=RealDictCursor)
@@ -901,9 +548,7 @@ def admin_get_sessions():
                 'email': row['email_address'],
                 'created_at': row['created_at'].isoformat(),
                 'expires_at': row['expires_at'].isoformat(),
-                'last_activity': row['last_activity'].isoformat(),
-                'session_age_minutes': int((datetime.now() - row['created_at']).total_seconds() / 60),
-                'time_remaining_minutes': int((row['expires_at'] - datetime.now()).total_seconds() / 60)
+                'last_activity': row['last_activity'].isoformat()
             })
         
         conn.close()
@@ -913,56 +558,35 @@ def admin_get_sessions():
         logger.error(f"❌ Error fetching sessions: {e}")
         return jsonify({'error': str(e)}), 500
 
-# End session from admin panel
 @app.route('/api/admin/session/<session_token>/end', methods=['POST'])
 @admin_required
 def admin_end_session(session_token):
-    """End a user session from admin panel"""
     try:
         conn = get_db()
         c = conn.cursor()
-        
-        # Mark session as inactive
-        c.execute('''
-            UPDATE sessions 
-            SET is_active = FALSE 
-            WHERE session_token = %s
-        ''', (session_token,))
-        
-        if c.rowcount == 0:
-            conn.close()
-            return jsonify({'error': 'Session not found'}), 404
-        
+        c.execute('UPDATE sessions SET is_active = FALSE WHERE session_token = %s', (session_token,))
         conn.commit()
         conn.close()
-        
         logger.info(f"✅ Admin ended session: {session_token}")
-        return jsonify({'success': True, 'message': 'Session ended successfully'})
-        
+        return jsonify({'success': True})
     except Exception as e:
-        logger.error(f"❌ Error ending session from admin: {e}")
+        logger.error(f"❌ Error ending session: {e}")
         return jsonify({'error': str(e)}), 500
 
-# Blacklist endpoints with database persistence
+# Blacklist management
 @app.route('/api/admin/blacklist', methods=['GET'])
 @admin_required
 def get_blacklist():
-    """Get current blacklisted usernames from database"""
     try:
         conn = get_db()
         c = conn.cursor(cursor_factory=RealDictCursor)
-        
-        c.execute('''
-            SELECT username, added_at, added_by
-            FROM blacklist
-            ORDER BY username
-        ''')
+        c.execute('SELECT username, added_at, added_by FROM blacklist ORDER BY username')
         
         blacklist = []
         for row in c.fetchall():
             blacklist.append({
                 'username': row['username'],
-                'added_at': row['added_at'].isoformat() if row['added_at'] else None,
+                'added_at': row['added_at'].isoformat(),
                 'added_by': row['added_by']
             })
         
@@ -975,7 +599,6 @@ def get_blacklist():
 @app.route('/api/admin/blacklist', methods=['POST'])
 @admin_required
 def add_to_blacklist():
-    """Add username to blacklist in database"""
     try:
         data = request.get_json() or {}
         username = data.get('username', '').strip().lower()
@@ -990,16 +613,12 @@ def add_to_blacklist():
         c = conn.cursor()
         
         try:
-            c.execute('''
-                INSERT INTO blacklist (username, added_at, added_by) 
-                VALUES (%s, %s, %s)
-            ''', (username, datetime.now(), 'admin_manual'))
+            c.execute('INSERT INTO blacklist (username, added_at, added_by) VALUES (%s, %s, %s)', 
+                     (username, datetime.now(), 'admin_manual'))
             conn.commit()
             conn.close()
-            
             logger.info(f"✅ Added to blacklist: {username}")
             return jsonify({'success': True, 'message': f'Username {username} added to blacklist'})
-            
         except psycopg2.IntegrityError:
             conn.close()
             return jsonify({'error': 'Username already in blacklist'}), 409
@@ -1011,87 +630,39 @@ def add_to_blacklist():
 @app.route('/api/admin/blacklist/<username>', methods=['DELETE'])
 @admin_required
 def remove_from_blacklist(username):
-    """Remove username from blacklist in database"""
     try:
-        username = username.lower()
-        
         conn = get_db()
         c = conn.cursor()
         c.execute('DELETE FROM blacklist WHERE username = %s', (username,))
-        
-        if c.rowcount == 0:
-            conn.close()
-            return jsonify({'error': 'Username not found in blacklist'}), 404
-        
         conn.commit()
         conn.close()
-        
         logger.info(f"✅ Removed from blacklist: {username}")
         return jsonify({'success': True, 'message': f'Username {username} removed from blacklist'})
-        
     except Exception as e:
         logger.error(f"❌ Error removing from blacklist: {e}")
         return jsonify({'error': str(e)}), 500
-    
-@app.route('/api/admin/clear-sessions', methods=['POST'])
-@admin_required
-def admin_clear_sessions():
-    """Clear all admin-related sessions"""
-    try:
-        conn = get_db()
-        c = conn.cursor()
-        
-        # End all active sessions for admin usernames
-        admin_usernames = ['ammz', 'admin', 'owner', 'root', 'system', 'az', 'c']
-        
-        for username in admin_usernames:
-            email_pattern = f"{username}@%"
-            try:
-                c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
-                has_is_active = c.fetchone() is not None
-                
-                if has_is_active:
-                    c.execute('''
-                        UPDATE sessions 
-                        SET is_active = FALSE 
-                        WHERE email_address LIKE %s AND is_active = TRUE
-                    ''', (email_pattern,))
-                else:
-                    c.execute('''
-                        UPDATE sessions 
-                        SET expires_at = NOW()
-                        WHERE email_address LIKE %s AND expires_at > NOW()
-                    ''', (email_pattern,))
-            except Exception as e:
-                logger.warning(f"Error clearing admin session for {username}: {e}")
-        
-        conn.commit()
-        conn.close()
-        
-        logger.info("✅ All admin sessions cleared")
-        return jsonify({'success': True, 'message': 'Admin sessions cleared'})
-        
-    except Exception as e:
-        logger.error(f"❌ Error clearing admin sessions: {e}")
-        return jsonify({'error': str(e)}), 500
 
-@app.before_request
-def check_admin_session():
-    """Check and expire admin sessions automatically"""
-    if session.get('admin_authenticated'):
-        # Set session to expire after 1 hour of inactivity
-        session.permanent = True
-        app.permanent_session_lifetime = timedelta(hours=1)
+# Cleanup expired sessions
+def cleanup_expired_sessions():
+    while True:
+        time.sleep(300)  # Every 5 minutes
+        try:
+            conn = get_db()
+            c = conn.cursor()
+            c.execute("UPDATE sessions SET is_active = FALSE WHERE expires_at < NOW() AND is_active = TRUE")
+            deleted = c.rowcount
+            conn.commit()
+            conn.close()
+            if deleted > 0:
+                logger.info(f"🔄 Deactivated {deleted} expired sessions")
+        except Exception as e:
+            logger.error(f"Cleanup error: {e}")
 
-# Error handlers
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({'error': 'Resource not found'}), 404
+# Start cleanup thread
+cleanup_thread = Thread(target=cleanup_expired_sessions, daemon=True)
+cleanup_thread.start()
 
-@app.errorhandler(500)
-def internal_error(error):
-    return jsonify({'error': 'Internal server error'}), 500
-
+# Health check
 @app.route('/health')
 def health():
     return jsonify({
@@ -1104,4 +675,3 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
-
