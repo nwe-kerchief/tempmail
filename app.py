@@ -73,8 +73,7 @@ def init_db():
                 body TEXT,
                 timestamp TEXT,
                 received_at TIMESTAMP NOT NULL,
-                session_token TEXT,
-                (session_token) ON DELETE SET NULL
+                session_token TEXT
             )
         """)
         
