@@ -319,6 +319,21 @@ word-wrap: break-word;
 </head>
 <body class="text-gray-100 min-h-screen p-2 md:p-4">
 
+<!-- Custom Modal Structure -->
+<div id="custom-modal" class="modal-overlay hidden">
+<div class="modal-content">
+<div class="text-center mb-4">
+<i class="fas fa-exclamation-triangle text-3xl text-yellow-400 mb-3"></i>
+<h3 class="text-xl font-bold text-white mb-2" id="modal-title">Confirm Action</h3>
+<p class="text-gray-300" id="modal-message">Are you sure you want to proceed?</p>
+</div>
+<div class="modal-buttons">
+<button id="modal-cancel" class="modal-btn modal-btn-cancel">Cancel</button>
+<button id="modal-confirm" class="modal-btn modal-btn-confirm">Confirm</button>
+</div>
+</div>
+</div>
+
 <div class="h-fit mb-2">
 <div class="bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 text-white py-2 px-4 rounded-lg shadow-lg">
 <marquee class="text-sm md:text-base font-medium">
