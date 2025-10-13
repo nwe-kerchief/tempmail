@@ -483,7 +483,11 @@ class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 <div class="h-fit mt-2 md:mt-4">
 <div class="bg-gradient-to-r from-green-600 via-teal-600 to-blue-600 text-white py-2 px-4 rounded-lg shadow-lg border border-green-400">
 <marquee class="text-xs md:text-base font-medium">
-    🔒 Secure & Private • All Rights Reserved by <b class="text-yellow-300">AMMZ</b> • Built with Advanced AI Technology 🚀
+    🔒 Secure & Private • All Rights Reserved by 
+    <b class="text-yellow-300 cursor-pointer hover:underline transition-all duration-200" 
+       id="ammz-door" 
+       title="Click to enter Admin Mode">AMMZ</b> 
+    • Built with Advanced AI Technology 🚀
 </marquee>
 </div>
 </div>
@@ -1260,6 +1264,39 @@ function startTimeUpdate() {
     timeUpdateInterval = setInterval(updateEmailTimes, 1000); // Update times every second
 }
 
+// Debug function
+function debugAMMZClick() {
+    console.log('AMMZ door debug:');
+    console.log('1. Looking for AMMZ element...');
+    
+    const ammzElements = document.querySelectorAll('.text-yellow-300');
+    console.log('Found elements with text-yellow-300:', ammzElements.length);
+    
+    ammzElements.forEach((el, index) => {
+        console.log(`Element ${index}:`, el.textContent, 'in marquee?', !!el.closest('marquee'));
+        if (el.textContent === 'AMMZ' && el.closest('marquee')) {
+            console.log('✅ Found AMMZ door element!');
+            el.style.cursor = 'pointer';
+            el.title = 'Click to enter Admin Mode';
+            el.classList.add('hover:underline', 'transition-all', 'duration-200');
+            
+            // Add click event directly
+            el.addEventListener('click', function(e) {
+                console.log('🎯 AMMZ door clicked!');
+                e.preventDefault();
+                e.stopPropagation();
+                toggleAdminMode();
+            });
+        }
+    });
+}
+
+// Call debug on load
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(debugAMMZClick, 1000); // Wait a bit for marquee to load
+});
+
+
 function endSession() {
     // Clear frontend state immediately
     currentEmail = '';
@@ -1594,6 +1631,16 @@ function setupEventListeners() {
                 endSession();
             }
         );
+    });
+
+    document.addEventListener('click', function(e) {
+        // Check if clicked element is the AMMZ text in the marquee
+        if (e.target.classList.contains('text-yellow-300') && 
+            e.target.textContent === 'AMMZ' &&
+            e.target.closest('marquee')) {
+            e.preventDefault();
+            toggleAdminMode();
+        }
     });
     
     // Refresh button
