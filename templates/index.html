@@ -1718,16 +1718,21 @@ function endSessionBackend() {
         });
     });
     
-    // End session button
+
+  // ─── SHOW CUSTOM MODAL ───
     document.getElementById('end-session-btn').addEventListener('click', function() {
-        showModal(
-            'End Session',
-            'Are you sure you want to end this session? All emails will be cleared.',
-            function() {
-                endSession();
-            }
-        );
+        document.getElementById('custom-confirm-modal').classList.remove('hidden');
+    }); 
+
+        // ─── CUSTOM MODAL HANDLERS ───
+    document.getElementById('modal-confirm-btn').addEventListener('click', function() {
+        endSession();
+        document.getElementById('custom-confirm-modal').classList.add('hidden');
     });
+    document.getElementById('modal-cancel-btn').addEventListener('click', function() {
+        document.getElementById('custom-confirm-modal').classList.add('hidden');
+    });
+
 
     document.addEventListener('click', function(e) {
         // Check if clicked element is the AMMZ text in the marquee
@@ -1855,5 +1860,6 @@ function clearSession() {
 </script>
 </body>
 </html>
+
 
 
