@@ -1735,27 +1735,31 @@ document.getElementById('end-session-btn').addEventListener('click', function() 
     document.getElementById('modal-message').textContent = 'Are you sure you want to end this session? All emails will be cleared.';
 });
 
-// Beautiful modal CONFIRM button
+// Modal confirm button - FIXED FUNCTION
 document.getElementById('modal-confirm').addEventListener('click', function() {
     // Hide modal
     document.getElementById('custom-modal').classList.add('hidden');
     
-    // Call endSession WITHOUT refresh inside
+    // Save values BEFORE clearing
     const savedEmail = currentEmail;
     const savedToken = sessionToken;
     
-    // Clear UI immediately
+    // Clear UI and session data
     currentEmail = '';
     sessionToken = '';
+    sessionStartTime = null;
     localStorage.removeItem('tempMailSession');
+    
+    // Reset UI
     document.getElementById('email-display').classList.add('hidden');
     document.getElementById('end-session-btn').classList.add('hidden');
+    document.getElementById('email-list').innerHTML = '';
     
     // Stop intervals
     if (autoRefreshInterval) clearInterval(autoRefreshInterval);
     if (timeUpdateInterval) clearInterval(timeUpdateInterval);
     
-    // Tell backend
+    // Tell backend to end session
     if (savedEmail && savedToken) {
         fetch(API_URL + '/api/session/end', {
             method: 'POST',
@@ -1772,6 +1776,7 @@ document.getElementById('modal-confirm').addEventListener('click', function() {
     
     showNotification('✅ Session ended', 'success');
 });
+
 
 // Beautiful modal CANCEL button
 document.getElementById('modal-cancel').addEventListener('click', function() {
@@ -1870,21 +1875,6 @@ function debugAMMZClick() {
         expires: sessionExpireTime
     });
 }
-
-// FIX: Better end session 
-document.getElementById('end-session-btn').addEventListener('click', function() {
-    if (confirm('⚠️ End session?')) {
-        fetch('/api/session/end', {
-            method: 'POST',
-            headers: { 'X-Session-Token': sessionToken }
-        }).then(() => {
-            clearSession();
-            showNotification('✅ Session ended', 'success');
-        }).catch(() => {
-            clearSession(); // Clear anyway
-        });
-    }
-});
 
 // FIX: Better session clearing
 function clearSession() {
