@@ -499,7 +499,7 @@ def create_email():
         logger.error(f"❌ Error creating email: {e}")
         return jsonify({'error': 'Failed to create session', 'code': 'SERVER_ERROR'}), 500
 
-@@app.route('/api/emails/<email_address>', methods=['GET'])
+@app.route('/api/emails/<email_address>', methods=['GET'])
 def get_emails(email_address):
     session_token = request.headers.get('X-Session-Token', '')
     
@@ -1180,5 +1180,6 @@ if __name__ == '__main__':
     finally:
         if db_pool:
             db_pool.closeall()
+
 
 
