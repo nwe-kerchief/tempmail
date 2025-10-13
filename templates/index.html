@@ -1811,7 +1811,49 @@ document.addEventListener('visibilitychange', function() {
     }
 });
 }
+// FIX: Missing function
+function debugAMMZClick() {
+    console.log('AMMZ Debug:', {
+        email: currentEmail,
+        token: sessionToken ? 'Present' : 'Missing',
+        expires: sessionExpireTime
+    });
+}
+
+// FIX: Better end session 
+document.getElementById('end-session-btn').addEventListener('click', function() {
+    if (confirm('⚠️ End session?')) {
+        fetch('/api/session/end', {
+            method: 'POST',
+            headers: { 'X-Session-Token': sessionToken }
+        }).then(() => {
+            clearSession();
+            showNotification('✅ Session ended', 'success');
+        }).catch(() => {
+            clearSession(); // Clear anyway
+        });
+    }
+});
+
+// FIX: Better session clearing
+function clearSession() {
+    currentEmail = '';
+    sessionToken = '';
+    sessionExpireTime = null;
+    localStorage.removeItem('tempMailSession');
+    
+    // Reset UI
+    document.getElementById('email-display').classList.add('hidden');
+    document.getElementById('end-session-btn').classList.add('hidden');
+    document.getElementById('username-input').value = '';
+    document.getElementById('domain-select').value = '';
+    
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    if (timeUpdateInterval) clearInterval(timeUpdateInterval);
+}
+
 </script>
 </body>
 </html>
+
 
