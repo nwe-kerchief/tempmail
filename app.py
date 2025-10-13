@@ -286,35 +286,6 @@ def validate_session(email_address, session_token):
         return False, str(e)
     
 
-@app.route('/api/session/heartbeat', methods=['POST'])
-def session_heartbeat():
-    try:
-        session_token = request.headers.get('X-Session-Token', '')
-        data = request.get_json() or {}
-        email_address = data.get('email_address', '')
-        
-        if not session_token or not email_address:
-            return jsonify({'error': 'Missing data'}), 400
-        
-        conn = get_db()
-        c = conn.cursor()
-        
-        # Update last_activity to keep session alive
-        c.execute('''
-            UPDATE sessions 
-            SET last_activity = NOW() 
-            WHERE session_token = %s AND email_address = %s AND is_active = TRUE
-        ''', (session_token, email_address))
-        
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'success': True})
-        
-    except Exception as e:
-        logger.error(f"Heartbeat error: {e}")
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -511,6 +482,32 @@ def get_emails(email_address):
         
     except Exception as e:
         logger.error(f"❌ Error getting emails: {e}")
+        return jsonify({'error': str(e)}), 500
+    
+
+@app.route('/api/debug/error-test', methods=['POST'])
+def debug_error_test():
+    """Test if create endpoint works"""
+    try:
+        # Test database connection
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('SELECT 1')
+        conn.close()
+        
+        # Test session creation
+        session_token = secrets.token_urlsafe(32)
+        email_address = "test@aungmyomyatzaw.online"
+        
+        return jsonify({
+            'success': True,
+            'database': 'working',
+            'session_token': session_token,
+            'test_email': email_address
+        })
+        
+    except Exception as e:
+        logger.error(f"Debug error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/webhook/inbound', methods=['POST'])
