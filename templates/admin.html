@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -375,51 +376,67 @@ var selectedAddress = null;
 var autoRefreshInterval = null;
 var DOMAIN = 'aungmyomyatzaw.online';
 
-// Blacklist management functions - FIXED: Now uses database
+// Blacklist management functions - FIXED display issue
 function loadBlacklist() {
-    fetch(API_URL + '/api/admin/blacklist')
-    .then(res => {
-        if (res.status === 401) {
-            location.reload();
-            return;
-        }
-        return res.json();
-    })
-    .then(data => {
-        var blacklistEl = document.getElementById('blacklist-list');
-        
-        if (!data || data.error) {
-            blacklistEl.innerHTML = '<p class="text-red-400 text-center py-8">Error loading blacklist</p>';
-            return;
-        }
-        
-        if (!data.blacklist || data.blacklist.length === 0) {
-            blacklistEl.innerHTML = '<p class="text-gray-400 text-center py-8">No blacklisted usernames</p>';
-            return;
-        }
-        
-        blacklistEl.innerHTML = '';
-        
-        data.blacklist.forEach(username => {
-            var item = document.createElement('div');
-            item.className = 'bg-gray-800 p-3 rounded-lg border border-gray-700 flex justify-between items-center';
-            item.innerHTML = `
-                <div>
-                    <span class="text-white font-semibold text-sm">${escapeHtml(username)}</span>
-                    <span class="text-xs text-gray-400 ml-2">@${DOMAIN}</span>
-                </div>
-                <button onclick="removeFromBlacklist('${escapeHtml(username)}')" class="text-green-400 hover:text-green-300 p-1 rounded transition-colors" title="Remove from blacklist">
-                    <i class="fas fa-times"></i>
-                </button>
-            `;
-            blacklistEl.appendChild(item);
+    fetch(`${API_URL}/api/admin/blacklist`)
+        .then(res => {
+            if (res.status === 401) {
+                location.reload();
+                return;
+            }
+            return res.json();
+        })
+        .then(data => {
+            var blacklistEl = document.getElementById('blacklist-list');
+            
+            if (!data || data.error) {
+                blacklistEl.innerHTML = '<p class="text-red-400 text-center py-8">Error loading blacklist</p>';
+                return;
+            }
+            
+            if (!data.blacklist || data.blacklist.length === 0) {
+                blacklistEl.innerHTML = '<p class="text-gray-400 text-center py-8">No blacklisted usernames</p>';
+                return;
+            }
+            
+            blacklistEl.innerHTML = '';
+            
+            // FIXED: Handle both string array and object array formats
+            data.blacklist.forEach(item => {
+                // Extract username - handle both formats
+                let username;
+                if (typeof item === 'string') {
+                    username = item;
+                } else if (typeof item === 'object' && item !== null) {
+                    // Try different possible property names
+                    username = item.username || item.name || item.value || String(item);
+                } else {
+                    username = String(item);
+                }
+                
+                var itemDiv = document.createElement('div');
+                itemDiv.className = 'bg-gray-800 p-3 rounded-lg border border-gray-700 flex justify-between items-center';
+                itemDiv.innerHTML = `
+                    <div>
+                        <span class="text-white font-semibold text-sm">${escapeHtml(username)}</span>
+                        <span class="text-xs text-gray-400 ml-2">@${DOMAIN}</span>
+                    </div>
+                    <button onclick="removeFromBlacklist('${escapeHtml(username)}')" 
+                            class="text-green-400 hover:text-green-300 p-1 rounded transition-colors" 
+                            title="Remove from blacklist">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                blacklistEl.appendChild(itemDiv);
+            });
+        })
+        .catch(err => {
+            console.error('Error loading blacklist:', err);
+            document.getElementById('blacklist-list').innerHTML = 
+                '<p class="text-red-400 text-center py-8">Failed to load blacklist</p>';
         });
-    })
-    .catch(err => {
-        console.error('Error loading blacklist:', err);
-        document.getElementById('blacklist-list').innerHTML = '<p class="text-red-400 text-center py-8">Failed to load blacklist</p>';
-    });
 }
+
 
 function addToBlacklist() {
     var usernameInput = document.getElementById('new-blacklist-username');
