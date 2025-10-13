@@ -243,49 +243,46 @@ def parse_email_body(raw_body):
         return clean_raw_email(raw_body)
 
 def validate_session(email_address, session_token):
-    """Validate if session is valid"""
+    """Validate if session is valid - IMPROVED VERSION"""
     try:
         conn = get_db()
         c = conn.cursor()
         
         # Check if session exists and is active
-        try:
-            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
-            has_is_active = c.fetchone() is not None
-            
-            if has_is_active:
-                c.execute('''
-                    SELECT session_token FROM sessions 
-                    WHERE email_address = %s AND session_token = %s 
-                    AND expires_at > NOW() AND is_active = TRUE
-                ''', (email_address, session_token))
-            else:
-                c.execute('''
-                    SELECT session_token FROM sessions 
-                    WHERE email_address = %s AND session_token = %s 
-                    AND expires_at > NOW()
-                ''', (email_address, session_token))
-        except Exception as e:
-            logger.warning(f"Error checking session: {e}")
-            c.execute('''
-                SELECT session_token FROM sessions 
-                WHERE email_address = %s AND session_token = %s 
-                AND expires_at > NOW()
-            ''', (email_address, session_token))
+        c.execute('''
+            SELECT session_token, expires_at 
+            FROM sessions 
+            WHERE email_address = %s AND session_token = %s 
+            AND expires_at > NOW()
+        ''', (email_address, session_token))
         
         session_data = c.fetchone()
         conn.close()
         
         if not session_data:
+            logger.warning(f"❌ Invalid session for {email_address}")
             return False, "Invalid or expired session"
+        
+        # Update last activity
+        try:
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('''
+                UPDATE sessions 
+                SET last_activity = NOW() 
+                WHERE session_token = %s
+            ''', (session_token,))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.warning(f"Error updating session activity: {e}")
         
         return True, "Valid session"
         
     except Exception as e:
         logger.error(f"Session validation error: {e}")
         return False, str(e)
-    
-
+      
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -308,7 +305,6 @@ def create_email():
         if not session_id or not security_key:
             logger.warning("Missing security headers in create request")
         
-        # 🚨 FIX: Define username variable at the start
         username = ""
         
         if custom_name:
@@ -328,43 +324,27 @@ def create_email():
             male_name = random.choice(MALE_NAMES)
             female_name = random.choice(FEMALE_NAMES)
             three_digits = ''.join(random.choices(string.digits, k=3))
-            username = f"{male_name}{female_name}{three_digits}"  # 🚨 This should work now
+            username = f"{male_name}{female_name}{three_digits}"
         
         email_address = f"{username}@{DOMAIN}"
-        
-        # ... rest of your create_email code ...
         
         conn = get_db()
         c = conn.cursor()
         
-        # 🚨 FORCE END ALL SESSIONS for this email (more aggressive)
+        # 🚨 FORCE END ALL SESSIONS for this email (MORE AGGRESSIVE)
         try:
-            # Method 1: Set is_active to FALSE
+            # Method 1: Delete all sessions for this email
+            c.execute('DELETE FROM sessions WHERE email_address = %s', (email_address,))
+            
+            # Method 2: Set expires_at to past for any remaining
             c.execute('''
                 UPDATE sessions 
-                SET is_active = FALSE 
-                WHERE email_address = %s
-            ''', (email_address,))
-            
-            # Method 2: Set expires_at to past
-            c.execute('''
-                UPDATE sessions 
-                SET expires_at = NOW() - INTERVAL '1 minute'
-                WHERE email_address = %s AND expires_at > NOW()
-            ''', (email_address,))
-            
-            # Method 3: For any remaining active sessions
-            c.execute('''
-                DELETE FROM sessions 
+                SET expires_at = NOW() - INTERVAL '1 hour'
                 WHERE email_address = %s
             ''', (email_address,))
             
         except Exception as e:
             logger.warning(f"Error ending existing sessions: {e}")
-        
-        # ... rest of your create_email code ...
-            # Fallback - delete sessions
-            c.execute('DELETE FROM sessions WHERE email_address = %s', (email_address,))
         
         # Create session token
         session_token = secrets.token_urlsafe(32)
@@ -384,7 +364,7 @@ def create_email():
                 VALUES (%s, %s, %s, %s, %s)
             ''', (session_token, email_address, created_at, expires_at, created_at))
         
-        # NEW FEATURE: If admin mode is enabled, automatically add to blacklist
+        # NEW FEATURE: If admin mode is enabled AND custom name is provided, add to blacklist
         if admin_mode and custom_name:
             try:
                 c.execute('''
@@ -399,7 +379,7 @@ def create_email():
         conn.commit()
         conn.close()
         
-        logger.info(f"✅ Created email: {email_address}")
+        logger.info(f"✅ Created email: {email_address} (admin_mode: {admin_mode})")
         
         return jsonify({
             'email': email_address,
@@ -410,7 +390,7 @@ def create_email():
     except Exception as e:
         logger.error(f"❌ Error creating email: {e}")
         return jsonify({'error': 'Failed to create session', 'code': 'SERVER_ERROR'}), 500
-    
+      
 @app.route('/api/session/end', methods=['POST'])
 def end_session():
     try:
@@ -1124,3 +1104,4 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
+
