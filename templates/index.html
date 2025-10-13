@@ -804,23 +804,27 @@ function showNotification(message, type) {
     setTimeout(() => notif.classList.add('hidden'), 3000);
 }
 
-function handleApiError(error, defaultMessage = 'An error occurred') {
-    console.error('API Error:', error);
+function handleApiError(error, defaultMessage = "An error occurred") {
+    console.error("API Error:", error);
     
-    if (error.message && error.message.includes('Failed to fetch')) {
-        showNotification('🌐 Network error - check your connection', 'error');
-    } else if (error.message && (error.message.includes('401') || error.message.includes('Session expired') || error.message.includes('Session has been ended'))) {
-        showNotification('🔐 Session ended - creating new session', 'error');
+    if (error.message && error.message.includes("Failed to fetch")) {
+        showNotification("Network error - check your connection", "error");
+    } else if (error.message && (error.message.includes("403") || error.message.includes("Session expired"))) {
+        showNotification("Session expired - creating new session", "error");
         clearSession();
-    } else if (error.message && error.message.includes('409')) {
-        showNotification('⚠️ This email is already in use by another session', 'error');
-    } else if (error.message && error.message.includes('404')) {
+    } else if (error.message && (error.message.includes("401") || error.message.includes("Session expired") || error.message.includes("Session has been ended"))) {
+        showNotification("Session ended - creating new session", "error");
+        clearSession();
+    } else if (error.message && error.message.includes("409")) {
+        showNotification("This email is already in use by another session", "error");
+    } else if (error.message && error.message.includes("404")) {
         // This is normal for new emails
         return;
     } else {
-        showNotification(`❌ ${error.message || defaultMessage}`, 'error');
+        showNotification(error.message || defaultMessage, "error");
     }
 }
+
 
 // FIXED: Clear session properly when switching from admin mode
 function clearSession() {
@@ -968,11 +972,19 @@ function setupSessionExpiration() {
 // Email Management
 function loadEmails() {
     if (!currentEmail) {
-        console.log('No current email to load');
+        console.log("No current email to load");
         return;
     }
     
-    console.log('Loading emails for:', currentEmail);
+    // CRITICAL: Check if we have a session token
+    if (!sessionToken) {
+        console.error("No session token available");
+        showNotification("Session expired. Please create a new email.", "error");
+        clearSession();
+        return;
+    }
+    
+    console.log("Loading emails for:", currentEmail);
     
     const loader = document.getElementById('inbox-loader');
     const list = document.getElementById('email-list');
@@ -988,9 +1000,10 @@ function loadEmails() {
     }
     window.emailFetchController = new AbortController();
     
-    fetch(API_URL + '/api/emails/' + encodeURIComponent(currentEmail), {
+    fetch(`${API_URL}/api/emails/${encodeURIComponent(currentEmail)}`, {
         headers: {
-            'X-Session-Token': sessionToken
+            'X-Session-Token': sessionToken,  // FIXED: Send session token
+            'Content-Type': 'application/json'
         },
         signal: window.emailFetchController.signal
     })
@@ -999,42 +1012,48 @@ function loadEmails() {
             if (res.status === 404) {
                 return { emails: [] };
             }
-            throw new Error('Failed to fetch emails: ' + res.status);
+            if (res.status === 403) {
+                throw new Error("Session expired or invalid");
+            }
+            throw new Error(`Failed to fetch emails: ${res.status}`);
         }
         return res.json();
     })
     .then(data => {
-        console.log('Emails loaded:', data.emails?.length || 0);
+        console.log("Emails loaded:", data.emails?.length || 0);
         
         const newCount = data.emails ? data.emails.length : 0;
-        document.getElementById('email-count').textContent = newCount + ' email' + (newCount !== 1 ? 's' : '');
-        document.title = newCount > 0 ? '(' + newCount + ') TempMail - AMMZ' : 'TempMail - AMMZ';
+        document.getElementById('email-count').textContent = `${newCount} email${newCount !== 1 ? 's' : ''}`;
+        document.title = newCount > 0 ? `(${newCount}) TempMail - AMMZ` : 'TempMail - AMMZ';
         
         // Show new email notification
         if (newCount > lastEmailCount && lastEmailCount > 0) {
-            showNotification('🔔 ' + (newCount - lastEmailCount) + ' new email(s) received!', 'success');
+            showNotification(`${newCount - lastEmailCount} new email(s) received!`, 'success');
         }
         lastEmailCount = newCount;
         
         list.innerHTML = '';
         
         if (newCount === 0) {
-            list.innerHTML = '<div class="text-center py-8 text-gray-300 h-full flex flex-col justify-center"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>';
+            list.innerHTML = `<div class="text-center py-8 text-gray-300 h-full flex flex-col justify-center"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>`;
         } else {
             // Use document fragment for better performance
             const fragment = document.createDocumentFragment();
             
             data.emails.forEach(function(email, idx) {
                 let displaySender = email.sender;
-                if (displaySender.includes('bounces+') || displaySender.includes('bounce-md')) {
-                    displaySender = 'ChatGPT';
-                } else if (displaySender.includes('<')) {
-                    displaySender = displaySender.substring(0, displaySender.indexOf('<')).trim() || displaySender.substring(displaySender.indexOf('<')+1, displaySender.indexOf('>')).trim();
+                
+                // Clean sender display
+                if (displaySender.includes("bounces") || displaySender.includes("bounce-md")) {
+                    displaySender = "ChatGPT";
+                } else if (displaySender.includes("<")) {
+                    displaySender = displaySender.substring(0, displaySender.indexOf("<")).trim() || 
+                                   displaySender.substring(displaySender.indexOf("<") + 1, displaySender.indexOf(">")).trim();
                 }
                 
-                // Simple preview text extraction (faster)
-                let previewText = email.body.replace(/<[^>]*>/g, '').substring(0, 80);
-                if (previewText.length === 80) previewText += '...';
+                // Simple preview text extraction
+                let previewText = email.body.replace(/<[^>]+>/g, '').substring(0, 80);
+                if (previewText.length >= 80) previewText += '...';
                 
                 const item = document.createElement('div');
                 item.className = 'email-list-item rounded-lg border border-gray-700 hover:border-gray-600 transition-all cursor-pointer';
@@ -1047,7 +1066,11 @@ function loadEmails() {
                     <div class="text-sm font-medium text-gray-200 mb-2 truncate">${escapeHtml(email.subject)}</div>
                     <div class="text-xs text-gray-400 email-preview">${escapeHtml(previewText)}</div>
                 `;
-                item.addEventListener('click', function() { viewEmail(email, item); });
+                
+                item.addEventListener('click', function() {
+                    viewEmail(email, item);
+                });
+                
                 fragment.appendChild(item);
             });
             
@@ -1056,19 +1079,27 @@ function loadEmails() {
     })
     .catch(err => {
         if (err.name === 'AbortError') {
-            console.log('Email fetch aborted');
+            console.log("Email fetch aborted");
             return;
         }
-        console.error('Error loading emails:', err);
-        handleApiError(err, 'Failed to load emails');
         
-        list.innerHTML = '<div class="text-center py-8 text-gray-300"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>';
+        console.error("Error loading emails:", err);
+        
+        if (err.message.includes("Session expired")) {
+            showNotification("Session expired. Creating new email...", "error");
+            clearSession();
+        } else {
+            handleApiError(err, "Failed to load emails");
+        }
+        
+        list.innerHTML = `<div class="text-center py-8 text-gray-300"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>`;
     })
     .finally(function() {
         loader.style.display = 'none';
         window.emailFetchController = null;
     });
 }
+
 
 function loadDomains() {
     return fetch(API_URL + '/api/domains')
@@ -1809,7 +1840,7 @@ document.getElementById('username-input').addEventListener('keypress', function(
     }
 });
 
-// Reset on page load - FIXED: Clear admin sessions
+// Reset on page load - FIXED Clear admin sessions
 window.addEventListener('load', function() {
     // Check if we have an admin session and clear it
     const savedSession = localStorage.getItem('tempMailSession');
@@ -1819,22 +1850,23 @@ window.addEventListener('load', function() {
             if (session.email) {
                 const username = session.email.split('@')[0].toLowerCase();
                 const adminUsernames = ['ammz', 'admin', 'owner', 'root', 'system', 'az', 'c'];
-                
                 if (adminUsernames.includes(username)) {
-                    console.log('🔄 Clearing admin session on page load');
+                    console.log('Clearing admin session on page load');
                     clearSession();
                     return;
                 }
             }
-        } catch (e) {
+        } catch(e) {
             console.error('Error checking session on load:', e);
         }
     }
     
+    // Deactivate admin mode if active
     if (isAdminMode) {
         deactivateAdminMode();
     }
 });
+
 
 // Auto-logout when page is closed/refreshed
 window.addEventListener('beforeunload', function() {
