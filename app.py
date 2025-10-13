@@ -284,6 +284,36 @@ def validate_session(email_address, session_token):
     except Exception as e:
         logger.error(f"Session validation error: {e}")
         return False, str(e)
+    
+
+@app.route('/api/session/heartbeat', methods=['POST'])
+def session_heartbeat():
+    try:
+        session_token = request.headers.get('X-Session-Token', '')
+        data = request.get_json() or {}
+        email_address = data.get('email_address', '')
+        
+        if not session_token or not email_address:
+            return jsonify({'error': 'Missing data'}), 400
+        
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Update last_activity to keep session alive
+        c.execute('''
+            UPDATE sessions 
+            SET last_activity = NOW() 
+            WHERE session_token = %s AND email_address = %s AND is_active = TRUE
+        ''', (session_token, email_address))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        logger.error(f"Heartbeat error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/')
 def index():
@@ -300,56 +330,39 @@ def create_email():
         custom_name = data.get('name', '').strip()
         admin_mode = data.get('admin_mode', False)
         
-        # Validate security headers
-        session_id = request.headers.get('X-Session-ID')
-        security_key = request.headers.get('X-Security-Key')
-        
-        if not session_id or not security_key:
-            logger.warning("Missing security headers in create request")
-        
-        if custom_name:
-            username = custom_name.lower()
-            username = ''.join(c for c in username if c.isalnum() or c in '-_')
-            if not username:
-                return jsonify({'error': 'Invalid username', 'code': 'INVALID_USERNAME'}), 400
-            
-            # Skip blacklist check if admin mode is enabled
-            if not admin_mode and is_username_blacklisted(username):
-                return jsonify({
-                    'error': 'This username is reserved for the system owner. Please choose a different username.',
-                    'code': 'USERNAME_BLACKLISTED'
-                }), 403
-        else:
-            # Generate random name
-            male_name = random.choice(MALE_NAMES)
-            female_name = random.choice(FEMALE_NAMES)
-            three_digits = ''.join(random.choices(string.digits, k=3))
-            username = f"{male_name}{female_name}{three_digits}"
+        # ... existing code ...
         
         email_address = f"{username}@{DOMAIN}"
         
         conn = get_db()
         c = conn.cursor()
         
-        # FIX: Always end any existing sessions for this email first
+        # 🚨 FORCE END ALL SESSIONS for this email (more aggressive)
         try:
-            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
-            has_is_active = c.fetchone() is not None
+            # Method 1: Set is_active to FALSE
+            c.execute('''
+                UPDATE sessions 
+                SET is_active = FALSE 
+                WHERE email_address = %s
+            ''', (email_address,))
             
-            if has_is_active:
-                c.execute('''
-                    UPDATE sessions 
-                    SET is_active = FALSE 
-                    WHERE email_address = %s AND is_active = TRUE
-                ''', (email_address,))
-            else:
-                # If no is_active column, delete the session
-                c.execute('''
-                    DELETE FROM sessions 
-                    WHERE email_address = %s
-                ''', (email_address,))
+            # Method 2: Set expires_at to past
+            c.execute('''
+                UPDATE sessions 
+                SET expires_at = NOW() - INTERVAL '1 minute'
+                WHERE email_address = %s AND expires_at > NOW()
+            ''', (email_address,))
+            
+            # Method 3: For any remaining active sessions
+            c.execute('''
+                DELETE FROM sessions 
+                WHERE email_address = %s
+            ''', (email_address,))
+            
         except Exception as e:
             logger.warning(f"Error ending existing sessions: {e}")
+        
+        # ... rest of your create_email code ...
             # Fallback - delete sessions
             c.execute('DELETE FROM sessions WHERE email_address = %s', (email_address,))
         
