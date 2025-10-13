@@ -1127,14 +1127,14 @@ function showEmailList() {
     document.getElementById('back-to-list').classList.add('hidden');
 }
 
-// IMPROVED: Better email content processing
+// IMPROVED Better email content processing
 function improvedCleanEmailBody(rawBody) {
     // Extract verification code - improved pattern
     const codeMatch = rawBody.match(/\b\d{4,8}\b/);
     const verificationCode = codeMatch ? codeMatch[0] : null;
     
     // Remove HTML tags and decode HTML entities
-    let cleanBody = rawBody.replace(/<[^>]*>/g, '');
+    let cleanBody = rawBody.replace(/<[^>]*>/g, ' ');
     
     // Improved HTML entity decoding
     cleanBody = cleanBody
@@ -1144,27 +1144,31 @@ function improvedCleanEmailBody(rawBody) {
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')
         .replace(/&#39;/g, "'")
-        .replace(/=E2=80=99/g, "'")
-        .replace(/=C2=A0/g, ' ')
+        .replace(/&#8217;/g, "'")
+        .replace(/&#160;/g, ' ')
         .replace(/=3D/g, '=')
         .replace(/=20/g, ' ')
         .replace(/=2E/g, '.');
     
     // Remove quoted-printable line breaks
-    cleanBody = cleanBody.replace(/=\r?\n/g, '');
+    cleanBody = cleanBody.replace(/=\?/g, '');
     
-    // Split into paragraphs
-    const paragraphs = cleanBody.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+    // Remove extra whitespace and normalize
+    cleanBody = cleanBody.replace(/\s+/g, ' ').trim();
+    
+    // Split into sentences for better formatting
+    let sentences = cleanBody.split(/(?<=\.\s)/).filter(s => s.trim().length > 0);
     
     let html = '';
     
     // Add verification code prominently if found
     if (verificationCode) {
-        html += '<div class="verification-code">' + verificationCode + '</div>';
+        html += `<div class="verification-code">${verificationCode}</div>`;
     }
     
-    paragraphs.forEach(paragraph => {
-        const trimmed = paragraph.trim();
+    // Process each sentence
+    sentences.forEach(sentence => {
+        const trimmed = sentence.trim();
         if (trimmed.length === 0) return;
         
         // Skip the line that contains the verification code (already displayed)
@@ -1172,37 +1176,42 @@ function improvedCleanEmailBody(rawBody) {
         
         // Skip technical lines and headers
         if (trimmed.includes('by cloudflare-email.net') ||
-            trimmed.includes('ARC-Seal:') ||
-            trimmed.includes('DKIM-Signature:') ||
+            trimmed.includes('ARC-Seal') ||
+            trimmed.includes('DKIM-Signature') ||
             trimmed.includes('Received:') ||
             trimmed.includes('Content-Type:') ||
             trimmed.includes('MIME-Version:') ||
             trimmed.includes('@font-face') ||
-            trimmed.includes('font-family') ||
+            trimmed.includes('font-family:') ||
             trimmed.includes('.ExternalClass') ||
-            trimmed.includes('#outlook') ||
-            trimmed.includes('@media')) {
-            return;
-        }
+            trimmed.includes('outlook') ||
+            trimmed.includes('@media')) return;
         
-        // Format specific message parts
-        if (trimmed.toLowerCase().includes('enter this temporary verification code') ||
-            trimmed.toLowerCase().includes('your chatgpt code is') ||
-            trimmed.toLowerCase().includes('verification code')) {
-            html += '<div class="email-header"><p>' + escapeHtml(trimmed) + '</p></div>';
-        } else if (trimmed.toLowerCase().includes('please ignore this email')) {
-            html += '<div class="email-meta"><p>' + escapeHtml(trimmed) + '</p></div>';
-        } else if (trimmed.toLowerCase().includes('best,') || 
-                   trimmed.toLowerCase().includes('regards,') ||
-                   trimmed.toLowerCase().includes('the chatgpt team')) {
-            html += '<div class="email-header"><p>' + escapeHtml(trimmed) + '</p></div>';
-        } else if (trimmed.length > 5) { // Only add non-empty paragraphs
-            html += '<p>' + escapeHtml(trimmed) + '</p>';
-        }
+        // Format as paragraphs with proper spacing
+        html += `<p class="mb-3 leading-relaxed">${escapeHtml(trimmed)}</p>`;
     });
     
-    return html || '<p>No readable content found in this email.</p>';
+    // If no content was added, show raw body in a cleaner way
+    if (html === '' || (verificationCode && html === `<div class="verification-code">${verificationCode}</div>`)) {
+        // Clean the body more aggressively
+        let fallbackBody = cleanBody
+            .replace(/Content-Type[^\n]*/gi, '')
+            .replace(/MIME-Version[^\n]*/gi, '')
+            .replace(/charset=[^\s]*/gi, '')
+            .replace(/boundary=[^\s]*/gi, '')
+            .replace(/Transfer-Encoding[^\n]*/gi, '')
+            .trim();
+        
+        if (fallbackBody.length > 0) {
+            html += `<div class="email-content-container"><p class="mb-3 leading-relaxed">${escapeHtml(fallbackBody)}</p></div>`;
+        } else {
+            html += '<p class="text-gray-400">No readable content found in this email.</p>';
+        }
+    }
+    
+    return html;
 }
+
 
 // Auto-refresh functions
 function startAutoRefresh() {
