@@ -74,7 +74,7 @@ def init_db():
                 timestamp TEXT,
                 received_at TIMESTAMP NOT NULL,
                 session_token TEXT,
-                FOREIGN KEY (session_token) REFERENCES sessions(session_token) ON DELETE SET NULL
+                (session_token) ON DELETE SET NULL
             )
         """)
         
@@ -628,14 +628,19 @@ def cleanup_expired_sessions():
             conn = get_db()
             c = conn.cursor()
             
-            # FIX: Only cleanup expired sessions, NEVER delete emails
-            c.execute("DELETE FROM sessions WHERE expires_at < NOW()")
+            # ONLY clean sessions, NEVER touch emails
+            c.execute("""
+                UPDATE sessions 
+                SET is_active = FALSE 
+                WHERE expires_at < NOW() AND is_active = TRUE
+            """)
+            
             deleted = c.rowcount
             conn.commit()
             conn.close()
             
             if deleted > 0:
-                logger.info(f"Cleaned up {deleted} expired sessions (emails preserved)")
+                logger.info(f"🔄 Deactivated {deleted} expired sessions (emails preserved)")
         except Exception as e:
             logger.error(f"Cleanup error: {e}")
 
@@ -790,7 +795,7 @@ def admin_delete_email(email_id):
     try:
         conn = get_db()
         c = conn.cursor()
-        c.execute('DELETE FROM emails WHERE id = %s', (email_id,))
+        c.execute('DELETE FROM emails WHERE id = %s', (email_id,))  # 🚨 DELETES EMAIL
         conn.commit()
         conn.close()
         
@@ -799,6 +804,7 @@ def admin_delete_email(email_id):
     except Exception as e:
         logger.error(f"❌ Admin delete email error: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/admin/delete-address/<email_address>', methods=['DELETE'])
 @admin_required
