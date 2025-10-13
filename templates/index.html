@@ -1502,11 +1502,63 @@ function validateCurrentSession() {
 function initApp() {
     console.log('🚀 Initializing app...');
     
-    loadDomains();
+    loadDomains().then(() => {
+        // Restore session ONLY for normal users
+        if (!window.location.pathname.includes('/admin')) {
+            const saved = localStorage.getItem('tempMailSession');
+            
+            if (saved) {
+                try {
+                    const data = JSON.parse(saved);
+                    
+                    // Skip admin sessions
+                    if (data.isAdmin || isAdminMode) {
+                        console.log('🚫 Skipping admin session restore');
+                        localStorage.removeItem('tempMailSession');
+                        return;
+                    }
+                    
+                    // Restore session
+                    currentEmail = data.email;
+                    sessionToken = data.token;
+                    sessionStartTime = new Date(data.startTime);
+                    
+                    console.log('✅ Session restored:', currentEmail);
+                    
+                    // Show UI
+                    document.getElementById('email-display').classList.remove('hidden');
+                    document.getElementById('end-session-btn').classList.remove('hidden');
+                    document.getElementById('current-email').textContent = currentEmail;
+                    
+                    // Start email loading
+                    startAutoRefresh();
+                    updateSessionTime();
+                    
+                } catch (e) {
+                    console.error('Session restore error:', e);
+                    localStorage.removeItem('tempMailSession');
+                }
+            }
+        }
+    });
     
-    // ✅ Set up periodic session validation
-    setInterval(validateCurrentSession, 30000); // Check every 30 seconds
+    setInterval(validateCurrentSession, 30000);
 }
+
+
+function saveSession() {
+    if (currentEmail && sessionToken) {
+        const sessionData = {
+            email: currentEmail,
+            token: sessionToken,
+            startTime: sessionStartTime ? sessionStartTime.toISOString() : new Date().toISOString(),
+            isAdmin: isAdminMode
+        };
+        localStorage.setItem('tempMailSession', JSON.stringify(sessionData));
+        console.log('✅ Session saved to localStorage');
+    }
+}
+
 
 
 function setupEventListeners() {
@@ -1534,17 +1586,46 @@ function setupEventListeners() {
     // Random email button
 // Replace the big-random-btn event listener
 // Replace the complex random button with this:
-document.getElementById('big-random-btn').addEventListener('click', function() {
+document.getElementById('random-generate-btn').addEventListener('click', function() {
     console.log('🎲 Generating random email...');
     
-    // Clear any existing session first
-    clearSession();
+    // END CURRENT SESSION FIRST
+    if (currentEmail && sessionToken) {
+        const savedToken = sessionToken;
+        const savedEmail = currentEmail;
+        
+        // Clear frontend immediately
+        currentEmail = '';
+        sessionToken = '';
+        sessionStartTime = null;
+        localStorage.removeItem('tempMailSession');
+        
+        // Stop intervals
+        if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+        if (timeUpdateInterval) clearInterval(timeUpdateInterval);
+        
+        // Tell backend to end session
+        fetch(API_URL + '/api/session/end', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Session-Token': savedToken
+            },
+            body: JSON.stringify({
+                session_token: savedToken,
+                email_address: savedEmail
+            })
+        }).catch(err => console.log('End session error:', err));
+    }
     
-    // Wait a moment for cleanup, then create new random email
-    setTimeout(() => {
-        createEmail('');
-    }, 100);
+    // Clear inputs
+    document.getElementById('username-input').value = '';
+    document.getElementById('domain-select').selectedIndex = 0;
+    
+    // Create new random email
+    createEmail('');
 });
+
 
 // Add this function to properly end session in backend
 function endSessionBackend() {
