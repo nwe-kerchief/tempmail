@@ -311,55 +311,76 @@ def validate_session(email_address, session_token):
 
 # FIX 2: Get emails endpoint
 
-# FIX 3: Session end endpoint
 @app.route('/api/session/end', methods=['POST'])
 def end_session():
-    session_token = request.headers.get('X-Session-Token')
-    if not session_token:
-        return jsonify({'error': 'No token'}), 400
-    
+    """FIXED: End session properly"""
     try:
+        # Get token from header OR body
+        session_token = request.headers.get('X-Session-Token')
+        
+        if not session_token:
+            data = request.get_json() or {}
+            session_token = data.get('session_token')
+        
+        if not session_token:
+            return jsonify({'error': 'No session token'}), 400
+        
         with get_db() as conn:
             c = conn.cursor()
-            c.execute('UPDATE sessions SET expires_at = NOW() WHERE session_token = %s', (session_token,))
+            
+            # Expire the session immediately
+            c.execute('''
+                UPDATE sessions
+                SET expires_at = NOW() - INTERVAL '1 hour'
+                WHERE session_token = %s
+            ''', (session_token,))
+            
+            # Also set is_active if exists
+            try:
+                c.execute('UPDATE sessions SET is_active = FALSE WHERE session_token = %s', (session_token,))
+            except:
+                pass
+            
             conn.commit()
+        
+        logger.info(f"✅ Session ended: {session_token[:10]}...")
         return jsonify({'success': True})
+        
     except Exception as e:
+        logger.error(f"❌ Error ending session: {e}")
         return jsonify({'error': str(e)}), 500
 
 
+
 def invalidate_existing_sessions(email_address):
-    """Invalidate existing sessions for an email"""
+    """FIXED: Immediately invalidate ALL existing sessions"""
     try:
         with get_db() as conn:
             c = conn.cursor()
             
-            # Multiple methods to ensure sessions are ended
+            # Method 1: Set expires_at to past (works always)
+            c.execute('''
+                UPDATE sessions
+                SET expires_at = NOW() - INTERVAL '1 hour'
+                WHERE email_address = %s
+            ''', (email_address,))
+            
+            # Method 2: Set is_active to FALSE (if column exists)
             try:
-                # Method 1: Set is_active to FALSE
                 c.execute('''
                     UPDATE sessions
                     SET is_active = FALSE
                     WHERE email_address = %s
                 ''', (email_address,))
-                
-                # Method 2: Set expires_at to past
-                c.execute('''
-                    UPDATE sessions
-                    SET expires_at = NOW() - INTERVAL '1 minute'
-                    WHERE email_address = %s AND expires_at > NOW()
-                ''', (email_address,))
-                
-            except Exception as e:
-                logger.warning(f"Error ending existing sessions: {e}")
-                # Fallback - delete sessions
-                c.execute('DELETE FROM sessions WHERE email_address = %s', (email_address,))
+            except:
+                pass  # Column might not exist
             
             conn.commit()
-            logger.info(f"Invalidated existing sessions for {email_address}")
+            logger.info(f"✅ FORCEFULLY invalidated ALL sessions for {email_address}")
             
     except Exception as e:
-        logger.error(f"Error invalidating sessions: {e}")
+        logger.error(f"❌ Error invalidating sessions: {e}")
+
 
 # Security headers middleware
 @app.after_request
