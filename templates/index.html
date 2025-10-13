@@ -1368,18 +1368,21 @@ function endSession() {
 // Replace the toggleAdminMode function
 function toggleAdminMode() {
     if (!isAdminMode) {
-        // Clear any existing user session first
-        clearSession();
-        showPasswordModal();
+        // End current session BEFORE entering admin mode
+        endSessionBackend().then(() => {
+            showPasswordModal();
+        });
     } else {
-        // Logout from admin mode
-        fetch('/api/admin/logout', {
-            method: 'POST',
-            credentials: 'include'
-        }).then(() => {
-            deactivateAdminMode();
-        }).catch(() => {
-            deactivateAdminMode();
+        // End admin session when leaving admin mode
+        endSessionBackend().then(() => {
+            fetch('/api/admin/logout', {
+                method: 'POST',
+                credentials: 'include'
+            }).then(() => {
+                deactivateAdminMode();
+            }).catch(() => {
+                deactivateAdminMode();
+            });
         });
     }
 }
@@ -1392,19 +1395,28 @@ function clearAdminSessions() {
     }).catch(err => console.log('Admin sessions cleared'));
 }
 
-// Call this when entering admin mode
 function activateAdminMode() {
     isAdminMode = true;
     
-    // Clear any existing user sessions first
+    // Clear frontend session
     clearSession();
     
-    // Clear any admin sessions
-    clearAdminSessions();
-    
-    // Rest of the function remains the same...
+    // Change UI colors
     document.body.classList.add('admin-mode');
-    // ... existing code
+    document.querySelector('header').classList.add('admin-header');
+    
+    // Update header
+    const header = document.querySelector('h1');
+    header.innerHTML = '<i class="fas fa-shield-alt text-xl md:text-3xl mr-2 md:mr-3"></i><span class="text-xl md:text-4xl lg:text-5xl font-bold">ADMIN MODE - TempMail</span>';
+    header.classList.add('admin-text');
+    
+    // Update subtitle
+    const subtitle = document.querySelector('header p');
+    if (subtitle) {
+        subtitle.innerHTML = '<span class="admin-text">Admin Mode Active - Blacklist Bypass Enabled</span>';
+    }
+    
+    showNotification('🔓 Admin Mode Activated', 'success');
 }
 
 function showPasswordModal() {
@@ -1541,6 +1553,31 @@ function deactivateAdminMode() {
     }, 1000);
 }
 
+function startSessionHeartbeat() {
+    if (!currentEmail || !sessionToken) return;
+    
+    // Send heartbeat every 2 minutes while tab is active
+    const heartbeat = setInterval(() => {
+        if (!currentEmail || !sessionToken || isAdminMode) {
+            clearInterval(heartbeat);
+            return;
+        }
+        
+        fetch(`${API_URL}/api/session/heartbeat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Session-Token': sessionToken
+            },
+            body: JSON.stringify({
+                email_address: currentEmail
+            })
+        }).catch(() => {}); // Silent fail
+    }, 120000); // 2 minutes
+    
+    return heartbeat;
+}
+
 function validateCurrentSession() {
     if (!currentEmail || !sessionToken) return false;
     
@@ -1594,12 +1631,52 @@ function setupEventListeners() {
     });
     
     // Random email button
-    document.getElementById('big-random-btn').addEventListener('click', function() {
-        // Clear any existing session
-        clearSession();
-        // Create random email
-        createEmail();
+// Replace the big-random-btn event listener
+document.getElementById('big-random-btn').addEventListener('click', function() {
+    // First end any existing session, THEN create new random email
+    if (currentEmail && sessionToken) {
+        endSessionBackend().then(() => {
+            createEmail(''); // Create random email
+        });
+    } else {
+        createEmail(''); // Create random email directly
+    }
+});
+
+// Add this function to properly end session in backend
+function endSessionBackend() {
+    return new Promise((resolve) => {
+        if (!currentEmail || !sessionToken) {
+            resolve();
+            return;
+        }
+        
+        fetch(API_URL + '/api/session/end', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                session_token: sessionToken,
+                email_address: currentEmail
+            })
+        })
+        .then(res => {
+            if (!res.ok) {
+                console.log('Backend session end failed, but continuing');
+            }
+            return res.json();
+        })
+        .then(data => {
+            console.log('✅ Backend session ended');
+            resolve();
+        })
+        .catch(err => {
+            console.log('❌ Backend session end error (ignoring):', err);
+            resolve();
+        });
     });
+}
     
     // Copy button
     document.getElementById('copy-btn').addEventListener('click', function() {
@@ -1687,11 +1764,33 @@ function setupEventListeners() {
     });
     
     // Handle beforeunload to save session
-    window.addEventListener('beforeunload', function() {
-        if (currentEmail) {
-            saveSession();
-        }
-    });
+    // End session when page refreshes or closes
+window.addEventListener('beforeunload', function() {
+    if (currentEmail && sessionToken && !isAdminMode) {
+        // Try to end session (may not complete due to page unload)
+        fetch(API_URL + '/api/session/end', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                session_token: sessionToken,
+                email_address: currentEmail
+            }),
+            keepalive: true // Helps request complete during unload
+        }).catch(() => {});
+    }
+});
+
+// End session when visibility changes (tab switch, minimize, etc)
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden && currentEmail && sessionToken && !isAdminMode) {
+        // User switched tabs or minimized window - end session after delay
+        setTimeout(() => {
+            if (document.hidden) { // Still not visible
+                endSessionBackend();
+            }
+        }, 30000); // 30 seconds
+    }
+});
 }
 </script>
 </body>
