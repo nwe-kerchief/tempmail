@@ -841,6 +841,44 @@ function saveSession() {
     localStorage.setItem('tempMailSession', JSON.stringify(session));
 }
 
+// Add this function - it was missing!
+function endSessionBackend() {
+    return new Promise((resolve) => {
+        if (!currentEmail || !sessionToken) {
+            console.log('No session to end');
+            resolve();
+            return;
+        }
+        
+        console.log('Ending backend session for:', currentEmail);
+        
+        fetch(API_URL + '/api/session/end', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                session_token: sessionToken,
+                email_address: currentEmail
+            })
+        })
+        .then(res => {
+            if (!res.ok) {
+                console.log('Backend session end failed, but continuing');
+            }
+            return res.json();
+        })
+        .then(data => {
+            console.log('✅ Backend session ended successfully');
+            resolve();
+        })
+        .catch(err => {
+            console.log('❌ Backend session end error (ignoring):', err);
+            resolve();
+        });
+    });
+}
+
 function setupSessionExpiration() {
     // Clear any existing timeout
     if (window.sessionExpirationTimeout) {
@@ -1265,22 +1303,18 @@ function startTimeUpdate() {
 }
 
 // Debug function
-function debugAMMZClick() {
-    console.log('AMMZ door debug:');
-    console.log('1. Looking for AMMZ element...');
-    
+// Replace the debugAMMZClick function with this:
+function setupAMMZDoor() {
     const ammzElements = document.querySelectorAll('.text-yellow-300');
-    console.log('Found elements with text-yellow-300:', ammzElements.length);
     
-    ammzElements.forEach((el, index) => {
-        console.log(`Element ${index}:`, el.textContent, 'in marquee?', !!el.closest('marquee'));
+    ammzElements.forEach((el) => {
         if (el.textContent === 'AMMZ' && el.closest('marquee')) {
-            console.log('✅ Found AMMZ door element!');
+            console.log('✅ Setting up AMMZ door');
             el.style.cursor = 'pointer';
             el.title = 'Click to enter Admin Mode';
             el.classList.add('hover:underline', 'transition-all', 'duration-200');
             
-            // Add click event directly
+            // Add click event
             el.addEventListener('click', function(e) {
                 console.log('🎯 AMMZ door clicked!');
                 e.preventDefault();
@@ -1290,6 +1324,8 @@ function debugAMMZClick() {
         }
     });
 }
+
+
 
 // Call debug on load
 document.addEventListener('DOMContentLoaded', function() {
@@ -1365,24 +1401,21 @@ function endSession() {
     }
 }
 
-// Replace the toggleAdminMode function
 function toggleAdminMode() {
+    console.log('Toggle admin mode, current:', isAdminMode);
+    
     if (!isAdminMode) {
-        // End current session BEFORE entering admin mode
-        endSessionBackend().then(() => {
-            showPasswordModal();
-        });
+        // Simple approach for now - just show password modal
+        showPasswordModal();
     } else {
-        // End admin session when leaving admin mode
-        endSessionBackend().then(() => {
-            fetch('/api/admin/logout', {
-                method: 'POST',
-                credentials: 'include'
-            }).then(() => {
-                deactivateAdminMode();
-            }).catch(() => {
-                deactivateAdminMode();
-            });
+        // Leaving admin mode
+        fetch('/api/admin/logout', {
+            method: 'POST',
+            credentials: 'include'
+        }).then(() => {
+            deactivateAdminMode();
+        }).catch(() => {
+            deactivateAdminMode();
         });
     }
 }
@@ -1553,31 +1586,6 @@ function deactivateAdminMode() {
     }, 1000);
 }
 
-function startSessionHeartbeat() {
-    if (!currentEmail || !sessionToken) return;
-    
-    // Send heartbeat every 2 minutes while tab is active
-    const heartbeat = setInterval(() => {
-        if (!currentEmail || !sessionToken || isAdminMode) {
-            clearInterval(heartbeat);
-            return;
-        }
-        
-        fetch(`${API_URL}/api/session/heartbeat`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Session-Token': sessionToken
-            },
-            body: JSON.stringify({
-                email_address: currentEmail
-            })
-        }).catch(() => {}); // Silent fail
-    }, 120000); // 2 minutes
-    
-    return heartbeat;
-}
-
 function validateCurrentSession() {
     if (!currentEmail || !sessionToken) return false;
     
@@ -1632,15 +1640,13 @@ function setupEventListeners() {
     
     // Random email button
 // Replace the big-random-btn event listener
+// Replace the complex random button with this:
 document.getElementById('big-random-btn').addEventListener('click', function() {
-    // First end any existing session, THEN create new random email
-    if (currentEmail && sessionToken) {
-        endSessionBackend().then(() => {
-            createEmail(''); // Create random email
-        });
-    } else {
-        createEmail(''); // Create random email directly
-    }
+    console.log('Random email button clicked');
+    
+    // Simple approach - just clear session and create new email
+    clearSession(); // Clear frontend first
+    createEmail(''); // Create random email
 });
 
 // Add this function to properly end session in backend
