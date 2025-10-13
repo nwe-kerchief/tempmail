@@ -310,32 +310,6 @@ def validate_session(email_address, session_token):
         return True, "Fallback allow"  # Prevent blocking on errors
 
 # FIX 2: Get emails endpoint
-@app.route('/api/emails/<email_address>', methods=['GET'])
-def get_emails(email_address):
-    session_token = request.headers.get('X-Session-Token', '')
-    
-    # Skip validation if missing (backward compatibility)
-    if session_token:
-        is_valid, msg = validate_session(email_address, session_token)
-        if not is_valid and "expired" in msg:
-            return jsonify({'error': 'Session expired'}), 403
-    
-    # Get emails regardless (for compatibility)
-    with get_db() as conn:
-        c = conn.cursor(cursor_factory=RealDictCursor)
-        c.execute('SELECT * FROM emails WHERE recipient = %s ORDER BY received_at DESC LIMIT 50', 
-                 (email_address,))
-        
-        emails = []
-        for row in c.fetchall():
-            emails.append({
-                'sender': row['sender'],
-                'subject': row['subject'] or 'No Subject', 
-                'body': row['body'] or 'No Content',
-                'timestamp': row['received_at'].astimezone(MYANMAR_TZ).isoformat()
-            })
-        
-    return jsonify({'emails': emails})
 
 # FIX 3: Session end endpoint
 @app.route('/api/session/end', methods=['POST'])
@@ -1180,6 +1154,7 @@ if __name__ == '__main__':
     finally:
         if db_pool:
             db_pool.closeall()
+
 
 
 
