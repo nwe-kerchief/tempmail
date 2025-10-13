@@ -1501,17 +1501,20 @@ function closePasswordModal() {
 
 async function verifyAdminPassword() {
     const password = document.getElementById('admin-password-input').value;
+    
     if (!password) {
-        alert('❌ Please enter a password');
+        alert('Please enter a password');
         return;
     }
     
     try {
         const response = await fetch('/api/verify-admin', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: {
+                'Content-Type': 'application/json'
+            },
             credentials: 'include',
-            body: JSON.stringify({password: password})
+            body: JSON.stringify({ password: password })  // FIXED: correct format
         });
         
         if (response.ok) {
@@ -1520,17 +1523,17 @@ async function verifyAdminPassword() {
                 closePasswordModal();
                 activateAdminMode();
             } else {
-                alert('❌ Invalid password');
+                alert('Invalid password');
             }
         } else {
-            const error = await response.json();
-            alert('❌ ' + (error.error || 'Verification failed'));
+            alert('Authentication failed');
         }
     } catch (error) {
         console.error('Admin login error:', error);
-        alert('❌ Connection error');
+        alert('Connection error');
     }
 }
+
 
 function activateAdminMode() {
     isAdminMode = true;
@@ -1719,19 +1722,26 @@ function endSessionBackend() {
     });
     
 
-  // ─── SHOW CUSTOM MODAL ───
-    document.getElementById('end-session-btn').addEventListener('click', function() {
-        document.getElementById('custom-confirm-modal').classList.remove('hidden');
-    }); 
+        // End session button - FIXED
+        document.getElementById('end-session-btn').addEventListener('click', function() {
+            document.getElementById('custom-modal').classList.remove('hidden');
+            
+            // Set modal content
+            document.getElementById('modal-title').textContent = 'End Session';
+            document.getElementById('modal-message').textContent = 'Are you sure you want to end this session? All emails will be cleared.';
+        });
 
-        // ─── CUSTOM MODAL HANDLERS ───
-    document.getElementById('modal-confirm-btn').addEventListener('click', function() {
-        endSession();
-        document.getElementById('custom-confirm-modal').classList.add('hidden');
-    });
-    document.getElementById('modal-cancel-btn').addEventListener('click', function() {
-        document.getElementById('custom-confirm-modal').classList.add('hidden');
-    });
+        // Modal confirm button
+        document.getElementById('modal-confirm').addEventListener('click', function() {
+            document.getElementById('custom-modal').classList.add('hidden');
+            endSession();
+        });
+
+        // Modal cancel button
+        document.getElementById('modal-cancel').addEventListener('click', function() {
+            document.getElementById('custom-modal').classList.add('hidden');
+        });
+
 
 
     document.addEventListener('click', function(e) {
