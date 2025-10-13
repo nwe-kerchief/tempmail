@@ -353,19 +353,22 @@ def end_session():
 
 
 def invalidate_existing_sessions(email_address):
-    """FIXED: Immediately invalidate ALL existing sessions"""
+    """FORCE EXPIRE all sessions for this email - STRONGER VERSION"""
     try:
         with get_db() as conn:
             c = conn.cursor()
             
-            # Method 1: Set expires_at to past (works always)
+            # Method 1: Delete sessions entirely (most aggressive)
+            c.execute('DELETE FROM sessions WHERE email_address = %s', (email_address,))
+            
+            # Alternative Method 2: Expire them far in the past
             c.execute('''
                 UPDATE sessions
-                SET expires_at = NOW() - INTERVAL '1 hour'
+                SET expires_at = NOW() - INTERVAL '10 years'
                 WHERE email_address = %s
             ''', (email_address,))
             
-            # Method 2: Set is_active to FALSE (if column exists)
+            # Method 3: Set is_active to FALSE (if column exists)
             try:
                 c.execute('''
                     UPDATE sessions
@@ -373,10 +376,10 @@ def invalidate_existing_sessions(email_address):
                     WHERE email_address = %s
                 ''', (email_address,))
             except:
-                pass  # Column might not exist
+                pass
             
             conn.commit()
-            logger.info(f"✅ FORCEFULLY invalidated ALL sessions for {email_address}")
+            logger.info(f"💀 DELETED/EXPIRED all sessions for {email_address}")
             
     except Exception as e:
         logger.error(f"❌ Error invalidating sessions: {e}")
@@ -829,47 +832,36 @@ def admin_delete_address(email_address):
 @app.route('/api/admin/sessions', methods=['GET'])
 @admin_required
 def admin_get_sessions():
-    """Get all active sessions"""
     try:
         with get_db() as conn:
             c = conn.cursor(cursor_factory=RealDictCursor)
             
-            try:
-                c.execute('''
-                    SELECT session_token, email_address, created_at, expires_at, last_activity
-                    FROM sessions
-                    WHERE expires_at > NOW() AND is_active = TRUE
-                    ORDER BY last_activity DESC
-                ''')
-            except:
-                c.execute('''
-                    SELECT session_token, email_address, created_at, expires_at, last_activity
-                    FROM sessions
-                    WHERE expires_at > NOW()
-                    ORDER BY last_activity DESC
-                ''')
+            # FIXED: Only show TRULY active sessions
+            c.execute('''
+                SELECT session_token, email_address, created_at, expires_at, last_activity
+                FROM sessions
+                WHERE expires_at > NOW()
+                ORDER BY last_activity DESC
+            ''')
             
             sessions = []
             for row in c.fetchall():
-                created_at = row['created_at'].astimezone(MYANMAR_TZ)
-                expires_at = row['expires_at'].astimezone(MYANMAR_TZ)
-                last_activity = row['last_activity'].astimezone(MYANMAR_TZ)
-                
-                sessions.append({
-                    'session_token': row['session_token'],
-                    'email': row['email_address'],
-                    'created_at': created_at.isoformat(),
-                    'expires_at': expires_at.isoformat(),
-                    'last_activity': last_activity.isoformat(),
-                    'session_age_minutes': int((datetime.now(MYANMAR_TZ) - created_at).total_seconds() / 60),
-                    'time_remaining_minutes': int((expires_at - datetime.now(MYANMAR_TZ)).total_seconds() / 60)
-                })
+                # Double check expiry
+                if row['expires_at'] > datetime.now(MYANMAR_TZ):
+                    sessions.append({
+                        'session_token': row['session_token'],
+                        'email': row['email_address'],
+                        'created_at': row['created_at'].astimezone(MYANMAR_TZ).isoformat(),
+                        'expires_at': row['expires_at'].astimezone(MYANMAR_TZ).isoformat(),
+                        'last_activity': row['last_activity'].astimezone(MYANMAR_TZ).isoformat()
+                    })
         
         return jsonify({'sessions': sessions})
         
     except Exception as e:
-        logger.error(f"❌ Error fetching sessions: {e}")
+        logger.error(f"Error fetching sessions: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/admin/session/<session_token>/end', methods=['POST'])
 @admin_required
