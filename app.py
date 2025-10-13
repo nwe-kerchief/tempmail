@@ -329,52 +329,30 @@ def create_email():
         
         email_address = f"{username}@{DOMAIN}"
         
-        # Check if email already has an active session
         conn = get_db()
         c = conn.cursor()
         
+        # FIX: Always end any existing sessions for this email first
         try:
-            c.execute('''
-                SELECT session_token, is_active 
-                FROM sessions 
-                WHERE email_address = %s AND expires_at > NOW() AND is_active = TRUE
-                ORDER BY created_at DESC 
-                LIMIT 1
-            ''', (email_address,))
+            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
+            has_is_active = c.fetchone() is not None
+            
+            if has_is_active:
+                c.execute('''
+                    UPDATE sessions 
+                    SET is_active = FALSE 
+                    WHERE email_address = %s AND is_active = TRUE
+                ''', (email_address,))
+            else:
+                # If no is_active column, delete the session
+                c.execute('''
+                    DELETE FROM sessions 
+                    WHERE email_address = %s
+                ''', (email_address,))
         except Exception as e:
-            logger.warning(f"Error checking session: {e}")
-            c.execute('''
-                SELECT session_token
-                FROM sessions 
-                WHERE email_address = %s AND expires_at > NOW()
-                ORDER BY created_at DESC 
-                LIMIT 1
-            ''', (email_address,))
-        
-        existing_session = c.fetchone()
-        
-        if existing_session:
-            session_is_active = True
-            if len(existing_session) > 1:
-                session_is_active = existing_session[1]
-            
-            current_user_session = data.get('session_token')
-            
-            if session_is_active:
-                if existing_session[0] == current_user_session:
-                    # It's the same user - tell them they're already using it
-                    conn.close()
-                    return jsonify({
-                        'error': 'You are already using this email address in your current session.',
-                        'code': 'EMAIL_SELF_USED'
-                    }), 409
-                else:
-                    # It's a different user
-                    conn.close()
-                    return jsonify({
-                        'error': 'This email address is currently in use by another active session.',
-                        'code': 'EMAIL_IN_USE'
-                    }), 409
+            logger.warning(f"Error ending existing sessions: {e}")
+            # Fallback - delete sessions
+            c.execute('DELETE FROM sessions WHERE email_address = %s', (email_address,))
         
         # Create session token
         session_token = secrets.token_urlsafe(32)
@@ -420,7 +398,7 @@ def create_email():
     except Exception as e:
         logger.error(f"❌ Error creating email: {e}")
         return jsonify({'error': 'Failed to create session', 'code': 'SERVER_ERROR'}), 500
-      
+    
 @app.route('/api/session/end', methods=['POST'])
 def end_session():
     try:
@@ -446,7 +424,7 @@ def end_session():
             conn.close()
             return jsonify({'error': 'Session not found'}), 404
         
-        # Try to update is_active if column exists
+        # FIX: Only mark session as inactive, NEVER delete emails
         try:
             c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
             has_is_active = c.fetchone() is not None
@@ -458,29 +436,31 @@ def end_session():
                     WHERE session_token = %s AND email_address = %s
                 ''', (session_token, email_address))
             else:
-                # If is_active column doesn't exist, delete the session
+                # If is_active column doesn't exist, just update expires_at to now
                 c.execute('''
-                    DELETE FROM sessions 
+                    UPDATE sessions 
+                    SET expires_at = NOW()
                     WHERE session_token = %s AND email_address = %s
                 ''', (session_token, email_address))
         except Exception as e:
             logger.warning(f"Error in session end logic: {e}")
-            # Fallback to simple deletion
+            # Fallback to updating expires_at
             c.execute('''
-                DELETE FROM sessions 
+                UPDATE sessions 
+                SET expires_at = NOW()
                 WHERE session_token = %s AND email_address = %s
             ''', (session_token, email_address))
         
         conn.commit()
         conn.close()
         
-        logger.info(f"✅ Session ended for: {email_address}")
+        logger.info(f"✅ Session ended for: {email_address} (emails preserved)")
         return jsonify({'success': True, 'message': 'Session ended successfully'})
         
     except Exception as e:
         logger.error(f"❌ Error ending session: {e}")
         return jsonify({'error': 'Failed to end session'}), 500
-
+    
 @app.route('/api/emails/<email_address>', methods=['GET'])
 def get_emails(email_address):
     """Get emails for a specific email address"""
@@ -648,7 +628,7 @@ def cleanup_expired_sessions():
             conn = get_db()
             c = conn.cursor()
             
-            # Cleanup expired sessions ONLY - emails are preserved forever
+            # FIX: Only cleanup expired sessions, NEVER delete emails
             c.execute("DELETE FROM sessions WHERE expires_at < NOW()")
             deleted = c.rowcount
             conn.commit()
@@ -988,6 +968,48 @@ def remove_from_blacklist(username):
         
     except Exception as e:
         logger.error(f"❌ Error removing from blacklist: {e}")
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/admin/clear-sessions', methods=['POST'])
+@admin_required
+def admin_clear_sessions():
+    """Clear all admin-related sessions"""
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        
+        # End all active sessions for admin usernames
+        admin_usernames = ['ammz', 'admin', 'owner', 'root', 'system', 'az', 'c']
+        
+        for username in admin_usernames:
+            email_pattern = f"{username}@%"
+            try:
+                c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
+                has_is_active = c.fetchone() is not None
+                
+                if has_is_active:
+                    c.execute('''
+                        UPDATE sessions 
+                        SET is_active = FALSE 
+                        WHERE email_address LIKE %s AND is_active = TRUE
+                    ''', (email_pattern,))
+                else:
+                    c.execute('''
+                        UPDATE sessions 
+                        SET expires_at = NOW()
+                        WHERE email_address LIKE %s AND expires_at > NOW()
+                    ''', (email_pattern,))
+            except Exception as e:
+                logger.warning(f"Error clearing admin session for {username}: {e}")
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info("✅ All admin sessions cleared")
+        return jsonify({'success': True, 'message': 'Admin sessions cleared'})
+        
+    except Exception as e:
+        logger.error(f"❌ Error clearing admin sessions: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.before_request
