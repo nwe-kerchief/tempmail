@@ -531,6 +531,210 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// IMPROVED Email Content Cleaning - Same as index.html
+function improvedCleanEmailBody(rawBody) {
+    // Step 1: Extract verification code first
+    const codeMatch = rawBody.match(/\b\d{4,8}\b/);
+    const verificationCode = codeMatch ? codeMatch[0] : null;
+    
+    // Step 2: Remove ALL CSS and style blocks
+    let cleanBody = rawBody;
+    
+    // Remove style blocks
+    cleanBody = cleanBody.replace(/<style[^>]*>.*?<\/style>/gis, '');
+    
+    // Remove inline styles and classes from HTML
+    cleanBody = cleanBody.replace(/style="[^"]*"/gi, '');
+    cleanBody = cleanBody.replace(/class="[^"]*"/gi, '');
+    
+    // Remove all HTML comments
+    cleanBody = cleanBody.replace(/<!--.*?-->/gs, '');
+    
+    // Remove ALL HTML tags but preserve spaces
+    cleanBody = cleanBody.replace(/<[^>]+>/g, ' ');
+    
+    // Step 3: Decode HTML entities
+    cleanBody = cleanBody
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&#8217;/g, "'")
+        .replace(/&#160;/g, ' ')
+        .replace(/&copy;/g, '©')
+        .replace(/&reg;/g, '®');
+    
+    // Step 4: Remove quoted-printable encoding
+    cleanBody = cleanBody
+        .replace(/=3D/g, '=')
+        .replace(/=20/g, ' ')
+        .replace(/=2E/g, '.')
+        .replace(/=\r?\n/g, '')
+        .replace(/=\?/g, '');
+    
+    // Step 5: Remove MIME boundaries and headers
+    cleanBody = cleanBody
+        .replace(/----==_mimepart_[^\s]*/g, '')
+        .replace(/Content-Type:[^\n]*/gi, '')
+        .replace(/Content-Transfer-Encoding:[^\n]*/gi, '')
+        .replace(/MIME-Version:[^\n]*/gi, '')
+        .replace(/charset=[^\s;]*/gi, '')
+        .replace(/boundary=[^\s;]*/gi, '');
+    
+    // Step 6: Remove email headers and technical lines
+    const linesToRemove = [
+        /^From:.*/gmi,
+        /^To:.*/gmi,
+        /^Subject:.*/gmi,
+        /^Date:.*/gmi,
+        /^Received:.*/gmi,
+        /^Return-Path:.*/gmi,
+        /^Message-ID:.*/gmi,
+        /^DKIM-Signature:.*/gmi,
+        /^ARC-.*:.*/gmi,
+        /by cloudflare-email\.net.*/gi,
+        /@font-face.*/gi,
+        /font-family:.*/gi,
+        /@media.*/gi,
+        /\.ExternalClass.*/gi,
+        /outlook.*/gi,
+        /-webkit-.*/gi,
+        /-moz-.*/gi,
+        /\*\s*!!!!?.*/g
+    ];
+    
+    linesToRemove.forEach(pattern => {
+        cleanBody = cleanBody.replace(pattern, '');
+    });
+    
+    // Step 7: Clean whitespace
+    cleanBody = cleanBody
+        .replace(/\s+/g, ' ')
+        .replace(/\s*\.\s*/g, '. ')
+        .trim();
+    
+    // Step 8: Split into meaningful sentences
+    const sentences = cleanBody
+        .split(/\.\s+/)
+        .map(s => s.trim())
+        .filter(s => {
+            // Filter out short, meaningless fragments
+            if (s.length < 10) return false;
+            
+            // Filter out technical junk
+            const junk = ['charset', 'utf-8', 'helvetica', 'arial', 'sans-serif', 
+                          'margin', 'padding', 'border', 'font-size', 'color',
+                          'text-align', 'display', 'width', 'height'];
+            return !junk.some(j => s.toLowerCase().includes(j));
+        });
+    
+    // Step 9: Build clean HTML output
+    let html = '';
+    
+    // Add verification code prominently if found
+    if (verificationCode) {
+        html += `<div class="verification-code">${verificationCode}</div>`;
+    }
+    
+    // Add meaningful content
+    if (sentences.length > 0) {
+        sentences.forEach(sentence => {
+            // Skip if already shown in verification code
+            if (verificationCode && sentence.includes(verificationCode)) {
+                return;
+            }
+            
+            // Add as paragraph with proper spacing
+            html += `<p class="mb-3 leading-relaxed text-gray-200">${escapeHtml(sentence)}.</p>`;
+        });
+    } else {
+        // Fallback: Show cleaned body if no sentences found
+        if (cleanBody.length > 20) {
+            html += `<p class="mb-3 leading-relaxed text-gray-200">${escapeHtml(cleanBody)}</p>`;
+        } else {
+            html += '<p class="text-gray-400">No readable content found in this email.</p>';
+        }
+    }
+    
+    return html;
+}
+
+// View full email content
+function viewFullEmail(email) {
+    const details = document.getElementById('email-details');
+    
+    const cleanedBody = improvedCleanEmailBody(email.body || 'No content');
+    
+    details.innerHTML = `
+        <div class="email-viewer-container custom-scrollbar">
+            <!-- Back Button -->
+            <button onclick="viewEmails('${escapeHtml(selectedAddress)}')" 
+                    class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg mb-4 transition-all text-sm">
+                <i class="fas fa-arrow-left mr-2"></i>Back to List
+            </button>
+            
+            <!-- Email Header -->
+            <div class="email-header">
+                <div class="email-header-item">
+                    <div class="email-header-label">From</div>
+                    <div class="email-header-value">${escapeHtml(email.sender || 'Unknown')}</div>
+                </div>
+                <div class="email-header-item">
+                    <div class="email-header-label">To</div>
+                    <div class="email-header-value">${escapeHtml(email.recipient || selectedAddress)}</div>
+                </div>
+                <div class="email-header-item">
+                    <div class="email-header-label">Subject</div>
+                    <div class="email-header-value">${escapeHtml(email.subject || 'No subject')}</div>
+                </div>
+                <div class="email-header-item">
+                    <div class="email-header-label">Date</div>
+                    <div class="email-header-value">${formatTime(email.timestamp)}</div>
+                </div>
+            </div>
+            
+            <!-- Email Body -->
+            <div class="email-body-content">
+                ${cleanedBody}
+            </div>
+            
+            <!-- Delete Button -->
+            <div class="mt-6 pt-4 border-t border-gray-700">
+                <button onclick="deleteEmailAndReturn(${email.id})" 
+                        class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all text-sm">
+                    <i class="fas fa-trash mr-2"></i>Delete Email
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+// Delete email and return to list
+function deleteEmailAndReturn(emailId) {
+    showModal('Delete Email', 'Are you sure you want to delete this email? This action cannot be undone.', function() {
+        fetch(`${API_URL}/api/admin/delete/${emailId}`, {
+            method: 'DELETE'
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                viewEmails(selectedAddress); // Return to list
+                loadStats();
+                showNotification('Email deleted successfully', 'success');
+            } else {
+                showNotification('Failed to delete email', 'error');
+            }
+        })
+        .catch(err => {
+            console.error('Error deleting email:', err);
+            showNotification('Error deleting email', 'error');
+        });
+    });
+}
+
+
 function formatTime(timestamp) {
     try {
         const date = new Date(timestamp);
@@ -1127,16 +1331,29 @@ function showEmailList() {
     document.getElementById('back-to-list').classList.add('hidden');
 }
 
-// IMPROVED Better email content processing
+// COMPLETELY REWRITTEN Email Content Processing
 function improvedCleanEmailBody(rawBody) {
-    // Extract verification code - improved pattern
+    // Step 1: Extract verification code first
     const codeMatch = rawBody.match(/\b\d{4,8}\b/);
     const verificationCode = codeMatch ? codeMatch[0] : null;
     
-    // Remove HTML tags and decode HTML entities
-    let cleanBody = rawBody.replace(/<[^>]*>/g, ' ');
+    // Step 2: Remove ALL CSS and style blocks
+    let cleanBody = rawBody;
     
-    // Improved HTML entity decoding
+    // Remove style blocks
+    cleanBody = cleanBody.replace(/<style[^>]*>.*?<\/style>/gis, '');
+    
+    // Remove inline styles and classes from HTML
+    cleanBody = cleanBody.replace(/style="[^"]*"/gi, '');
+    cleanBody = cleanBody.replace(/class="[^"]*"/gi, '');
+    
+    // Remove all HTML comments
+    cleanBody = cleanBody.replace(/<!--.*?-->/gs, '');
+    
+    // Remove ALL HTML tags but preserve spaces
+    cleanBody = cleanBody.replace(/<[^>]+>/g, ' ');
+    
+    // Step 3: Decode HTML entities
     cleanBody = cleanBody
         .replace(/&nbsp;/g, ' ')
         .replace(/&amp;/g, '&')
@@ -1146,19 +1363,74 @@ function improvedCleanEmailBody(rawBody) {
         .replace(/&#39;/g, "'")
         .replace(/&#8217;/g, "'")
         .replace(/&#160;/g, ' ')
+        .replace(/&copy;/g, '©')
+        .replace(/&reg;/g, '®');
+    
+    // Step 4: Remove quoted-printable encoding
+    cleanBody = cleanBody
         .replace(/=3D/g, '=')
         .replace(/=20/g, ' ')
-        .replace(/=2E/g, '.');
+        .replace(/=2E/g, '.')
+        .replace(/=\r?\n/g, '')
+        .replace(/=\?/g, '');
     
-    // Remove quoted-printable line breaks
-    cleanBody = cleanBody.replace(/=\?/g, '');
+    // Step 5: Remove MIME boundaries and headers
+    cleanBody = cleanBody
+        .replace(/----==_mimepart_[^\s]*/g, '')
+        .replace(/Content-Type:[^\n]*/gi, '')
+        .replace(/Content-Transfer-Encoding:[^\n]*/gi, '')
+        .replace(/MIME-Version:[^\n]*/gi, '')
+        .replace(/charset=[^\s;]*/gi, '')
+        .replace(/boundary=[^\s;]*/gi, '');
     
-    // Remove extra whitespace and normalize
-    cleanBody = cleanBody.replace(/\s+/g, ' ').trim();
+    // Step 6: Remove email headers and technical lines
+    const linesToRemove = [
+        /^From:.*/gmi,
+        /^To:.*/gmi,
+        /^Subject:.*/gmi,
+        /^Date:.*/gmi,
+        /^Received:.*/gmi,
+        /^Return-Path:.*/gmi,
+        /^Message-ID:.*/gmi,
+        /^DKIM-Signature:.*/gmi,
+        /^ARC-.*:.*/gmi,
+        /by cloudflare-email\.net.*/gi,
+        /@font-face.*/gi,
+        /font-family:.*/gi,
+        /@media.*/gi,
+        /\.ExternalClass.*/gi,
+        /outlook.*/gi,
+        /-webkit-.*/gi,
+        /-moz-.*/gi,
+        /\*\s*!!!!?.*/g
+    ];
     
-    // Split into sentences for better formatting
-    let sentences = cleanBody.split(/(?<=\.\s)/).filter(s => s.trim().length > 0);
+    linesToRemove.forEach(pattern => {
+        cleanBody = cleanBody.replace(pattern, '');
+    });
     
+    // Step 7: Clean whitespace
+    cleanBody = cleanBody
+        .replace(/\s+/g, ' ')
+        .replace(/\s*\.\s*/g, '. ')
+        .trim();
+    
+    // Step 8: Split into meaningful sentences
+    const sentences = cleanBody
+        .split(/\.\s+/)
+        .map(s => s.trim())
+        .filter(s => {
+            // Filter out short, meaningless fragments
+            if (s.length < 10) return false;
+            
+            // Filter out technical junk
+            const junk = ['charset', 'utf-8', 'helvetica', 'arial', 'sans-serif', 
+                          'margin', 'padding', 'border', 'font-size', 'color',
+                          'text-align', 'display', 'width', 'height'];
+            return !junk.some(j => s.toLowerCase().includes(j));
+        });
+    
+    // Step 9: Build clean HTML output
     let html = '';
     
     // Add verification code prominently if found
@@ -1166,44 +1438,21 @@ function improvedCleanEmailBody(rawBody) {
         html += `<div class="verification-code">${verificationCode}</div>`;
     }
     
-    // Process each sentence
-    sentences.forEach(sentence => {
-        const trimmed = sentence.trim();
-        if (trimmed.length === 0) return;
-        
-        // Skip the line that contains the verification code (already displayed)
-        if (verificationCode && trimmed.includes(verificationCode)) return;
-        
-        // Skip technical lines and headers
-        if (trimmed.includes('by cloudflare-email.net') ||
-            trimmed.includes('ARC-Seal') ||
-            trimmed.includes('DKIM-Signature') ||
-            trimmed.includes('Received:') ||
-            trimmed.includes('Content-Type:') ||
-            trimmed.includes('MIME-Version:') ||
-            trimmed.includes('@font-face') ||
-            trimmed.includes('font-family:') ||
-            trimmed.includes('.ExternalClass') ||
-            trimmed.includes('outlook') ||
-            trimmed.includes('@media')) return;
-        
-        // Format as paragraphs with proper spacing
-        html += `<p class="mb-3 leading-relaxed">${escapeHtml(trimmed)}</p>`;
-    });
-    
-    // If no content was added, show raw body in a cleaner way
-    if (html === '' || (verificationCode && html === `<div class="verification-code">${verificationCode}</div>`)) {
-        // Clean the body more aggressively
-        let fallbackBody = cleanBody
-            .replace(/Content-Type[^\n]*/gi, '')
-            .replace(/MIME-Version[^\n]*/gi, '')
-            .replace(/charset=[^\s]*/gi, '')
-            .replace(/boundary=[^\s]*/gi, '')
-            .replace(/Transfer-Encoding[^\n]*/gi, '')
-            .trim();
-        
-        if (fallbackBody.length > 0) {
-            html += `<div class="email-content-container"><p class="mb-3 leading-relaxed">${escapeHtml(fallbackBody)}</p></div>`;
+    // Add meaningful content
+    if (sentences.length > 0) {
+        sentences.forEach(sentence => {
+            // Skip if already shown in verification code
+            if (verificationCode && sentence.includes(verificationCode)) {
+                return;
+            }
+            
+            // Add as paragraph with proper spacing
+            html += `<p class="mb-3 leading-relaxed text-gray-200">${escapeHtml(sentence)}.</p>`;
+        });
+    } else {
+        // Fallback: Show cleaned body if no sentences found
+        if (cleanBody.length > 20) {
+            html += `<p class="mb-3 leading-relaxed text-gray-200">${escapeHtml(cleanBody)}</p>`;
         } else {
             html += '<p class="text-gray-400">No readable content found in this email.</p>';
         }
@@ -1211,6 +1460,7 @@ function improvedCleanEmailBody(rawBody) {
     
     return html;
 }
+
 
 
 // Auto-refresh functions
