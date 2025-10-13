@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -157,7 +156,7 @@ border-radius: 3px;
 background: rgba(255, 255, 255, 0.5);
 }
 
-/* Responsive Design - Copy from index.html */
+/* Responsive Design */
 @media (max-width: 768px) {
 .mobile-stack { flex-direction: column; }
 .mobile-full { width: 100%; }
@@ -178,37 +177,35 @@ height: 350px;
 max-height: 350px;
 }
 }
-/* Email content fixes using existing classes */
-/* Email Viewer - Match index.html */
+
 .verification-code {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    color: white;
-    padding: 20px;
-    border-radius: 12px;
-    font-size: 28px;
-    font-weight: bold;
-    text-align: center;
-    letter-spacing: 4px;
-    margin-bottom: 20px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+color: white;
+padding: 20px;
+border-radius: 12px;
+font-size: 28px;
+font-weight: bold;
+text-align: center;
+letter-spacing: 4px;
+margin-bottom: 20px;
+box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
 .email-content-container {
-    background: rgba(31, 41, 55, 0.3);
-    border-radius: 12px;
-    padding: 20px;
-    line-height: 1.6;
-    color: #e5e7eb;
+background: rgba(31, 41, 55, 0.3);
+border-radius: 12px;
+padding: 20px;
+line-height: 1.6;
+color: #e5e7eb;
 }
 
 .email-content-container p {
-    margin-bottom: 1rem;
+margin-bottom: 1rem;
 }
 
 #admin-inbox-container {
-    background: rgba(0, 0, 0, 0.3);
+background: rgba(0, 0, 0, 0.3);
 }
-
 
 #email-content-container {
 height: 500px;
@@ -226,67 +223,64 @@ max-width: 100%;
 word-wrap: break-word;
 }
 .border-red-500 {
-    border-color: #ef4444 !important;
+border-color: #ef4444 !important;
 }
 .bg-blue-600 {
-    background-color: #2563eb;
+background-color: #2563eb;
 }
 .bg-blue-600:hover {
-    background-color: #1d4ed8;
+background-color: #1d4ed8;
 }
 
-/* Email Content Viewer - Match index.html */
 .verification-code {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    color: white;
-    padding: 20px;
-    border-radius: 12px;
-    font-size: 32px;
-    font-weight: bold;
-    text-align: center;
-    letter-spacing: 4px;
-    margin-bottom: 20px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+color: white;
+padding: 20px;
+border-radius: 12px;
+font-size: 32px;
+font-weight: bold;
+text-align: center;
+letter-spacing: 4px;
+margin-bottom: 20px;
+box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
 .email-viewer-container {
-    background: rgba(31, 41, 55, 0.5);
-    border-radius: 12px;
-    padding: 20px;
-    max-height: 500px;
-    overflow-y: auto;
+background: rgba(31, 41, 55, 0.5);
+border-radius: 12px;
+padding: 20px;
+max-height: 500px;
+overflow-y: auto;
 }
 
 .email-header {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    padding-bottom: 15px;
-    margin-bottom: 20px;
+border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+padding-bottom: 15px;
+margin-bottom: 20px;
 }
 
 .email-header-item {
-    margin-bottom: 10px;
+margin-bottom: 10px;
 }
 
 .email-header-label {
-    color: #9ca3af;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    margin-bottom: 4px;
+color: #9ca3af;
+font-size: 12px;
+font-weight: 600;
+text-transform: uppercase;
+margin-bottom: 4px;
 }
 
 .email-header-value {
-    color: #ffffff;
-    font-size: 14px;
+color: #ffffff;
+font-size: 14px;
 }
 
 .email-body-content {
-    color: #e5e7eb;
-    line-height: 1.6;
+color: #e5e7eb;
+line-height: 1.6;
 }
 
-
-/* Session item styling */
 .session-item {
 transition: all 0.2s ease;
 cursor: pointer;
@@ -397,62 +391,61 @@ transform: translateY(-1px);
                 </div>
             </div>
 
-            <!-- Email Details - NEW MOBILE-STYLE INBOX -->
-<div class="glass-effect rounded-xl p-4 md:p-6 fade-in mobile-full">
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
-        <h2 class="text-lg md:text-xl font-bold text-white">
-            <i class="fas fa-envelope-open mr-2"></i>Emails for: 
-            <span id="selected-address" class="text-blue-400 text-sm md:text-base">None selected</span>
-        </h2>
-        <div id="email-count-badge" class="bg-blue-600 text-white px-3 py-1 rounded-full text-xs md:text-sm font-medium hidden">
-            0 emails
-        </div>
-    </div>
-    
-    <!-- Single Container for List and Content View -->
-    <div id="admin-inbox-container" class="w-full bg-gray-900 rounded-xl p-3 overflow-y-auto" style="height: 500px;">
-        
-        <!-- Email List View -->
-        <div id="admin-email-list-view" class="h-full">
-            <div id="email-details" class="space-y-2 h-full overflow-y-auto custom-scrollbar">
-                <p class="text-gray-400 text-center py-8">Select an address to view emails</p>
-            </div>
-        </div>
-        
-        <!-- Email Content View (Hidden by default) -->
-        <div id="admin-email-content-view" class="hidden h-full flex flex-col">
-            <!-- Back Button -->
-            <button id="admin-back-btn" onclick="showAdminEmailList()" 
-                    class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg mb-4 transition-all text-sm flex items-center">
-                <i class="fas fa-arrow-left mr-2"></i>Back to List
-            </button>
-            
-            <!-- Email Header -->
-            <div class="border-b border-gray-700 pb-4 mb-4">
-                <h2 id="admin-email-subject" class="text-lg md:text-xl font-bold text-white mb-2 break-words"></h2>
-                <div class="flex items-center text-xs md:text-sm text-gray-300 mb-2">
-                    <strong class="mr-2 text-white font-semibold flex items-center">
-                        <i class="fas fa-user mr-2"></i>From:
-                    </strong>
-                    <span id="admin-email-from" class="font-mono font-medium break-all"></span>
+            <!-- Email Details -->
+            <div class="glass-effect rounded-xl p-4 md:p-6 fade-in mobile-full">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                    <h2 class="text-lg md:text-xl font-bold text-white">
+                        <i class="fas fa-envelope-open mr-2"></i>Emails for: 
+                        <span id="selected-address" class="text-blue-400 text-sm md:text-base">None selected</span>
+                    </h2>
+                    <div id="email-count-badge" class="bg-blue-600 text-white px-3 py-1 rounded-full text-xs md:text-sm font-medium hidden">
+                        0 emails
+                    </div>
                 </div>
-                <span id="admin-email-date" class="text-xs text-gray-400"></span>
-            </div>
-            
-            <!-- Email Body -->
-            <div id="admin-email-body" class="email-content-container flex-1 overflow-y-auto custom-scrollbar"></div>
-            
-            <!-- Delete Button -->
-            <div class="mt-4 pt-4 border-t border-gray-700">
-                <button id="admin-delete-email-btn" 
-                        class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all text-sm">
-                    <i class="fas fa-trash mr-2"></i>Delete Email
-                </button>
+                
+                <!-- Single Container for List and Content View -->
+                <div id="admin-inbox-container" class="w-full bg-gray-900 rounded-xl p-3 overflow-y-auto" style="height: 500px;">
+                    
+                    <!-- Email List View -->
+                    <div id="admin-email-list-view" class="h-full">
+                        <div id="email-details" class="space-y-2 h-full overflow-y-auto custom-scrollbar">
+                            <p class="text-gray-400 text-center py-8">Select an address to view emails</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Email Content View (Hidden by default) -->
+                    <div id="admin-email-content-view" class="hidden h-full flex flex-col">
+                        <!-- Back Button -->
+                        <button id="admin-back-btn" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg mb-4 transition-all text-sm flex items-center">
+                            <i class="fas fa-arrow-left mr-2"></i>Back to List
+                        </button>
+                        
+                        <!-- Email Header -->
+                        <div class="border-b border-gray-700 pb-4 mb-4">
+                            <h2 id="admin-email-subject" class="text-lg md:text-xl font-bold text-white mb-2 break-words"></h2>
+                            <div class="flex items-center text-xs md:text-sm text-gray-300 mb-2">
+                                <strong class="mr-2 text-white font-semibold flex items-center">
+                                    <i class="fas fa-user mr-2"></i>From:
+                                </strong>
+                                <span id="admin-email-from" class="font-mono font-medium break-all"></span>
+                            </div>
+                            <span id="admin-email-date" class="text-xs text-gray-400"></span>
+                        </div>
+                        
+                        <!-- Email Body -->
+                        <div id="admin-email-body" class="email-content-container flex-1 overflow-y-auto custom-scrollbar"></div>
+                        
+                        <!-- Delete Button -->
+                        <div class="mt-4 pt-4 border-t border-gray-700">
+                            <button id="admin-delete-email-btn" 
+                                    class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all text-sm">
+                                <i class="fas fa-trash mr-2"></i>Delete Email
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
-</div>
-
 
         <!-- Active Sessions Section -->
         <div class="glass-effect rounded-xl p-4 md:p-6 fade-in mb-6">
@@ -497,10 +490,25 @@ var API_URL = window.location.origin;
 var selectedAddress = null;
 var autoRefreshInterval = null;
 var DOMAIN = 'aungmyomyatzaw.online';
+var currentViewingEmail = null;
 
-// Blacklist management functions - FIXED display issue
+// Initialize functions when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Set up event listeners
+    document.getElementById('admin-login-btn').addEventListener('click', adminLogin);
+    document.getElementById('admin-password').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') adminLogin();
+    });
+    document.getElementById('logout-btn').addEventListener('click', adminLogout);
+    document.getElementById('admin-back-btn').addEventListener('click', showAdminEmailList);
+    document.getElementById('admin-delete-email-btn').addEventListener('click', deleteCurrentEmail);
+});
+
+// Blacklist management functions
 function loadBlacklist() {
-    fetch(`${API_URL}/api/admin/blacklist`)
+    fetch(`${API_URL}/api/admin/blacklist`, {
+        credentials: 'include'
+    })
         .then(res => {
             if (res.status === 401) {
                 location.reload();
@@ -523,14 +531,11 @@ function loadBlacklist() {
             
             blacklistEl.innerHTML = '';
             
-            // FIXED: Handle both string array and object array formats
             data.blacklist.forEach(item => {
-                // Extract username - handle both formats
                 let username;
                 if (typeof item === 'string') {
                     username = item;
                 } else if (typeof item === 'object' && item !== null) {
-                    // Try different possible property names
                     username = item.username || item.name || item.value || String(item);
                 } else {
                     username = String(item);
@@ -559,7 +564,6 @@ function loadBlacklist() {
         });
 }
 
-
 function addToBlacklist() {
     var usernameInput = document.getElementById('new-blacklist-username');
     var username = usernameInput.value.trim().toLowerCase();
@@ -581,6 +585,7 @@ function addToBlacklist() {
             fetch(API_URL + '/api/admin/blacklist', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
+                credentials: 'include',
                 body: JSON.stringify({username: username})
             })
             .then(res => res.json())
@@ -607,7 +612,8 @@ function removeFromBlacklist(username) {
         `Are you sure you want to remove "<strong>${escapeHtml(username)}</strong>" from the blacklist?<br><br>Users will be able to use this username again.`,
         function() {
             fetch(API_URL + '/api/admin/blacklist/' + encodeURIComponent(username), {
-                method: 'DELETE'
+                method: 'DELETE',
+                credentials: 'include'
             })
             .then(res => res.json())
             .then(data => {
@@ -626,14 +632,15 @@ function removeFromBlacklist(username) {
     );
 }
 
-// NEW: End user session from admin
+// End user session from admin
 function endUserSession(sessionToken, email) {
     showModal(
         'End User Session',
         `Are you sure you want to end the session for <strong>${escapeHtml(email)}</strong>?<br><br>The user will be logged out and lose access to their emails.`,
         function() {
             fetch(API_URL + '/api/admin/session/' + sessionToken + '/end', {
-                method: 'POST'
+                method: 'POST',
+                credentials: 'include'
             })
             .then(res => res.json())
             .then(data => {
@@ -673,7 +680,7 @@ function showModal(title, message, confirmCallback) {
     const modalCancel = document.getElementById('modal-cancel');
     
     modalTitle.textContent = title;
-    modalMessage.innerHTML = message; // Use innerHTML to allow <strong> tags
+    modalMessage.innerHTML = message;
     modal.classList.remove('hidden');
     
     // Remove previous event listeners
@@ -694,11 +701,6 @@ function showModal(title, message, confirmCallback) {
 }
 
 // Login handler
-document.getElementById('admin-login-btn').addEventListener('click', adminLogin);
-document.getElementById('admin-password').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') adminLogin();
-});
-
 function adminLogin() {
     var password = document.getElementById('admin-password').value;
     var errorEl = document.getElementById('admin-login-error');
@@ -717,6 +719,7 @@ function adminLogin() {
     fetch(API_URL + '/api/admin/login', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
+        credentials: 'include',
         body: JSON.stringify({password: password})
     })
     .then(res => {
@@ -752,12 +755,15 @@ function adminLogin() {
 }
 
 // Logout handler
-document.getElementById('logout-btn').addEventListener('click', function() {
+function adminLogout() {
     showModal(
         'Confirm Logout',
         'Are you sure you want to logout from the admin panel?',
         function() {
-            fetch(API_URL + '/api/admin/logout', {method: 'POST'})
+            fetch(API_URL + '/api/admin/logout', {
+                method: 'POST',
+                credentials: 'include'
+            })
             .then(() => {
                 location.reload();
             })
@@ -766,9 +772,9 @@ document.getElementById('logout-btn').addEventListener('click', function() {
             });
         }
     );
-});
+}
 
-// Email cleaning function - Same as index.html
+// Email cleaning function
 function improvedCleanEmailBody(rawBody) {
     const codeMatch = rawBody.match(/\b\d{4,8}\b/);
     const verificationCode = codeMatch ? codeMatch[0] : null;
@@ -854,8 +860,6 @@ function improvedCleanEmailBody(rawBody) {
 }
 
 // View full email in admin panel
-var currentViewingEmail = null;
-
 function viewFullAdminEmail(email) {
     currentViewingEmail = email;
     
@@ -871,11 +875,6 @@ function viewFullAdminEmail(email) {
     // Clean and display body
     const cleanBody = improvedCleanEmailBody(email.body || 'No content');
     document.getElementById('admin-email-body').innerHTML = cleanBody;
-    
-    // Set up delete button
-    document.getElementById('admin-delete-email-btn').onclick = function() {
-        deleteEmail(email.id);
-    };
 }
 
 // Show email list
@@ -885,10 +884,17 @@ function showAdminEmailList() {
     currentViewingEmail = null;
 }
 
+// Delete current email
+function deleteCurrentEmail() {
+    if (!currentViewingEmail) return;
+    deleteEmail(currentViewingEmail.id);
+}
 
 // Load addresses
 function loadAddresses() {
-    fetch(API_URL + '/api/admin/addresses')
+    fetch(API_URL + '/api/admin/addresses', {
+        credentials: 'include'
+    })
     .then(res => {
         if (res.status === 401) {
             location.reload();
@@ -946,7 +952,9 @@ function viewEmails(address) {
     selectedAddress = address;
     document.getElementById('selected-address').textContent = address;
     
-    fetch(API_URL + '/api/admin/emails/' + encodeURIComponent(address))
+    fetch(API_URL + '/api/admin/emails/' + encodeURIComponent(address), {
+        credentials: 'include'
+    })
     .then(res => res.json())
     .then(data => {
         var details = document.getElementById('email-details');
@@ -971,42 +979,40 @@ function viewEmails(address) {
         
         details.innerHTML = '';
         
-        // Inside viewEmails function, replace the data.emails.forEach section:
-data.emails.forEach(email => {
-    var item = document.createElement('div');
-    item.className = 'bg-gray-800 p-3 md:p-4 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors cursor-pointer';
-    
-    // Make entire card clickable
-    item.onclick = function() {
-        viewFullEmail(email);
-    };
-    
-    // Clean and truncate body for preview
-    var cleanBody = email.body ? email.body.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() : 'No content';
-    var previewBody = cleanBody.length > 100 ? cleanBody.substring(0, 100) + '...' : cleanBody;
-    
-    item.innerHTML = `
-        <div class="flex justify-between items-start mb-2">
-            <div class="flex-1">
-                <p class="text-white font-semibold text-xs md:text-sm truncate">${escapeHtml(email.sender || 'Unknown')}</p>
-                <p class="text-gray-300 text-xs md:text-sm font-medium mt-1">${escapeHtml(email.subject || 'No subject')}</p>
-                <p class="text-xs text-gray-400 mt-1">${formatTime(email.timestamp)}</p>
-            </div>
-            <button onclick="event.stopPropagation(); deleteEmail(${email.id})" 
-                    class="text-red-400 hover:text-red-300 p-1 md:p-2 rounded transition-colors ml-2" 
-                    title="Delete email">
-                <i class="fas fa-trash text-xs md:text-sm"></i>
-            </button>
-        </div>
-        <p class="text-xs text-gray-400 mt-2">${escapeHtml(previewBody)}</p>
-        <div class="mt-2 text-xs text-blue-400 hover:text-blue-300">
-            <i class="fas fa-eye mr-1"></i>Click to view full email
-        </div>
-    `;
-    
-    details.appendChild(item);
-});
-
+        data.emails.forEach(email => {
+            var item = document.createElement('div');
+            item.className = 'bg-gray-800 p-3 md:p-4 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors cursor-pointer';
+            
+            // Make entire card clickable
+            item.onclick = function() {
+                viewFullAdminEmail(email);
+            };
+            
+            // Clean and truncate body for preview
+            var cleanBody = email.body ? email.body.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() : 'No content';
+            var previewBody = cleanBody.length > 100 ? cleanBody.substring(0, 100) + '...' : cleanBody;
+            
+            item.innerHTML = `
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex-1">
+                        <p class="text-white font-semibold text-xs md:text-sm truncate">${escapeHtml(email.sender || 'Unknown')}</p>
+                        <p class="text-gray-300 text-xs md:text-sm font-medium mt-1">${escapeHtml(email.subject || 'No subject')}</p>
+                        <p class="text-xs text-gray-400 mt-1">${formatTime(email.timestamp)}</p>
+                    </div>
+                    <button onclick="event.stopPropagation(); deleteEmail(${email.id})" 
+                            class="text-red-400 hover:text-red-300 p-1 md:p-2 rounded transition-colors ml-2" 
+                            title="Delete email">
+                        <i class="fas fa-trash text-xs md:text-sm"></i>
+                    </button>
+                </div>
+                <p class="text-xs text-gray-400 mt-2">${escapeHtml(previewBody)}</p>
+                <div class="mt-2 text-xs text-blue-400 hover:text-blue-300">
+                    <i class="fas fa-eye mr-1"></i>Click to view full email
+                </div>
+            `;
+            
+            details.appendChild(item);
+        });
     })
     .catch(err => {
         console.error('Error loading emails:', err);
@@ -1020,7 +1026,10 @@ function deleteEmail(emailId) {
         'Delete Email',
         'Are you sure you want to delete this email? This action cannot be undone.',
         function() {
-            fetch(API_URL + '/api/admin/delete/' + emailId, {method: 'DELETE'})
+            fetch(API_URL + '/api/admin/delete/' + emailId, {
+                method: 'DELETE',
+                credentials: 'include'
+            })
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
@@ -1045,7 +1054,10 @@ function deleteAddress(address) {
         'Delete All Emails',
         `Are you sure you want to delete ALL emails for <strong>${escapeHtml(address)}</strong>?<br><br>This action cannot be undone and will permanently remove all emails for this address.`,
         function() {
-            fetch(API_URL + '/api/admin/delete-address/' + encodeURIComponent(address), {method: 'DELETE'})
+            fetch(API_URL + '/api/admin/delete-address/' + encodeURIComponent(address), {
+                method: 'DELETE',
+                credentials: 'include'
+            })
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
@@ -1067,9 +1079,29 @@ function deleteAddress(address) {
     );
 }
 
+// Load stats
+function loadStats() {
+    fetch(API_URL + '/api/admin/stats', {
+        credentials: 'include'
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data && !data.error) {
+            document.getElementById('stat-emails').textContent = data.total_emails || 0;
+            document.getElementById('stat-addresses').textContent = data.total_addresses || 0;
+            document.getElementById('stat-recent').textContent = data.recent_emails || 0;
+        }
+    })
+    .catch(err => {
+        console.error('Error loading stats:', err);
+    });
+}
+
 // Load active sessions with end session functionality
 function loadActiveSessions() {
-    fetch(API_URL + '/api/admin/sessions')
+    fetch(API_URL + '/api/admin/sessions', {
+        credentials: 'include'
+    })
     .then(res => {
         if (res.status === 401) {
             location.reload();
