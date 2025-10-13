@@ -68,16 +68,15 @@ def init_db():
             CREATE TABLE IF NOT EXISTS emails (
                 id SERIAL PRIMARY KEY,
                 recipient TEXT NOT NULL,
-                  sender TEXT NOT NULL,
-                  subject TEXT,
-                  body TEXT,
-                  timestamp TEXT,
-                  receivedat TIMESTAMP NOT NULL,
-                  sessiontoken TEXT,
-                  FOREIGN KEY (sessiontoken) REFERENCES sessions(sessiontoken) ON DELETE SET NULL
-              )
-          """)
-
+                sender TEXT NOT NULL,
+                subject TEXT,
+                body TEXT,
+                timestamp TEXT,
+                received_at TIMESTAMP NOT NULL,
+                session_token TEXT,
+                FOREIGN KEY (session_token) REFERENCES sessions(session_token) ON DELETE SET NULL
+            )
+        """)
         
         # Blacklist table
         c.execute('''
@@ -650,7 +649,7 @@ def cleanup_expired_sessions():
             c = conn.cursor()
             
             # Cleanup expired sessions ONLY - emails are preserved forever
-            c.execute("DELETE FROM sessions WHERE expiresat < NOW()")
+            c.execute("DELETE FROM sessions WHERE expires_at < NOW()")
             deleted = c.rowcount
             conn.commit()
             conn.close()
@@ -659,7 +658,6 @@ def cleanup_expired_sessions():
                 logger.info(f"Cleaned up {deleted} expired sessions (emails preserved)")
         except Exception as e:
             logger.error(f"Cleanup error: {e}")
-
 
 # Start cleanup thread
 cleanup_thread = Thread(target=cleanup_expired_sessions, daemon=True)
@@ -747,7 +745,7 @@ def admin_addresses():
         c = conn.cursor(cursor_factory=RealDictCursor)
         
         c.execute('''
-            SELECT recipient, COUNT(*) as count, MAX(received_at) as last_email
+            SELECT recipient as address, COUNT(*) as count, MAX(received_at) as last_email
             FROM emails
             GROUP BY recipient
             ORDER BY last_email DESC
@@ -762,7 +760,7 @@ def admin_addresses():
                 last_email_str = None
                 
             addresses.append({
-                'address': row['recipient'],
+                'address': row['address'],
                 'count': row['count'],
                 'last_email': last_email_str
             })
@@ -906,22 +904,15 @@ def admin_end_session(session_token):
 @app.route('/api/admin/blacklist', methods=['GET'])
 @admin_required
 def get_blacklist():
-    """Get current blacklisted usernames from database with email counts"""
+    """Get current blacklisted usernames from database"""
     try:
         conn = get_db()
         c = conn.cursor(cursor_factory=RealDictCursor)
         
-        # NEW: Get blacklist with email counts
         c.execute('''
-            SELECT 
-                b.username, 
-                b.added_at,
-                b.added_by,
-                COUNT(e.id) as email_count
-            FROM blacklist b
-            LEFT JOIN emails e ON e.recipient LIKE b.username || '@%'
-            GROUP BY b.username, b.added_at, b.added_by
-            ORDER BY b.username
+            SELECT username, added_at, added_by
+            FROM blacklist
+            ORDER BY username
         ''')
         
         blacklist = []
@@ -929,8 +920,7 @@ def get_blacklist():
             blacklist.append({
                 'username': row['username'],
                 'added_at': row['added_at'].isoformat() if row['added_at'] else None,
-                'added_by': row['added_by'],
-                'email_count': row['email_count'] or 0
+                'added_by': row['added_by']
             })
         
         conn.close()
