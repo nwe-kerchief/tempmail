@@ -511,7 +511,14 @@ let isAdminMode = false;
 
 // Initialize functions when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
+    // FORCE clear admin mode on user page load
+    isAdminMode = false;
+    localStorage.removeItem('adminMode');
+    const banner = document.getElementById('admin-mode-banner');
+    if (banner) banner.classList.add('hidden');
+    
     initApp();
+
     setupEventListeners();
 });
 
@@ -1750,6 +1757,10 @@ document.getElementById('modal-confirm').addEventListener('click', function() {
     sessionStartTime = null;
     localStorage.removeItem('tempMailSession');
     
+    // ✅ ADD THESE 2 LINES - Clear username input
+    document.getElementById('username-input').value = '';
+    document.getElementById('domain-select').selectedIndex = 0;
+    
     // Reset UI
     document.getElementById('email-display').classList.add('hidden');
     document.getElementById('end-session-btn').classList.add('hidden');
@@ -1776,6 +1787,7 @@ document.getElementById('modal-confirm').addEventListener('click', function() {
     
     showNotification('✅ Session ended', 'success');
 });
+
 
 
 // Beautiful modal CANCEL button
