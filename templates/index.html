@@ -711,8 +711,14 @@ function handleApiError(error, defaultMessage = "An error occurred") {
     }
 }
 
-// FIXED: Clear session properly when switching from admin mode
 function clearSession() {
+    console.log('🔄 Clearing session...');
+    
+    // Save current session data for backend call
+    const endEmail = currentEmail;
+    const endToken = sessionToken;
+
+    // Clear frontend state
     currentEmail = '';
     sessionToken = '';
     sessionStartTime = null;
@@ -720,28 +726,18 @@ function clearSession() {
     // Clear localStorage completely
     localStorage.clear();
 
-    // Clear the username input field
+    // Reset UI
     document.getElementById('username-input').value = '';
-    
-    // Reset domain selection to default ("Select domain")
     document.getElementById('domain-select').selectedIndex = 0;
-    
-    // Hide email display and end session button
     document.getElementById('email-display').classList.add('hidden');
     document.getElementById('end-session-btn').classList.add('hidden');
+    document.getElementById('email-count').textContent = '0 emails';
+    document.getElementById('email-list').innerHTML = '';
+    document.getElementById('no-emails-default').style.display = 'flex';
     
-    // Reset email view to placeholder
+    // Reset email view
     document.getElementById('desktop-email-placeholder').style.display = 'flex';
     document.getElementById('desktop-email-content-inner').classList.add('hidden');
-    
-    // Clear email list and show default message
-    document.getElementById('email-list').innerHTML = '';
-    document.getElementById('email-count').textContent = '0 emails';
-    document.getElementById('no-emails-default').style.display = 'flex';
-    document.getElementById('inbox-loader').style.display = 'none';
-    
-    // Reset page title
-    document.title = 'TempMail - AMMZ';
     
     // Stop refresh intervals
     if (autoRefreshInterval) {
@@ -751,6 +747,19 @@ function clearSession() {
     if (timeUpdateInterval) {
         clearInterval(timeUpdateInterval);
         timeUpdateInterval = null;
+    }
+    
+    // Notify backend to end session (fire and forget)
+    if (endEmail && endToken) {
+        fetch(API_URL + '/api/session/end', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                session_token: endToken,
+                email_address: endEmail
+            }),
+            keepalive: true // Ensure request completes
+        }).catch(err => console.log('Backend session end attempted'));
     }
     
     console.log('✅ Session cleared completely');
@@ -1328,8 +1337,17 @@ function setupAMMZDoor() {
 
 
 // Call debug on load
-document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(debugAMMZClick, 1000); // Wait a bit for marquee to load
+// Setup AMMZ door functionality
+document.getElementById('big-random-btn').addEventListener('click', function() {
+    console.log('🎲 Generating random email...');
+    
+    // Clear any existing session first
+    clearSession();
+    
+    // Wait a moment for cleanup, then create new random email
+    setTimeout(() => {
+        createEmail('');
+    }, 100);
 });
 
 
@@ -1801,3 +1819,4 @@ document.addEventListener('visibilitychange', function() {
 </script>
 </body>
 </html>
+
