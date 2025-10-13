@@ -1637,18 +1637,44 @@ function validateCurrentSession() {
 }
 
 function initApp() {
-    // Initialize app
+    console.log('🚀 Initializing app...');
+    
+    // ✅ Load domains first
     loadDomains().then(() => {
-        // Try to restore session after domains are loaded
-        if (!loadSession()) {
-            // No valid session, clear any leftover state
+        // ✅ Check if we should restore session
+        const savedSession = localStorage.getItem('tempMailSession');
+        
+        if (savedSession) {
+            try {
+                const session = JSON.parse(savedSession);
+                
+                // ✅ Skip admin sessions on user page
+                if (isAdminMode || session.isAdmin) {
+                    console.log('🚫 Skipping admin session restore on user page');
+                    localStorage.removeItem('tempMailSession');
+                    clearSession();
+                    return;
+                }
+                
+                // ✅ Try to restore normal user session
+                if (!loadSession()) {
+                    console.log('⚠️ Session restore failed, clearing');
+                    clearSession();
+                }
+            } catch (e) {
+                console.error('Session parse error:', e);
+                clearSession();
+            }
+        } else {
+            // No saved session, ensure UI is clean
             clearSession();
         }
     });
     
-    // Set up periodic session validation
+    // ✅ Set up periodic session validation
     setInterval(validateCurrentSession, 30000); // Check every 30 seconds
 }
+
 
 function setupEventListeners() {
     // Create button
@@ -1891,14 +1917,14 @@ document.addEventListener('visibilitychange', function() {
     }
 });
 }
-// FIX: Missing function
 function debugAMMZClick() {
     console.log('AMMZ Debug:', {
         email: currentEmail,
         token: sessionToken ? 'Present' : 'Missing',
-        expires: sessionExpireTime
+        startTime: sessionStartTime || 'Not set'
     });
 }
+
 
 // FIX: Better session clearing
 function clearSession() {
