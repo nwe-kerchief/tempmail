@@ -63,21 +63,21 @@ def init_db():
                 is_active BOOLEAN DEFAULT TRUE
             )
         ''')
-        
-        # Emails table
-        c.execute('''
+
+        c.execute("""
             CREATE TABLE IF NOT EXISTS emails (
                 id SERIAL PRIMARY KEY,
                 recipient TEXT NOT NULL,
-                sender TEXT NOT NULL,
-                subject TEXT,
-                body TEXT,
-                timestamp TEXT,
-                received_at TIMESTAMP NOT NULL,
-                session_token TEXT NOT NULL,
-                FOREIGN KEY (session_token) REFERENCES sessions(session_token) ON DELETE CASCADE
-            )
-        ''')
+                  sender TEXT NOT NULL,
+                  subject TEXT,
+                  body TEXT,
+                  timestamp TEXT,
+                  receivedat TIMESTAMP NOT NULL,
+                  sessiontoken TEXT,
+                  FOREIGN KEY (sessiontoken) REFERENCES sessions(sessiontoken) ON DELETE SET NULL
+              )
+          """)
+
         
         # Blacklist table
         c.execute('''
@@ -642,30 +642,24 @@ def webhook_inbound():
         logger.error(f"❌ Webhook error: {e}")
         return jsonify({'error': str(e)}), 400
 
-# Cleanup expired sessions (ONLY sessions, NOT emails)
 def cleanup_expired_sessions():
     while True:
         time.sleep(300)  # Every 5 minutes
-        
         try:
             conn = get_db()
             c = conn.cursor()
             
-            # Delete ONLY expired sessions but KEEP emails
-            # We don't cascade delete emails anymore to preserve them forever
-            c.execute('''
-                DELETE FROM sessions 
-                WHERE expires_at < NOW()
-            ''')
-            
+            # Cleanup expired sessions ONLY - emails are preserved forever
+            c.execute("DELETE FROM sessions WHERE expiresat < NOW()")
             deleted = c.rowcount
             conn.commit()
             conn.close()
             
             if deleted > 0:
-                logger.info(f"🧹 Cleaned up {deleted} expired sessions (emails preserved)")
+                logger.info(f"Cleaned up {deleted} expired sessions (emails preserved)")
         except Exception as e:
-            logger.error(f"❌ Cleanup error: {e}")
+            logger.error(f"Cleanup error: {e}")
+
 
 # Start cleanup thread
 cleanup_thread = Thread(target=cleanup_expired_sessions, daemon=True)
