@@ -712,6 +712,1656 @@ function clearSession() {
     currentEmail = '';
     sessionToken = '';
     sessionStartTime = null;
+
+    // Clear localStorage completely
+    localStorage.clear();
+
+    // Clear the username input field
+    document.getElementById('username-input').value = '';
+    
+    // Reset domain selection to default ("Select domain")
+    document.getElementById('domain-select').selectedIndex = 0;
+    
+    // Hide email display and end session button
+    document.getElementById('email-display').classList.add('hidden');
+    document.getElementById('end-session-btn').classList.add('hidden');
+    
+    // Reset email view to placeholder
+    document.getElementById('desktop-email-placeholder').style.display = 'flex';
+    document.getElementById('desktop-email-content-inner').classList.add('hidden');
+    
+    // Clear email list and show default message
+    document.getElementById('email-list').innerHTML = '';
+    document.getElementById('email-count').textContent = '0 emails';
+    document.getElementById('no-emails-default').style.display = 'flex';
+    document.getElementById('inbox-loader').style.display = 'none';
+    
+    // Reset page title
+    document.title = 'TempMail - AMMZ';
+    
+    // Stop refresh intervals
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+    if (timeUpdateInterval) {
+        clearInterval(timeUpdateInterval);
+        timeUpdateInterval = null;
+    }
+    
+    console.log('✅ Session cleared completely');
+}
+
+function loadSession() {
+    const savedSession = localStorage.getItem('tempMailSession');
+    if (savedSession) {
+        try {
+            const session = JSON.parse(savedSession);
+            const now = Date.now();
+            const sessionAge = now - session.createdAt;
+            
+            // Session expires after 1 hour
+            const sessionValid = sessionAge < SESSION_TIMEOUT;
+            
+            if (sessionValid && session.email) {
+                // FIXED: Check if this is an admin username and clear session if so
+                const username = session.email.split('@')[0].toLowerCase();
+                const adminUsernames = ['ammz', 'admin', 'owner', 'root', 'system', 'az', 'c'];
+                
+                if (adminUsernames.includes(username)) {
+                    console.log('🔄 Clearing admin session');
+                    localStorage.removeItem('tempMailSession');
+                    return false;
+                }
+                
+                currentEmail = session.email;
+                sessionStartTime = session.createdAt;
+                sessionToken = session.sessionToken || '';
+
+                // Wait for domains to load before restoring
+                if (domainsLoaded) {
+                    restoreSessionUI();
+                } else {
+                    // If domains aren't loaded yet, wait for them
+                    const checkDomains = setInterval(() => {
+                        if (domainsLoaded) {
+                            clearInterval(checkDomains);
+                            restoreSessionUI();
+                        }
+                    }, 100);
+                }
+                return true;
+            } else {
+                // Session expired
+                localStorage.removeItem('tempMailSession');
+                showNotification('🕒 Session expired', 'error');
+            }
+        } catch (e) {
+            console.error('Error parsing saved session:', e);
+            localStorage.removeItem('tempMailSession');
+        }
+    }
+    return false;
+}
+
+function restoreSessionUI() {
+    if (!currentEmail) return;
+    
+    const parts = currentEmail.split('@');
+    document.getElementById('username-input').value = parts[0];
+    document.getElementById('domain-select').value = parts[1];
+    
+    // Show the email display immediately
+    document.getElementById('current-email').textContent = currentEmail;
+    document.getElementById('email-display').classList.remove('hidden');
+    document.getElementById('end-session-btn').classList.remove('hidden');
+    
+    showNotification('✅ Session restored', 'success');
+    
+    // Load emails immediately
+    loadEmails();
+    startAutoRefresh();
+    startTimeUpdate();
+    setupSessionExpiration();
+}
+
+function saveSession() {
+    if (!currentEmail) return;
+    
+    const session = {
+        email: currentEmail,
+        sessionToken: sessionToken,
+        createdAt: sessionStartTime || Date.now(),
+        lastEmailTime: Date.now()
+    };
+    localStorage.setItem('tempMailSession', JSON.stringify(session));
+}
+
+function setupSessionExpiration() {
+    // Clear any existing timeout
+    if (window.sessionExpirationTimeout) {
+        clearTimeout(window.sessionExpirationTimeout);
+    }
+    
+    // Set new timeout
+    window.sessionExpirationTimeout = setTimeout(function() {
+        showNotification('🕒 Session expired. Please create a new email address.', 'error');
+        clearSession();
+    }, SESSION_TIMEOUT);
+}
+
+// Email Management
+function loadEmails() {
+    if (!currentEmail) {
+        console.log("No current email to load");
+        return;
+    }
+    
+    // CRITICAL: Check if we have a session token
+    if (!sessionToken) {
+        console.error("No session token available");
+        showNotification("Session expired. Please create a new email.", "error");
+        clearSession();
+        return;
+    }
+    
+    console.log("Loading emails for:", currentEmail);
+    
+    const loader = document.getElementById('inbox-loader');
+    const list = document.getElementById('email-list');
+    const defaultMsg = document.getElementById('no-emails-default');
+    
+    loader.style.display = 'flex';
+    defaultMsg.style.display = 'none';
+    list.innerHTML = '';
+    
+    // Use AbortController to prevent multiple simultaneous requests
+    if (window.emailFetchController) {
+        window.emailFetchController.abort();
+    }
+    window.emailFetchController = new AbortController();
+    
+    fetch(`${API_URL}/api/emails/${encodeURIComponent(currentEmail)}`, {
+        headers: {
+            'X-Session-Token': sessionToken,
+            'Content-Type': 'application/json'
+        },
+        signal: window.emailFetchController.signal
+    })
+    .then(res => {
+        if (!res.ok) {
+            if (res.status === 404) {
+                return { emails: [] };
+            }
+            if (res.status === 403) {
+                throw new Error("Session expired or invalid");
+            }
+            throw new Error(`Failed to fetch emails: ${res.status}`);
+        }
+        return res.json();
+    })
+    .then(data => {
+        console.log("Emails loaded:", data.emails?.length || 0);
+        
+        const newCount = data.emails ? data.emails.length : 0;
+        document.getElementById('email-count').textContent = `${newCount} email${newCount !== 1 ? 's' : ''}`;
+        document.title = newCount > 0 ? `(${newCount}) TempMail - AMMZ` : 'TempMail - AMMZ';
+        
+        // Show new email notification
+        if (newCount > lastEmailCount && lastEmailCount > 0) {
+            showNotification(`${newCount - lastEmailCount} new email(s) received!`, 'success');
+        }
+        lastEmailCount = newCount;
+        
+        list.innerHTML = '';
+        
+        if (newCount === 0) {
+            list.innerHTML = `<div class="text-center py-8 text-gray-300 h-full flex flex-col justify-center"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>`;
+        } else {
+            // Use document fragment for better performance
+            const fragment = document.createDocumentFragment();
+            
+            data.emails.forEach(function(email, idx) {
+                let displaySender = email.sender;
+                
+                // Clean sender display
+                if (displaySender.includes("bounces") || displaySender.includes("bounce-md")) {
+                    displaySender = "ChatGPT";
+                } else if (displaySender.includes("<")) {
+                    displaySender = displaySender.substring(0, displaySender.indexOf("<")).trim() || 
+                                   displaySender.substring(displaySender.indexOf("<") + 1, displaySender.indexOf(">")).trim();
+                }
+                
+                // Simple preview text extraction
+                let previewText = email.body.replace(/<[^>]+>/g, '').substring(0, 80);
+                if (previewText.length >= 80) previewText += '...';
+                
+                const item = document.createElement('div');
+                item.className = 'email-list-item rounded-lg border border-gray-700 hover:border-gray-600 transition-all cursor-pointer';
+                item.setAttribute('data-timestamp', email.timestamp);
+                item.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-sm font-semibold text-white truncate flex-1 mr-2">${escapeHtml(displaySender)}</span>
+                        <span class="text-xs text-gray-400 email-time whitespace-nowrap">${formatTime(email.timestamp)}</span>
+                    </div>
+                    <div class="text-sm font-medium text-gray-200 mb-2 truncate">${escapeHtml(email.subject)}</div>
+                    <div class="text-xs text-gray-400 email-preview">${escapeHtml(previewText)}</div>
+                `;
+                
+                item.addEventListener('click', function() {
+                    viewEmail(email, item);
+                });
+                
+                fragment.appendChild(item);
+            });
+            
+            list.appendChild(fragment);
+        }
+    })
+    .catch(err => {
+        if (err.name === 'AbortError') {
+            console.log("Email fetch aborted");
+            return;
+        }
+        
+        console.error("Error loading emails:", err);
+        
+        if (err.message.includes("Session expired")) {
+            showNotification("Session expired. Creating new email...", "error");
+            clearSession();
+        } else {
+            handleApiError(err, "Failed to load emails");
+        }
+        
+        list.innerHTML = `<div class="text-center py-8 text-gray-300"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>`;
+    })
+    .finally(function() {
+        loader.style.display = 'none';
+        window.emailFetchController = null;
+    });
+}
+
+function loadDomains() {
+    return fetch(API_URL + '/api/domains')
+    .then(res => {
+        if (!res.ok) {
+            throw new Error('Failed to load domains');
+        }
+        return res.json();
+    })
+    .then(data => {
+        const select = document.getElementById('domain-select');
+        select.innerHTML = '<option value="">Select domain</option>';
+        if (data.domains && data.domains.length > 0) {
+            data.domains.forEach(function(d) {
+                select.innerHTML += '<option value="' + d + '">' + d + '</option>';
+            });
+        } else {
+            // Fallback domain
+            select.innerHTML += '<option value="aungmyomyatzaw.online">aungmyomyatzaw.online</option>';
+        }
+        domainsLoaded = true;
+    })
+    .catch(err => {
+        console.error('Error loading domains:', err);
+        // Set default domain if API fails
+        const select = document.getElementById('domain-select');
+        select.innerHTML = '<option value="">Select domain</option>';
+        select.innerHTML += '<option value="aungmyomyatzaw.online">aungmyomyatzaw.online</option>';
+        domainsLoaded = true;
+    });
+}
+
+function createEmail(customName) {
+    const btn = document.getElementById('create-btn');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
+    
+    // Clear any previous error states
+    document.getElementById('username-input').classList.remove('border-red-500');
+    
+    // Security: Include session ID and security key in request
+    fetch(API_URL + '/api/create', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Session-ID': sessionId,
+            'X-Security-Key': emailSecurityKey
+        },
+        body: JSON.stringify({
+            name: customName,
+            sessionId: sessionId,
+            admin_mode: isAdminMode
+        })
+    })
+    .then(res => {
+        if (!res.ok) {
+            return res.text().then(text => {
+                let errorData;
+                try {
+                    errorData = JSON.parse(text);
+                } catch (e) {
+                    errorData = { error: text, code: 'UNKNOWN_ERROR' };
+                }
+                throw errorData;
+            });
+        }
+        return res.json();
+    })
+    .then(data => {
+        if (!data.email) {
+            throw new Error('No email returned from server');
+        }
+        
+        currentEmail = data.email;
+        sessionToken = data.session_token;
+        sessionStartTime = Date.now();
+        saveSession();
+
+        const parts = currentEmail.split('@');
+        
+        document.getElementById('username-input').value = parts[0];
+        document.getElementById('domain-select').value = parts[1];
+        document.getElementById('current-email').textContent = data.email;
+        document.getElementById('email-display').classList.remove('hidden');
+        document.getElementById('end-session-btn').classList.remove('hidden');
+
+        // Reset email view to placeholder
+        document.getElementById('desktop-email-placeholder').style.display = 'flex';
+        document.getElementById('desktop-email-content-inner').classList.add('hidden');
+        
+        showNotification('✅ Email created: ' + data.email, 'success');
+        
+        // Save session and start timers
+        saveSession();
+        
+        // Wait a moment for the server to register the email, then load emails
+        setTimeout(() => {
+            loadEmails();
+        }, 1000);
+        
+        startAutoRefresh();
+        startTimeUpdate();
+        setupSessionExpiration();
+    })
+    .catch(err => {
+        console.error('Error creating email:', err);
+        
+        // Handle specific error cases
+        if (err.code === 'EMAIL_SELF_USED') {
+            showNotification('📧 You are already using this email in your current session', 'info');
+        } else if (err.code === 'EMAIL_IN_USE') {
+            showModal('Email Currently in Use', err.error, function() {
+                document.getElementById('username-input').focus();
+            });
+        } else if (err.code === 'USERNAME_BLACKLISTED') {
+            showNotification('🚫 ' + err.error, 'error');
+            document.getElementById('username-input').value = '';
+            document.getElementById('username-input').classList.add('border-red-500');
+            document.getElementById('username-input').focus();
+            
+            showModal(
+                'Reserved Username',
+                'This username is reserved for the system owner. Please choose a different username.',
+                function() {
+                    document.getElementById('username-input').focus();
+                }
+            );
+        } else if (err.code === 'INVALID_USERNAME') {
+            showNotification('❌ ' + err.error, 'error');
+            document.getElementById('username-input').classList.add('border-red-500');
+            document.getElementById('username-input').focus();
+        } else {
+            handleApiError(err, 'Failed to create email');
+            if (!err.message || (!err.message.includes('409') && err.code !== 'EMAIL_IN_USE' && err.code !== 'USERNAME_BLACKLISTED')) {
+                createEmailLocally(customName);
+            }
+        }
+    })
+    .finally(function() {
+        // Reset button state PROPERLY
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create';
+        btn.classList.remove('opacity-50');
+    });
+}
+
+// Fallback function to create email locally if API fails
+function createEmailLocally(customName) {
+    const domain = document.getElementById('domain-select').value || 'aungmyomyatzaw.online';
+    const username = customName || generateRandomUsername();
+    currentEmail = username + '@' + domain;
+    sessionStartTime = Date.now();
+    
+    document.getElementById('username-input').value = username;
+    document.getElementById('domain-select').value = domain;
+    document.getElementById('current-email').textContent = currentEmail;
+    document.getElementById('email-display').classList.remove('hidden');
+    document.getElementById('end-session-btn').classList.remove('hidden');
+    
+    showNotification('✅ Email created locally: ' + currentEmail, 'success');
+    
+    // Save session and start timers
+    saveSession();
+    
+    // Try to load emails anyway (might work if email exists on server)
+    loadEmails();
+    startAutoRefresh();
+    startTimeUpdate();
+    setupSessionExpiration();
+}
+
+function generateRandomUsername() {
+    const maleNames = ['james', 'john', 'robert', 'michael', 'william', 'david', 'richard', 'joseph', 'thomas', 'charles'];
+    const femaleNames = ['mary', 'patricia', 'jennifer', 'linda', 'elizabeth', 'barbara', 'susan', 'jessica', 'sarah', 'karen'];
+    
+    const maleName = maleNames[Math.floor(Math.random() * maleNames.length)];
+    const femaleName = femaleNames[Math.floor(Math.random() * femaleNames.length)];
+    const digits = Math.floor(100 + Math.random() * 900); // 3 random digits
+    
+    return `${maleName}${femaleName}${digits}`;
+}
+
+// Handle window resize
+window.addEventListener('resize', function() {
+    if (window.innerWidth >= 768) {
+        // On desktop, ensure list view is visible
+        document.getElementById('email-list-view').classList.remove('hidden');
+    }
+});
+
+function updateLastEmailTime() {
+    const savedSession = localStorage.getItem('tempMailSession');
+    if (savedSession && currentEmail) {
+        try {
+            const session = JSON.parse(savedSession);
+            session.lastEmailTime = Date.now();
+            localStorage.setItem('tempMailSession', JSON.stringify(session));
+        } catch (e) {
+            console.error('Error updating last email time:', e);
+        }
+    }
+}
+
+// Update email times automatically
+function updateEmailTimes() {
+    const emailItems = document.querySelectorAll('.email-list-item');
+    emailItems.forEach(item => {
+        const timestamp = item.getAttribute('data-timestamp');
+        const timeElement = item.querySelector('.email-time');
+        if (timeElement && timestamp) {
+            timeElement.textContent = formatTime(timestamp);
+        }
+    });
+    
+    // Also update the time in email content if an email is open
+    const emailDateElement = document.getElementById('email-date');
+    if (emailDateElement && emailDateElement.getAttribute('data-timestamp')) {
+        emailDateElement.textContent = formatTime(emailDateElement.getAttribute('data-timestamp'));
+    }
+}
+
+function viewEmail(email, itemEl) {
+    // Set active state
+    document.querySelectorAll('.email-list-item').forEach(el => el.classList.remove('active', 'bg-blue-600', 'border-blue-500'));
+    itemEl.classList.add('active', 'bg-blue-600', 'border-blue-500');
+    
+    // Mobile: Switch to email content view
+    if (window.innerWidth < 768) {
+        showEmailContent();
+        
+        // Set mobile email content
+        document.getElementById('email-subject').textContent = email.subject;
+        document.getElementById('email-from').textContent = email.sender;
+        document.getElementById('email-date').textContent = formatTime(email.timestamp);
+        
+        // IMPROVED: Better email body processing
+        const bodyEl = document.getElementById('email-body');
+        const cleanBody = improvedCleanEmailBody(email.body);
+        bodyEl.innerHTML = cleanBody;
+    } else {
+        // Desktop: Update desktop panel
+        document.getElementById('desktop-email-placeholder').style.display = 'none';
+        document.getElementById('desktop-email-content-inner').classList.remove('hidden');
+        
+        document.getElementById('desktop-email-subject').textContent = email.subject;
+        document.getElementById('desktop-email-from').textContent = email.sender;
+        document.getElementById('desktop-email-date').textContent = formatTime(email.timestamp);
+        
+        const desktopBodyEl = document.getElementById('desktop-email-body');
+        const cleanBody = improvedCleanEmailBody(email.body);
+        desktopBodyEl.innerHTML = cleanBody;
+    }
+}
+
+function showEmailContent() {
+    document.getElementById('email-list-view').classList.add('hidden');
+    document.getElementById('email-content-view').classList.remove('hidden');
+    document.getElementById('header-title').textContent = 'Email';
+    document.getElementById('back-to-list').classList.remove('hidden');
+}
+
+function showEmailList() {
+    document.getElementById('email-list-view').classList.remove('hidden');
+    document.getElementById('email-content-view').classList.add('hidden');
+    document.getElementById('header-title').textContent = 'Inbox';
+    document.getElementById('back-to-list').classList.add('hidden');
+}
+
+// Auto-refresh functions
+function startAutoRefresh() {
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    autoRefreshInterval = setInterval(loadEmails, 5000); // Refresh every 5 seconds
+}
+
+function startTimeUpdate() {
+    if (timeUpdateInterval) clearInterval(timeUpdateInterval);
+    timeUpdateInterval = setInterval(updateEmailTimes, 1000); // Update times every second
+}
+
+function endSession() {
+    // Clear frontend state immediately
+    currentEmail = '';
+    sessionToken = '';
+    sessionStartTime = null;
+    
+    // Clear localStorage
+    localStorage.removeItem('tempMailSession');
+    
+    // Reset UI immediately
+    document.getElementById('username-input').value = '';
+    document.getElementById('domain-select').selectedIndex = 0;
+    document.getElementById('email-display').classList.add('hidden');
+    document.getElementById('end-session-btn').classList.add('hidden');
+    document.getElementById('email-count').textContent = '0 emails';
+    document.getElementById('email-list').innerHTML = '';
+    document.getElementById('no-emails-default').style.display = 'flex';
+    
+    // Stop auto-refresh
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+    if (timeUpdateInterval) {
+        clearInterval(timeUpdateInterval);
+        timeUpdateInterval = null;
+    }
+    
+    // Try to notify backend, but don't wait for it
+    if (currentEmail && sessionToken) {
+        fetch(API_URL + '/api/session/end', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                session_token: sessionToken,
+                email_address: currentEmail
+            })
+        })
+        .then(res => {
+            if (!res.ok) {
+                console.log('Backend session end failed, but continuing');
+            }
+            return res.json();
+        })
+        .then(data => {
+            console.log('✅ Backend session ended');
+        })
+        .catch(err => {
+            console.log('❌ Backend session end error (ignoring):', err);
+        })
+        .finally(() => {
+            // Always show success and reload
+            showNotification('✅ Session ended successfully', 'success');
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        });
+    } else {
+        // No session data, just reload
+        showNotification('✅ Session cleared', 'success');
+        setTimeout(() => {
+            window.location.reload();
+        }, 1000);
+    }
+}
+
+// Replace the toggleAdminMode function
+function toggleAdminMode() {
+    if (!isAdminMode) {
+        // Clear any existing user session first
+        clearSession();
+        showPasswordModal();
+    } else {
+        // Logout from admin mode
+        fetch('/api/admin/logout', {
+            method: 'POST',
+            credentials: 'include'
+        }).then(() => {
+            deactivateAdminMode();
+        }).catch(() => {
+            deactivateAdminMode();
+        });
+    }
+}
+
+// Add this function
+function clearAdminSessions() {
+    fetch('/api/admin/clear-sessions', {
+        method: 'POST',
+        credentials: 'include'
+    }).catch(err => console.log('Admin sessions cleared'));
+}
+
+// Call this when entering admin mode
+function activateAdminMode() {
+    isAdminMode = true;
+    
+    // Clear any existing user sessions first
+    clearSession();
+    
+    // Clear any admin sessions
+    clearAdminSessions();
+    
+    // Rest of the function remains the same...
+    document.body.classList.add('admin-mode');
+    // ... existing code
+}
+
+function showPasswordModal() {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+    modal.innerHTML = `
+        <div class="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 glass-effect">
+            <div class="text-center mb-6">
+                <i class="fas fa-shield-alt text-3xl text-yellow-400 mb-3"></i>
+                <h3 class="text-xl font-bold text-white mb-2">Admin Access</h3>
+                <p class="text-gray-300">Enter admin password to continue</p>
+            </div>
+            <input type="password" id="admin-password-input" 
+                   class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white mb-4 focus:outline-none focus:border-yellow-400" 
+                   placeholder="Enter password">
+            <div class="flex gap-3">
+                <button onclick="closePasswordModal()" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-3 rounded-lg transition-colors">
+                    Cancel
+                </button>
+                <button onclick="verifyAdminPassword()" class="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white py-3 rounded-lg transition-colors font-semibold">
+                    Verify
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    
+    // Focus input and handle Enter key
+    const input = document.getElementById('admin-password-input');
+    input.focus();
+    input.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') verifyAdminPassword();
+    });
+}
+
+function closePasswordModal() {
+    const modal = document.querySelector('.fixed.inset-0');
+    if (modal) modal.remove();
+}
+
+async function verifyAdminPassword() {
+    const password = document.getElementById('admin-password-input').value;
+    if (!password) {
+        alert('❌ Please enter a password');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/verify-admin', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'include',
+            body: JSON.stringify({password: password})
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                closePasswordModal();
+                activateAdminMode();
+            } else {
+                alert('❌ Invalid password');
+            }
+        } else {
+            const error = await response.json();
+            alert('❌ ' + (error.error || 'Verification failed'));
+        }
+    } catch (error) {
+        console.error('Admin login error:', error);
+        alert('❌ Connection error');
+    }
+}
+
+function activateAdminMode() {
+    isAdminMode = true;
+    
+    // Clear any existing session when entering admin mode
+    clearSession();
+    
+    // Change UI colors
+    document.body.classList.add('admin-mode');
+    document.querySelector('header').classList.add('admin-header');
+    
+    // Fix icon size and text alignment
+    const header = document.querySelector('h1');
+    header.innerHTML = '<i class="fas fa-shield-alt text-xl md:text-3xl mr-2 md:mr-3"></i><span class="text-xl md:text-4xl lg:text-5xl font-bold">ADMIN MODE - TempMail</span>';
+    header.classList.add('admin-text');
+    
+    // Update the subtitle
+    const subtitle = document.querySelector('header p');
+    if (subtitle) {
+        subtitle.innerHTML = '<span class="admin-text">Admin Mode Active - Blacklist Bypass Enabled</span>';
+    }
+    
+    showNotification('🔓 Admin Mode Activated - Session cleared', 'success');
+}
+
+function deactivateAdminMode() {
+    isAdminMode = false;
+    
+    // Clear any admin-created session
+    clearSession();
+    
+    // Force logout from admin backend
+    fetch('/api/admin/logout', {
+        method: 'POST',
+        credentials: 'include'
+    }).catch(err => console.log('Admin logout completed'));
+    
+    // Restore normal UI
+    document.body.classList.remove('admin-mode');
+    const header = document.querySelector('header');
+    if (header) header.classList.remove('admin-header');
+    
+    // Restore original header
+    const h1 = document.querySelector('h1');
+    if (h1) {
+        h1.innerHTML = '<i class="fas fa-envelope text-xl md:text-3xl mr-2 md:mr-3"></i><span class="text-xl md:text-4xl lg:text-5xl font-bold">Secure TempMail By AMMZ</span>';
+        h1.classList.remove('admin-text');
+    }
+    
+    // Restore original subtitle
+    const subtitle = document.querySelector('header p');
+    if (subtitle) {
+        subtitle.textContent = 'Disposable email addresses';
+        subtitle.classList.remove('admin-text');
+    }
+    
+    showNotification('🔓 Admin Mode Deactivated', 'success');
+    
+    // Force page reload after a short delay to ensure clean state
+    setTimeout(() => {
+        window.location.reload();
+    }, 1000);
+}
+
+function validateCurrentSession() {
+    if (!currentEmail || !sessionToken) return false;
+    
+    // Check if session is expired
+    if (sessionStartTime) {
+        const sessionAge = Date.now() - sessionStartTime;
+        if (sessionAge > SESSION_TIMEOUT) {
+            console.log('Session expired, clearing...');
+            clearSession();
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+function initApp() {
+    // Initialize app
+    loadDomains().then(() => {
+        // Try to restore session after domains are loaded
+        if (!loadSession()) {
+            // No valid session, clear any leftover state
+            clearSession();
+        }
+    });
+    
+    // Set up periodic session validation
+    setInterval(validateCurrentSession, 30000); // Check every 30 seconds
+}
+
+function setupEventListeners() {
+    // Create button
+    document.getElementById('create-btn').addEventListener('click', function() {
+        const username = document.getElementById('username-input').value.trim();
+        const domain = document.getElementById('domain-select').value;
+        
+        if (!domain) {
+            showNotification('❌ Please select a domain', 'error');
+            document.getElementById('domain-select').focus();
+            return;
+        }
+        
+        if (username && !/^[a-zA-Z0-9-_]+$/.test(username)) {
+            showNotification('❌ Username can only contain letters, numbers, hyphens, and underscores', 'error');
+            document.getElementById('username-input').classList.add('border-red-500');
+            document.getElementById('username-input').focus();
+            return;
+        }
+        
+        createEmail(username);
+    });
+    
+    // Random email button
+    document.getElementById('big-random-btn').addEventListener('click', function() {
+        // Clear any existing session
+        clearSession();
+        // Create random email
+        createEmail();
+    });
+    
+    // Copy button
+    document.getElementById('copy-btn').addEventListener('click', function() {
+        if (!currentEmail) {
+            showNotification('❌ No email to copy', 'error');
+            return;
+        }
+        
+        navigator.clipboard.writeText(currentEmail).then(function() {
+            showNotification('✅ Email copied to clipboard', 'success');
+        }).catch(function() {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = currentEmail;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            showNotification('✅ Email copied to clipboard', 'success');
+        });
+    });
+    
+    // End session button
+    document.getElementById('end-session-btn').addEventListener('click', function() {
+        showModal(
+            'End Session',
+            'Are you sure you want to end this session? All emails will be cleared.',
+            function() {
+                endSession();
+            }
+        );
+    });
+    
+    // Refresh button
+    document.getElementById('refresh-btn').addEventListener('click', function() {
+        if (currentEmail) {
+            loadEmails();
+            showNotification('🔄 Refreshing inbox...', 'info');
+        } else {
+            showNotification('❌ No active session', 'error');
+        }
+    });
+    
+    // Back to list button (mobile)
+    document.getElementById('back-to-list').addEventListener('click', function() {
+        showEmailList();
+    });
+    
+    // Enter key in username field
+    document.getElementById('username-input').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            document.getElementById('create-btn').click();
+        }
+    });
+    
+    // Clear username error when typing
+    document.getElementById('username-input').addEventListener('input', function() {
+        this.classList.remove('border-red-500');
+    });
+    
+    // Admin mode keyboard shortcut (Ctrl+Alt+A)
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.altKey && e.key === 'a') {
+            e.preventDefault();
+            toggleAdminMode();
+        }
+    });
+    
+    // Handle page visibility changes
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden && currentEmail) {
+            // Page became visible, refresh emails
+            loadEmails();
+        }
+    });
+    
+    // Handle beforeunload to save session
+    window.addEventListener('beforeunload', function() {
+        if (currentEmail) {
+            saveSession();
+        }
+    });
+}
+</script>
+</body>
+</html><!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TempMail - AMMZ</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📧</text></svg>">
+<style>
+body {
+font-family: 'Inter', sans-serif;
+background: linear-gradient(135deg, #1e3a8a 0%, #7e22ce 100%);
+min-height: 100vh;
+}
+.glass-effect {
+background: rgba(255, 255, 255, 0.15);
+backdrop-filter: blur(12px);
+border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.email-item {
+transition: all 0.2s ease;
+cursor: pointer;
+}
+.email-item:hover {
+background: rgba(255, 255, 255, 0.2);
+transform: translateY(-1px);
+}
+.email-item.active {
+background: rgba(168, 85, 247, 0.3);
+}
+#loader {
+border: 3px solid rgba(255, 255, 255, 0.3);
+border-top: 3px solid #fff;
+border-radius: 50%;
+width: 25px;
+height: 25px;
+animation: spin 1s linear infinite;
+}
+@keyframes spin {
+0% { transform: rotate(0deg); }
+100% { transform: rotate(360deg); }
+}
+.fade-in {
+animation: fadeIn 0.5s ease-in;
+}
+@keyframes fadeIn {
+from { opacity: 0; transform: translateY(10px); }
+to { opacity: 1; transform: translateY(0); }
+}
+
+.email-content-container {
+background: rgba(255, 255, 255, 0.05);
+border-radius: 12px;
+padding: 20px;
+overflow-y: auto;
+}
+.email-content-text {
+line-height: 1.6;
+font-size: 14px;
+color: #e5e7eb;
+}
+.email-content-text p {
+margin-bottom: 1rem;
+}
+.email-content-text code {
+background: rgba(255, 255, 255, 0.1);
+padding: 2px 6px;
+border-radius: 4px;
+font-family: monospace;
+}
+.email-content-text pre {
+background: rgba(0, 0, 0, 0.3);
+padding: 12px;
+border-radius: 6px;
+overflow-x: auto;
+margin: 1rem 0;
+}
+.email-content-text a {
+color: #60a5fa;
+text-decoration: underline;
+}
+.email-content-text ul, .email-content-text ol {
+padding-left: 1.5rem;
+margin-bottom: 1rem;
+}
+.email-content-text li {
+margin-bottom: 0.5rem;
+}
+.email-content-text h1, .email-content-text h2, .email-content-text h3 {
+color: white;
+margin-top: 1.5rem;
+margin-bottom: 0.75rem;
+}
+.email-content-text h1 {
+font-size: 1.5rem;
+}
+.email-content-text h2 {
+font-size: 1.3rem;
+}
+.email-content-text h3 {
+font-size: 1.1rem;
+}
+.email-content-text blockquote {
+border-left: 4px solid rgba(255, 255, 255, 0.3);
+padding-left: 1rem;
+margin: 1rem 0;
+font-style: italic;
+}
+.verification-code {
+background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+color: white;
+font-size: 1.5rem;
+font-weight: bold;
+padding: 15px;
+border-radius: 8px;
+text-align: center;
+margin: 20px 0;
+letter-spacing: 5px;
+box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+.email-header {
+background: rgba(0, 0, 0, 0.2);
+padding: 12px;
+border-radius: 8px;
+margin-bottom: 15px;
+}
+.email-meta {
+background: rgba(0, 0, 0, 0.1);
+padding: 10px;
+border-radius: 6px;
+margin-bottom: 15px;
+font-size: 12px;
+color: #9ca3af;
+}
+
+/* Custom Modal */
+.modal-overlay {
+position: fixed;
+top: 0;
+left: 0;
+right: 0;
+bottom: 0;
+background: rgba(0, 0, 0, 0.7);
+display: flex;
+align-items: center;
+justify-content: center;
+z-index: 1000;
+backdrop-filter: blur(5px);
+}
+.modal-content {
+background: linear-gradient(135deg, #1e293b 0%, #374151 100%);
+border-radius: 16px;
+padding: 2rem;
+max-width: 400px;
+width: 90%;
+border: 1px solid rgba(255, 255, 255, 0.1);
+box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+}
+.modal-buttons {
+display: flex;
+gap: 12px;
+margin-top: 1.5rem;
+}
+.modal-btn {
+flex: 1;
+padding: 12px 20px;
+border-radius: 10px;
+font-weight: 600;
+transition: all 0.2s ease;
+border: none;
+cursor: pointer;
+}
+.modal-btn-confirm {
+background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+color: white;
+}
+.modal-btn-confirm:hover {
+transform: translateY(-2px);
+box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+}
+.modal-btn-cancel {
+background: rgba(255, 255, 255, 0.1);
+color: white;
+border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.modal-btn-cancel:hover {
+background: rgba(255, 255, 255, 0.2);
+transform: translateY(-2px);
+}
+
+/* Improved inbox list styling */
+#email-list-container {
+height: calc(100% - 60px);
+overflow-y: auto;
+}
+.email-list-item {
+padding: 12px;
+border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+transition: all 0.2s ease;
+cursor: pointer;
+}
+.email-list-item:hover {
+background: rgba(255, 255, 255, 0.1);
+}
+.email-list-item.active {
+background: rgba(168, 85, 247, 0.3);
+}
+.email-preview {
+display: -webkit-box;
+-webkit-line-clamp: 2;
+-webkit-box-orient: vertical;
+overflow: hidden;
+}
+
+@media (max-width: 768px) {
+.mobile-stack { flex-direction: column; }
+.mobile-full { width: 100%; }
+.mobile-text-center { text-align: center; }
+.mobile-inbox-container { flex-direction: column; height: auto; }
+.mobile-inbox-list { height: 300px; max-height: 300px; }
+.mobile-email-content { height: 400px; max-height: 400px; }
+}
+
+@media (min-width: 768px) {
+#email-content-container {
+height: 550px;
+max-height: 550px;
+}
+#email-body {
+height: 350px;
+max-height: 350px;
+}
+}
+/* Mobile single box design */
+@media (max-width: 768px) {
+    #inbox-main-container {
+        height: 500px !important;
+        max-height: 500px !important;
+    }
+    
+    #desktop-email-content {
+        display: none !important;
+    }
+    
+    #back-to-list {
+        display: flex !important;
+        background: rgba(255, 255, 255, 0.1);
+        border: none;
+        border-radius: 8px;
+        width: 36px;
+        height: 36px;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+}
+
+/* Desktop two-panel design */
+@media (min-width: 768px) {
+    #inbox-main-container {
+        height: 500px !important;
+        width: 40% !important;
+    }
+    
+    #desktop-email-content {
+        display: block !important;
+        height: 500px !important;
+        width: 58% !important;
+    }
+    
+    #back-to-list {
+        display: none !important;
+    }
+}
+
+/* Smooth transitions */
+#email-list-view, #email-content-view {
+    transition: opacity 0.3s ease;
+}
+/* Email content fixes using existing classes */
+#email-content-container {
+height: 500px;
+max-height: 500px;
+overflow: hidden;
+}
+#email-body {
+height: 300px;
+max-height: 300px;
+overflow-y: auto;
+overflow-x: hidden;
+}
+#email-body * {
+max-width: 100%;
+word-wrap: break-word;
+}
+.border-red-500 {
+    border-color: #ef4444 !important;
+}
+/* Add to your existing CSS */
+.bg-blue-600 {
+    background-color: #2563eb;
+}
+.bg-blue-600:hover {
+    background-color: #1d4ed8;
+}
+.admin-mode {
+    background: linear-gradient(135deg, #1f2937 0%, #374151 100%) !important;
+}
+.admin-header {
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+}
+.admin-text {
+    color: #fbbf24 !important;
+    font-weight: bold;
+}
+</style>
+</head>
+<body class="text-gray-100 min-h-screen p-2 md:p-4">
+
+<!-- Custom Modal Structure -->
+<div id="custom-modal" class="modal-overlay hidden">
+<div class="modal-content">
+<div class="text-center mb-4">
+<i class="fas fa-exclamation-triangle text-3xl text-yellow-400 mb-3"></i>
+<h3 class="text-xl font-bold text-white mb-2" id="modal-title">Confirm Action</h3>
+<p class="text-gray-300" id="modal-message">Are you sure you want to proceed?</p>
+</div>
+<div class="modal-buttons">
+<button id="modal-cancel" class="modal-btn modal-btn-cancel">Cancel</button>
+<button id="modal-confirm" class="modal-btn modal-btn-confirm">Confirm</button>
+</div>
+</div>
+</div>
+
+<div class="h-fit mb-2">
+<div class="bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 text-white py-2 px-4 rounded-lg shadow-lg">
+<marquee class="text-sm md:text-base font-medium">
+✨ This website was created by <b class="text-yellow-300">Aung Myo Myat Zaw </b>✨
+</marquee>
+</div>
+</div>
+
+<div class="w-full max-w-6xl mx-auto">
+<header class="text-center mb-4 md:mb-8 fade-in">
+<div class="flex items-center justify-center mb-2 md:mb-4">
+<i class="fas fa-envelope text-xl md:text-3xl text-white mr-2 md:mr-3"></i>
+<h1 class="text-xl md:text-4xl lg:text-5xl font-bold text-white">Secure Temp Mail By AMMZ</h1>
+</div>
+<p class="text-gray-300 text-sm md:text-lg font-medium">Disposable email addresses</p>
+</header>
+
+<main class="glass-effect rounded-2xl shadow-2xl p-3 md:p-6 lg:p-8 w-full fade-in">
+<div class="mb-4 md:mb-8 text-center">
+<button id="big-random-btn" class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 md:py-4 px-6 md:px-8 rounded-2xl transition-all transform hover:scale-105 shadow-lg text-base md:text-xl w-full max-w-md mx-auto flex items-center justify-center">
+<i class="fas fa-random mr-2 md:mr-3 text-lg md:text-xl"></i>
+Generate Random Email
+</button>
+<p class="text-gray-300 text-xs md:text-sm mt-2 font-medium">One click to create a random email instantly</p>
+</div>
+
+<div class="mb-4 md:mb-8">
+<div class="flex flex-col gap-2 mb-3 md:mb-6">
+<div class="flex flex-col sm:flex-row gap-2 w-full">
+<div class="flex-1">
+<input type="text" id="username-input" placeholder="Enter username"
+class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white rounded-xl px-4 py-3 text-base md:text-lg focus:outline-none focus:border-blue-500 transition-colors">
+</div>
+<div class="w-full sm:w-auto sm:min-w-[200px]">
+<select id="domain-select" class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white rounded-xl px-4 py-3 text-base md:text-lg focus:outline-none focus:border-blue-500 transition-colors">
+<option value="">Select domain</option>
+</select>
+</div>
+</div>
+
+<!-- Buttons row -->
+<div class="flex gap-2 w-full">
+<button id="create-btn" class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 text-base">
+<i class="fas fa-plus mr-2"></i>Create
+</button>
+<button id="copy-btn" class="bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-semibold py-3 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 text-base">
+<i class="fas fa-copy mr-2"></i>Copy
+</button>
+<button id="end-session-btn" class="bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white font-semibold py-3 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 text-base hidden">
+    <i class="fas fa-times-circle mr-2"></i>End Session
+</button>
+
+</div>
+</div>
+
+<div id="email-display" class="hidden text-center p-2 md:p-4 bg-gray-900 rounded-xl mb-2 md:mb-4 border border-gray-700">
+<div class="flex items-center justify-center">
+<i class="fas fa-envelope text-blue-400 mr-2 text-sm md:text-xl"></i>
+<span id="current-email" class="text-white font-mono text-xs md:text-lg font-semibold break-all"></span>
+</div>
+</div>
+</div>
+
+<div id="notification" class="hidden text-center mb-2 md:mb-4 p-2 md:p-4 rounded-xl text-white font-medium text-sm md:text-base">
+<i class="fas fa-check-circle mr-2"></i>
+<span id="notification-text"></span>
+</div>
+
+<!-- Improved Inbox Section - Single Box Design -->
+<div class="flex flex-col md:flex-row gap-3 md:gap-6 mobile-inbox-container">
+    <!-- Single Main Container for both list and email view -->
+    <div id="inbox-main-container" class="w-full glass-effect rounded-xl p-2 md:p-4 overflow-y-auto" style="height: 500px;">
+        <!-- Header with back button -->
+        <div id="inbox-header" class="flex justify-between items-center mb-2 md:mb-4">
+            <div class="flex items-center">
+                <!-- Back Button (hidden on desktop and when viewing list) -->
+                <button id="back-to-list" class="hidden md:hidden mr-3 text-white hover:text-gray-300 transition-colors">
+                    <i class="fas fa-arrow-left text-lg"></i>
+                </button>
+                <h2 class="text-base md:text-xl font-semibold text-white">
+                    <i class="fas fa-inbox mr-1 md:mr-2"></i>
+                    <span id="header-title">Inbox</span>
+                </h2>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="email-count" class="text-xs text-gray-300 font-medium bg-gray-800 px-2 py-1 rounded">0 emails</span>
+                <button id="refresh-btn" class="p-2 rounded-lg hover:bg-gray-700 transition-colors text-white">
+                    <i class="fas fa-sync-alt text-sm"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Email List View -->
+        <div id="email-list-view" class="h-full overflow-y-auto">
+            <div id="no-emails-default" class="text-center py-6 md:py-10 text-gray-300 flex flex-col items-center justify-center h-full">
+                <i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i>
+                <p class="text-sm md:text-lg font-medium">No emails yet</p>
+                <p class="text-xs mt-1 font-medium">Your inbox is ready for messages</p>
+            </div>
+            <div id="inbox-loader" style="display:none;" class="flex justify-center items-center py-8 h-full">
+                <div id="loader"></div>
+</div>
+            <div id="email-list" class="space-y-2"></div>
+        </div>
+
+        <!-- Email Content View (hidden by default) -->
+        <div id="email-content-view" class="hidden h-full flex flex-col">
+            <div class="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-6">
+                <h2 id="email-subject" class="text-lg md:text-2xl font-bold text-white mb-1 md:mb-0 break-words"></h2>
+                <span id="email-date" class="text-xs text-gray-300 bg-gray-800 px-3 py-1 rounded-lg font-medium whitespace-nowrap"></span>
+            </div>
+            <div class="flex items-center text-xs md:text-sm text-gray-300 mb-3 md:mb-6 border-b border-gray-700 pb-2 md:pb-4">
+                <strong class="mr-2 text-white font-semibold flex items-center">
+                    <i class="fas fa-user mr-2"></i>From:
+                </strong>
+                <span id="email-from" class="font-mono font-medium break-all"></span>
+            </div>
+            <div id="email-body" class="email-content-container email-content-text flex-1 overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <!-- Desktop Email Content Panel (hidden on mobile) -->
+    <div id="desktop-email-content" class="hidden md:block w-3/5 glass-effect rounded-xl p-3 md:p-6 overflow-y-auto" style="height: 500px;">
+        <div id="desktop-email-placeholder" class="flex flex-col items-center justify-center h-full text-gray-300 py-8">
+            <i class="fas fa-envelope-open text-4xl md:text-5xl mb-4 opacity-60"></i>
+            <p class="text-lg md:text-xl font-medium text-center">Select an email to read</p>
+            <p class="text-sm mt-2 text-gray-400 text-center">Choose a message from your inbox to view its contents</p>
+        </div>
+        <div id="desktop-email-content-inner" class="hidden h-full flex flex-col">
+            <div class="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-6">
+                <h2 id="desktop-email-subject" class="text-lg md:text-2xl font-bold text-white mb-1 md:mb-0 break-words"></h2>
+                <span id="desktop-email-date" class="text-xs text-gray-300 bg-gray-800 px-3 py-1 rounded-lg font-medium whitespace-nowrap"></span>
+            </div>
+            <div class="flex items-center text-xs md:text-sm text-gray-300 mb-3 md:mb-6 border-b border-gray-700 pb-2 md:pb-4">
+                <strong class="mr-2 text-white font-semibold flex items-center">
+                    <i class="fas fa-user mr-2"></i>From:
+                </strong>
+                <span id="desktop-email-from" class="font-mono font-medium break-all"></span>
+            </div>
+            <div id="desktop-email-body" class="email-content-container email-content-text flex-1 overflow-y-auto"></div>
+        </div>
+    </div>
+</div>
+</main>
+</div>
+    
+<div class="h-fit mt-2 md:mt-4">
+<div class="bg-gradient-to-r from-green-600 via-teal-600 to-blue-600 text-white py-2 px-4 rounded-lg shadow-lg border border-green-400">
+<marquee class="text-xs md:text-base font-medium">
+    🔒 Secure & Private • All Rights Reserved by <b class="text-yellow-300">AMMZ</b> • Built with Advanced AI Technology 🚀
+</marquee>
+</div>
+</div>
+
+<script>
+// Configuration
+const API_URL = window.location.origin;
+const SESSION_TIMEOUT = 60 * 60 * 1000; // 1 hour
+
+// State variables
+let currentEmail = '';
+let sessionToken = ''; 
+let autoRefreshInterval = null;
+let timeUpdateInterval = null;
+let lastEmailCount = 0;
+let sessionId = generateSessionId();
+let emailSecurityKey = generateSecurityKey();
+let sessionStartTime = null;
+let domainsLoaded = false;
+let isAdminMode = false;
+
+// Initialize functions when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    initApp();
+    setupEventListeners();
+});
+
+// Utility Functions
+function generateSessionId() {
+    return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+}
+
+function generateSecurityKey() {
+    return 'key_' + Math.random().toString(36).substr(2, 16);
+}
+
+function validateEmail(email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// IMPROVED Email Content Cleaning
+function improvedCleanEmailBody(rawBody) {
+    const codeMatch = rawBody.match(/\b\d{4,8}\b/);
+    const verificationCode = codeMatch ? codeMatch[0] : null;
+    
+    let cleanBody = rawBody;
+    
+    cleanBody = cleanBody.replace(/<style[^>]*>.*?<\/style>/gis, '');
+    cleanBody = cleanBody.replace(/style="[^"]*"/gi, '');
+    cleanBody = cleanBody.replace(/class="[^"]*"/gi, '');
+    cleanBody = cleanBody.replace(/<!--.*?-->/gs, '');
+    cleanBody = cleanBody.replace(/<[^>]+>/g, ' ');
+    
+    cleanBody = cleanBody
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&#8217;/g, "'")
+        .replace(/&#160;/g, ' ')
+        .replace(/&copy;/g, '©')
+        .replace(/&reg;/g, '®');
+    
+    cleanBody = cleanBody
+        .replace(/=3D/g, '=')
+        .replace(/=20/g, ' ')
+        .replace(/=2E/g, '.')
+        .replace(/=\r?\n/g, '')
+        .replace(/=\?/g, '');
+    
+    cleanBody = cleanBody
+        .replace(/----==_mimepart_[^\s]*/g, '')
+        .replace(/Content-Type:[^\n]*/gi, '')
+        .replace(/Content-Transfer-Encoding:[^\n]*/gi, '')
+        .replace(/MIME-Version:[^\n]*/gi, '')
+        .replace(/charset=[^\s;]*/gi, '')
+        .replace(/boundary=[^\s;]*/gi, '');
+    
+    const linesToRemove = [
+        /^From:.*/gmi, /^To:.*/gmi, /^Subject:.*/gmi, /^Date:.*/gmi,
+        /^Received:.*/gmi, /^Return-Path:.*/gmi, /^Message-ID:.*/gmi,
+        /^DKIM-Signature:.*/gmi, /^ARC-.*:.*/gmi,
+        /by cloudflare-email\.net.*/gi, /@font-face.*/gi,
+        /font-family:.*/gi, /@media.*/gi, /\.ExternalClass.*/gi,
+        /outlook.*/gi, /-webkit-.*/gi, /-moz-.*/gi, /\*\s*!!!!?.*/g
+    ];
+    
+    linesToRemove.forEach(pattern => {
+        cleanBody = cleanBody.replace(pattern, '');
+    });
+    
+    cleanBody = cleanBody.replace(/\s+/g, ' ').replace(/\s*\.\s*/g, '. ').trim();
+    
+    const sentences = cleanBody.split(/\.\s+/).map(s => s.trim()).filter(s => {
+        if (s.length < 10) return false;
+        const junk = ['charset', 'utf-8', 'helvetica', 'arial', 'sans-serif', 
+                      'margin', 'padding', 'border', 'font-size', 'color',
+                      'text-align', 'display', 'width', 'height'];
+        return !junk.some(j => s.toLowerCase().includes(j));
+    });
+    
+    let html = '';
+    
+    if (verificationCode) {
+        html += `<div class="verification-code">${verificationCode}</div>`;
+    }
+    
+    if (sentences.length > 0) {
+        sentences.forEach(sentence => {
+            if (verificationCode && sentence.includes(verificationCode)) return;
+            html += `<p class="mb-3 leading-relaxed text-gray-200">${escapeHtml(sentence)}.</p>`;
+        });
+    } else {
+        if (cleanBody.length > 20) {
+            html += `<p class="mb-3 leading-relaxed text-gray-200">${escapeHtml(cleanBody)}</p>`;
+        } else {
+            html += '<p class="text-gray-400">No readable content found in this email.</p>';
+        }
+    }
+    
+    return html;
+}
+
+function formatTime(timestamp) {
+    try {
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diff = now - date;
+        const seconds = Math.floor(diff / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+        
+        if (seconds < 60) return seconds + ' sec ago';
+        if (minutes < 60) return minutes + ' min ago';
+        if (hours < 24) return hours + ' hour' + (hours > 1 ? 's' : '') + ' ago';
+        if (days < 7) return days + ' day' + (days > 1 ? 's' : '') + ' ago';
+        
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    } catch (e) {
+        return 'recently';
+    }
+}
+
+// UI Functions
+function showModal(title, message, confirmCallback) {
+    const modal = document.getElementById('custom-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalMessage = document.getElementById('modal-message');
+    const modalConfirm = document.getElementById('modal-confirm');
+    const modalCancel = document.getElementById('modal-cancel');
+    
+    modalTitle.textContent = title;
+    modalMessage.textContent = message;
+    modal.classList.remove('hidden');
+    
+    // Remove previous event listeners
+    const newConfirm = modalConfirm.cloneNode(true);
+    const newCancel = modalCancel.cloneNode(true);
+    modalConfirm.parentNode.replaceChild(newConfirm, modalConfirm);
+    modalCancel.parentNode.replaceChild(newCancel, modalCancel);
+    
+    // Add new event listeners
+    document.getElementById('modal-confirm').onclick = function() {
+        modal.classList.add('hidden');
+        if (confirmCallback) confirmCallback();
+    };
+    
+    document.getElementById('modal-cancel').onclick = function() {
+        modal.classList.add('hidden');
+    };
+}
+
+function showNotification(message, type) {
+    const notif = document.getElementById('notification');
+    const text = document.getElementById('notification-text');
+    text.textContent = message;
+    
+    let bgColor = 'bg-blue-600';
+    if (type === 'success') {
+        bgColor = 'bg-green-600';
+    } else if (type === 'error') {
+        bgColor = 'bg-red-600';
+    } else if (type === 'info') {
+        bgColor = 'bg-blue-600';
+    }
+    
+    notif.className = `text-center mb-2 md:mb-4 p-2 md:p-4 rounded-xl text-white font-medium text-sm md:text-base ${bgColor}`;
+    notif.classList.remove('hidden');
+    setTimeout(() => notif.classList.add('hidden'), 3000);
+}
+
+function handleApiError(error, defaultMessage = "An error occurred") {
+    console.error("API Error:", error);
+    
+    if (error.message && error.message.includes("Failed to fetch")) {
+        showNotification("Network error - check your connection", "error");
+    } else if (error.message && (error.message.includes("403") || error.message.includes("Session expired"))) {
+        showNotification("Session expired - creating new session", "error");
+        clearSession();
+    } else if (error.message && (error.message.includes("401") || error.message.includes("Session expired") || error.message.includes("Session has been ended"))) {
+        showNotification("Session ended - creating new session", "error");
+        clearSession();
+    } else if (error.message && error.message.includes("409")) {
+        showNotification("This email is already in use by another session", "error");
+    } else if (error.message && error.message.includes("404")) {
+        // This is normal for new emails
+        return;
+    } else {
+        showNotification(error.message || defaultMessage, "error");
+    }
+}
+
+// FIXED: Clear session properly when switching from admin mode
+function clearSession() {
+    currentEmail = '';
+    sessionToken = '';
+    sessionStartTime = null;
     
     // Clear localStorage completely
     localStorage.removeItem('tempMailSession');
@@ -1613,3 +3263,4 @@ function setupEventListeners() {
 </script>
 </body>
 </html>
+
