@@ -433,6 +433,11 @@ def create_email():
         
         with get_db() as conn:
             c = conn.cursor()
+            c.execute(
+                "UPDATE sessions SET expires_at = NOW() WHERE email_address = %s AND expires_at > NOW()",
+                (email_address,)
+            )
+            conn.commit()
             
             # Insert new session
             try:
@@ -1139,6 +1144,7 @@ if __name__ == '__main__':
     finally:
         if db_pool:
             db_pool.closeall()
+
 
 
 
