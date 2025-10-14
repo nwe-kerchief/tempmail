@@ -1226,13 +1226,15 @@ function createEmail(customName) {
     })
     .then(data => {
         // 🚨 CRITICAL FIX: Check if this is an error response from 409
-        if (data && data.status === 409) {
+        if (data && data.isConflict) {
             // This is a 409 error - email in use
             const errorData = data.error;
+            resetUIAfterConflict();
             showModal('Email Currently in Use', errorData.error, function() {
                 document.getElementById('username-input').focus();
+                document.getElementById('username-input').select();
             });
-            return; // STOP HERE - don't proceed with email creation
+            return;
         }
         
         // Only proceed if we have a valid email (success case)
@@ -1274,6 +1276,7 @@ function createEmail(customName) {
     })
     .catch(err => {
         console.error('Error creating email:', err);
+        resetUIAfterConflict();
         
         // Handle specific error cases
         if (err.code === 'EMAIL_SELF_USED') {
@@ -1281,6 +1284,7 @@ function createEmail(customName) {
         } else if (err.code === 'EMAIL_IN_USE' || err.code === 'EMAIL_IN_USE_ACTIVE') {
             showModal('Email Currently in Use', err.error, function() {
                 document.getElementById('username-input').focus();
+                document.getElementById('username-input').select();
             });
         } else if (err.code === 'USERNAME_BLACKLISTED') {
             showNotification('🚫 ' + err.error, 'error');
@@ -1313,6 +1317,40 @@ function createEmail(customName) {
         btn.classList.remove('opacity-50');
     });
 }
+function resetUIAfterConflict() {
+    console.log('🔄 Resetting UI after conflict error');
+    
+    // Clear session state
+    currentEmail = '';
+    sessionToken = '';
+    sessionStartTime = null;
+    
+    // Clear UI elements that show session state
+    document.getElementById('email-display').classList.add('hidden');
+    document.getElementById('end-session-btn').classList.add('hidden');
+    document.getElementById('email-count').textContent = '0 emails';
+    
+    // Clear any existing emails from display
+    document.getElementById('email-list').innerHTML = '';
+    document.getElementById('no-emails-default').style.display = 'flex';
+    
+    // Reset email content views
+    document.getElementById('desktop-email-placeholder').style.display = 'flex';
+    document.getElementById('desktop-email-content-inner').classList.add('hidden');
+    
+    // Stop any auto-refresh that might have been started
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+    if (timeUpdateInterval) {
+        clearInterval(timeUpdateInterval);
+        timeUpdateInterval = null;
+    }
+    
+    console.log('✅ UI reset complete after conflict');
+}
+
 // Fallback function to create email locally if API fails
 function createEmailLocally(customName) {
     const domain = document.getElementById('domain-select').value || 'aungmyomyatzaw.online';
