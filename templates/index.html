@@ -510,15 +510,75 @@ let sessionStartTime = null;
 let domainsLoaded = false;
 let isAdminMode = false;
 
-// ✅ Clear admin mode flags on every page load (user page only)
+// ✅ HANDLE PAGE TRANSITIONS (User ↔ Admin)
 (function() {
-    if (!window.location.pathname.includes('/admin')) {
-        localStorage.removeItem('tempMailSession');
+    const isAdminPage = window.location.pathname.includes('/admin');
+    const hasSession = localStorage.getItem('tempMailSession');
+    
+    console.log('🔍 Page load check:', {
+        isAdminPage,
+        hasSession: !!hasSession,
+        location: window.location.pathname
+    });
+    
+    if (isAdminPage) {
+        // ===== GOING TO ADMIN PAGE =====
+        // Clear user session if exists
+        if (hasSession) {
+            console.log('🧹 Clearing user session (entering admin)');
+            
+            try {
+                const data = JSON.parse(hasSession);
+                
+                // Tell backend to end session
+                if (data.token && data.email) {
+                    fetch('/api/session/end', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Session-Token': data.token
+                        },
+                        body: JSON.stringify({
+                            session_token: data.token,
+                            email_address: data.email
+                        })
+                    }).catch(err => console.log('End session error:', err));
+                }
+            } catch (e) {
+                console.error('Parse error:', e);
+            }
+            
+            // Clear user data
+            localStorage.removeItem('tempMailSession');
+        }
+        
+        // Set admin flag
+        localStorage.setItem('adminMode', 'true');
+        
+    } else {
+        // ===== GOING TO USER PAGE =====
+        console.log('🧹 Clearing admin mode (entering user page)');
+        
+        // Only clear admin flags, NOT user session!
         localStorage.removeItem('adminMode');
         localStorage.removeItem('admin_authenticated');
-        console.log('🧹 Cleared any admin data on user page load');
+        
+        // ✅ If there's a user session with admin flag, remove it
+        if (hasSession) {
+            try {
+                const data = JSON.parse(hasSession);
+                if (data.isAdmin === true) {
+                    console.log('🚫 Removing admin-flagged session');
+                    localStorage.removeItem('tempMailSession');
+                }
+            } catch (e) {
+                // If corrupted, just remove it
+                localStorage.removeItem('tempMailSession');
+            }
+        }
     }
 })();
+
 
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -1517,63 +1577,69 @@ function validateCurrentSession() {
 function initApp() {
     console.log('🚀 Initializing app...');
     
-    // ✅ Double-check we're not on admin page
+    // Check if we're on admin page
     const isAdminPage = window.location.pathname.includes('/admin');
     
     if (isAdminPage) {
-        console.log('🔒 Admin page - session restore disabled');
+        console.log('🔒 Admin page - no session restore');
         isAdminMode = true;
-        return;  // Don't restore anything on admin page
+        return;
     }
     
     // Load domains first
     loadDomains().then(() => {
-        // ✅ RESTORE SESSION from localStorage (ONLY on user page)
+        // ✅ RESTORE SESSION from localStorage
         const saved = localStorage.getItem('tempMailSession');
         
         if (saved) {
             try {
                 const data = JSON.parse(saved);
+                console.log('📦 Found saved session:', data);
                 
-                // ✅ Triple-check: Skip if ANY admin flag
+                // Skip admin sessions
                 if (data.isAdmin === true || isAdminMode) {
                     console.log('🚫 Skipping admin session restore');
                     localStorage.removeItem('tempMailSession');
                     return;
                 }
                 
-                // Restore session variables
+                // ✅ Restore all session variables
                 currentEmail = data.email;
                 sessionToken = data.token;
-                sessionStartTime = data.startTime ? new Date(data.startTime) : Date.now();
+                sessionStartTime = data.startTime || Date.now();
                 
                 console.log('✅ Session restored:', currentEmail);
                 
-                // Update UI
+                // ✅ Update ALL UI elements
                 document.getElementById('current-email').textContent = currentEmail;
                 document.getElementById('email-display').classList.remove('hidden');
                 document.getElementById('end-session-btn').classList.remove('hidden');
                 
                 // Update input fields
-                const parts = currentEmail.split('@');
-                document.getElementById('username-input').value = parts[0];
-                document.getElementById('domain-select').value = parts[1];
+                if (currentEmail.includes('@')) {
+                    const [username, domain] = currentEmail.split('@');
+                    document.getElementById('username-input').value = username;
+                    document.getElementById('domain-select').value = domain;
+                }
                 
-                // Start loading emails
+                // ✅ Start ALL intervals and loaders
                 loadEmails();
                 startAutoRefresh();
                 startTimeUpdate();
                 
             } catch (e) {
-                console.error('Session restore error:', e);
+                console.error('❌ Session restore error:', e);
                 localStorage.removeItem('tempMailSession');
             }
+        } else {
+            console.log('ℹ️ No saved session found');
         }
     });
     
-    // Set up periodic session validation
+    // Set up periodic validation
     setInterval(validateCurrentSession, 30000);
 }
+
 
 
 function saveSession() {
