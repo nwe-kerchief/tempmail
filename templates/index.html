@@ -1178,6 +1178,7 @@ function createEmail(customName) {
     const originalText = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
+    btn.classList.add('opacity-50');
     
     // Clear any previous error states
     document.getElementById('username-input').classList.remove('border-red-500');
@@ -1203,51 +1204,49 @@ function createEmail(customName) {
         },
         body: JSON.stringify(requestData)
     })
-    .then(res => {
+    .then(async (res) => {
+        const contentType = res.headers.get('content-type');
+        
         if (!res.ok) {
-            // If it's a 409 error (email in use), handle it specially
-            if (res.status === 409) {
-                return res.json().then(errorData => {
-                    // Don't throw here - we'll handle it in the next .then
-                    return { error: errorData, status: 409 };
-                });
-            }
-            return res.text().then(text => {
-                let errorData;
+            let errorData;
+            if (contentType && contentType.includes('application/json')) {
+                errorData = await res.json();
+            } else {
+                const text = await res.text();
                 try {
                     errorData = JSON.parse(text);
-                } catch (e) {
-                    errorData = { error: text, code: 'UNKNOWN_ERROR' };
+                } catch {
+                    errorData = { error: text || `HTTP ${res.status}`, code: 'UNKNOWN_ERROR' };
                 }
-                throw errorData;
-            });
-        }
-        return res.json();
-    })
-    .then(data => {
-        // 🚨 CRITICAL FIX: Check if this is an error response from 409
-        if (data && data.isConflict) {
-            // This is a 409 error - email in use
-            const errorData = data.error;
-            resetUIAfterConflict();
-            showModal('Email Currently in Use', errorData.error, function() {
-                document.getElementById('username-input').focus();
-                document.getElementById('username-input').select();
-            });
-            return;
+            }
+            
+            // Store the status with the error data
+            errorData.httpStatus = res.status;
+            
+            if (res.status === 409) {
+                return Promise.reject(errorData);
+            }
+            throw errorData;
         }
         
-        // Only proceed if we have a valid email (success case)
+        // Success case - parse JSON response
+        if (contentType && contentType.includes('application/json')) {
+            return res.json();
+        } else {
+            const text = await res.text();
+            throw new Error('Server returned non-JSON response');
+        }
+    })
+    .then(data => {
+        // SUCCESS: Email created successfully
         if (!data.email) {
             throw new Error('No email returned from server');
         }
         
-        // SUCCESS: Email created successfully
         currentEmail = data.email;
         sessionToken = data.session_token;
         sessionStartTime = Date.now();
-        saveSession();
-
+        
         const parts = currentEmail.split('@');
         
         document.getElementById('username-input').value = parts[0];
@@ -1276,16 +1275,22 @@ function createEmail(customName) {
     })
     .catch(err => {
         console.error('Error creating email:', err);
+        
+        // 🚨 Clear UI state on any error
         resetUIAfterConflict();
         
         // Handle specific error cases
-        if (err.code === 'EMAIL_SELF_USED') {
+        if (err.httpStatus === 409 || err.code === 'EMAIL_IN_USE_ACTIVE') {
+            showModal(
+                'Email Currently in Use', 
+                err.error || 'This email address is currently in use by another session. Please choose a different username or try again later.',
+                function() {
+                    document.getElementById('username-input').focus();
+                    document.getElementById('username-input').select();
+                }
+            );
+        } else if (err.code === 'EMAIL_SELF_USED') {
             showNotification('📧 You are already using this email in your current session', 'info');
-        } else if (err.code === 'EMAIL_IN_USE' || err.code === 'EMAIL_IN_USE_ACTIVE') {
-            showModal('Email Currently in Use', err.error, function() {
-                document.getElementById('username-input').focus();
-                document.getElementById('username-input').select();
-            });
         } else if (err.code === 'USERNAME_BLACKLISTED') {
             showNotification('🚫 ' + err.error, 'error');
             document.getElementById('username-input').value = '';
@@ -1317,6 +1322,9 @@ function createEmail(customName) {
         btn.classList.remove('opacity-50');
     });
 }
+
+
+// 🆕 NEW FUNCTION: Reset UI when session creation fails
 function resetUIAfterConflict() {
     console.log('🔄 Resetting UI after conflict error');
     
@@ -1325,10 +1333,14 @@ function resetUIAfterConflict() {
     sessionToken = '';
     sessionStartTime = null;
     
+    // Clear localStorage session
+    localStorage.removeItem('tempMailSession');
+    
     // Clear UI elements that show session state
     document.getElementById('email-display').classList.add('hidden');
     document.getElementById('end-session-btn').classList.add('hidden');
     document.getElementById('email-count').textContent = '0 emails';
+    document.getElementById('current-email').textContent = '';
     
     // Clear any existing emails from display
     document.getElementById('email-list').innerHTML = '';
@@ -1338,15 +1350,33 @@ function resetUIAfterConflict() {
     document.getElementById('desktop-email-placeholder').style.display = 'flex';
     document.getElementById('desktop-email-content-inner').classList.add('hidden');
     
+    // Show email list view (in case we were in email view)
+    document.getElementById('email-list-view').classList.remove('hidden');
+    document.getElementById('email-content-view').classList.add('hidden');
+    document.getElementById('header-title').textContent = 'Inbox';
+    document.getElementById('back-to-list').classList.add('hidden');
+    
     // Stop any auto-refresh that might have been started
     if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval);
         autoRefreshInterval = null;
+        console.log('✅ Auto-refresh stopped after conflict');
     }
     if (timeUpdateInterval) {
         clearInterval(timeUpdateInterval);
         timeUpdateInterval = null;
+        console.log('✅ Time updates stopped after conflict');
     }
+    
+    // Clear session expiration timeout
+    if (window.sessionExpirationTimeout) {
+        clearTimeout(window.sessionExpirationTimeout);
+        window.sessionExpirationTimeout = null;
+        console.log('✅ Session expiration timer stopped after conflict');
+    }
+    
+    // Reset page title
+    document.title = 'TempMail - AMMZ';
     
     console.log('✅ UI reset complete after conflict');
 }
