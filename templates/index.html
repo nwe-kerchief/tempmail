@@ -1033,47 +1033,48 @@ function createEmail(customName) {
         }
         return res.json();
     })
-    .then(data => {
-        if (!data.email) {
-            throw new Error('No email returned from server');
-        }
-        
-        currentEmail = data.email;
-        sessionToken = data.session_token;
-        sessionStartTime = Date.now();
-        
-        console.log('✅ Email created, admin mode:', isAdminMode);
-        
-        // Only save session if not in admin mode
-        if (!isAdminMode) {
-            saveSession();
-        }
-        
-        const parts = currentEmail.split('@');
-        
-        document.getElementById('username-input').value = parts[0];
-        document.getElementById('domain-select').value = parts[1];
-        document.getElementById('current-email').textContent = data.email;
-        document.getElementById('email-display').classList.remove('hidden');
-        document.getElementById('end-session-btn').classList.remove('hidden');
+.then(data => {
+    if (!data.email) {
+        throw new Error('No email returned from server');
+    }
+    
+    currentEmail = data.email;
+    sessionToken = data.session_token;
+    sessionStartTime = Date.now();
+    
+    console.log('✅ Email created, admin mode:', isAdminMode);
+    
+    // Update UI regardless of admin mode
+    const parts = currentEmail.split('@');
+    document.getElementById('username-input').value = parts[0];
+    document.getElementById('domain-select').value = parts[1];
+    document.getElementById('current-email').textContent = data.email;
+    document.getElementById('email-display').classList.remove('hidden');
+    document.getElementById('end-session-btn').classList.remove('hidden');
 
-        // Reset email view
-        document.getElementById('desktop-email-placeholder').style.display = 'flex';
-        document.getElementById('desktop-email-content-inner').classList.add('hidden');
+    // Reset email view
+    document.getElementById('desktop-email-placeholder').style.display = 'flex';
+    document.getElementById('desktop-email-content-inner').classList.add('hidden');
+    
+    showNotification('✅ Email created: ' + data.email, 'success');
+    
+    // Only save session and start auto-refresh if NOT in admin mode
+    if (!isAdminMode) {
+        saveSession();
+        setTimeout(() => {
+            loadEmails();
+        }, 1000);
         
-        showNotification('✅ Email created: ' + data.email, 'success');
-        
-        // Start email loading and timers (only if not admin mode)
-        if (!isAdminMode) {
-            setTimeout(() => {
-                loadEmails();
-            }, 1000);
-            
-            startAutoRefresh();
-            startTimeUpdate();
-            setupSessionExpiration();
-        }
-    })
+        startAutoRefresh();
+        startTimeUpdate();
+        setupSessionExpiration();
+    } else {
+        // In admin mode, still load emails but don't auto-refresh
+        setTimeout(() => {
+            loadEmails();
+        }, 1000);
+    }
+})
     .catch(err => {
         console.error('Error creating email:', err);
         handleApiError(err, 'Failed to create email');
@@ -1523,30 +1524,6 @@ async function verifyAdminPassword() {
 }
 
 
-function activateAdminMode() {
-    isAdminMode = true;
-    
-    // Clear any existing session when entering admin mode
-    clearSession();
-    
-    // Change UI colors
-    document.body.classList.add('admin-mode');
-    document.querySelector('header').classList.add('admin-header');
-    
-    // Fix icon size and text alignment
-    const header = document.querySelector('h1');
-    header.innerHTML = '<i class="fas fa-shield-alt text-xl md:text-3xl mr-2 md:mr-3"></i><span class="text-xl md:text-4xl lg:text-5xl font-bold">ADMIN MODE - TempMail</span>';
-    header.classList.add('admin-text');
-    
-    // Update the subtitle
-    const subtitle = document.querySelector('header p');
-    if (subtitle) {
-        subtitle.innerHTML = '<span class="admin-text">Admin Mode Active - Blacklist Bypass Enabled</span>';
-    }
-    
-    showNotification('🔓 Admin Mode Activated - Session cleared', 'success');
-}
-
 // Replace the deactivateAdminMode function
 function deactivateAdminMode() {
     console.log('🔚 Deactivating admin mode');
@@ -1681,7 +1658,7 @@ function initApp() {
   setInterval(validateCurrentSession, 30000);
 }
 
-// Add session validation function
+// In validateSessionWithBackend function, fix the parameter names:
 function validateSessionWithBackend() {
   return new Promise((resolve) => {
     if (!currentEmail || !sessionToken) {
@@ -1695,8 +1672,8 @@ function validateSessionWithBackend() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        email_address: currentEmail,
-        session_token: sessionToken
+        email_address: currentEmail,  // Backend expects this
+        session_token: sessionToken   // Backend expects this
       })
     })
     .then(res => res.json())
@@ -1706,7 +1683,7 @@ function validateSessionWithBackend() {
     })
     .catch(err => {
       console.error('❌ Session validation request failed:', err);
-      resolve(false); // Assume invalid on error
+      resolve(false);
     });
   });
 }
@@ -1733,7 +1710,7 @@ function restoreSessionUI() {
 
 
 
-// Replace the saveSession function
+// Replace the saveSession function with this more robust version:
 function saveSession() {
   console.log('💾 saveSession called:', {
     currentEmail,
@@ -1741,16 +1718,29 @@ function saveSession() {
     isAdminMode
   });
   
-  // Don't save admin sessions
-  if (isAdminMode) {
-    console.log('🚫 Not saving admin session');
+  // Don't save admin sessions or if no valid data
+  if (isAdminMode || !currentEmail || !sessionToken) {
+    console.log('🚫 Not saving session (admin mode or missing data)');
     return;
   }
   
-  if (!currentEmail || !sessionToken) {
-    console.log('❌ Cannot save - missing email or token');
-    return;
+  const sessionData = {
+    email: currentEmail,
+    token: sessionToken,
+    startTime: sessionStartTime || Date.now(),
+    isAdmin: false
+  };
+  
+  try {
+    localStorage.setItem('tempMailSession', JSON.stringify(sessionData));
+    console.log('✅ Session saved:', { 
+      email: currentEmail, 
+      tokenLength: sessionToken.length 
+    });
+  } catch (e) {
+    console.error('❌ Save error:', e);
   }
+}
   
   const sessionData = {
     email: currentEmail,
@@ -2084,31 +2074,14 @@ document.addEventListener('visibilitychange', function() {
     }
 });
 }
-function debugAMMZClick() {
-    console.log('AMMZ Debug:', {
-        email: currentEmail,
-        token: sessionToken ? 'Present' : 'Missing',
-        startTime: sessionStartTime || 'Not set'
-    });
-}
 
 
-// FIX: Better session clearing
-function clearSession() {
-    currentEmail = '';
-    sessionToken = '';
-    sessionExpireTime = null;
-    localStorage.removeItem('tempMailSession');
-    
-    // Reset UI
-    document.getElementById('email-display').classList.add('hidden');
-    document.getElementById('end-session-btn').classList.add('hidden');
-    document.getElementById('username-input').value = '';
-    document.getElementById('domain-select').value = '';
-    
-    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-    if (timeUpdateInterval) clearInterval(timeUpdateInterval);
-}
+// Replace the debugAMMZClick call with setupAMMZDoor
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(setupAMMZDoor, 1000); // Wait a bit for marquee to load
+});
+
+
 
 </script>
 </body>
