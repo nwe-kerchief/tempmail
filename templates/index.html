@@ -316,6 +316,16 @@ word-wrap: break-word;
     color: #fbbf24 !important;
     font-weight: bold;
 }
+
+/* Add to your existing CSS */
+.btn-loading {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.btn-loading:hover {
+    transform: none !important;
+}
 </style>
 </head>
 <body class="text-gray-100 min-h-screen p-2 md:p-4">
@@ -1821,20 +1831,170 @@ function setupEventListeners() {
         createEmail(username);
     });
     
-    // Random email button
-// Replace the big-random-btn event listener
-// Replace the complex random button with this:
+// Random email button - FIXED VERSION
+// Add these CSS class toggles in the random button event listener:
+
 document.getElementById('big-random-btn').addEventListener('click', function() {
-    console.log('🎲 Generating random email...');
+    console.log('🎲 Random button clicked - checking current session...');
     
-    // Clear any existing session first
-    clearSession();
+    const btn = document.getElementById('big-random-btn');
     
-    // Wait a moment for cleanup, then create new random email
-    setTimeout(() => {
+    // If there's an active session, end it first
+    if (currentEmail && sessionToken) {
+        console.log('🔄 Ending current session before creating new one...');
+        
+        // Show loading state on the button
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.classList.add('btn-loading');
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Ending Session...';
+        
+        // End current session first
+        endSessionForNewEmail().then(() => {
+            console.log('✅ Current session ended, now creating new email...');
+            
+            // Update button to show creating state
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
+            
+            // Wait a moment for cleanup to complete, then create new random email
+            setTimeout(() => {
+                createEmail('');
+                
+                // Restore button state after creation
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.classList.remove('btn-loading');
+                    btn.innerHTML = '<i class="fas fa-random mr-2 md:mr-3 text-lg md:text-xl"></i>Generate Random Email';
+                }, 2000);
+            }, 500);
+            
+        }).catch(err => {
+            console.error('❌ Error ending session:', err);
+            
+            // Still try to create new email even if ending fails
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
+            setTimeout(() => {
+                createEmail('');
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.classList.remove('btn-loading');
+                    btn.innerHTML = '<i class="fas fa-random mr-2 md:mr-3 text-lg md:text-xl"></i>Generate Random Email';
+                }, 2000);
+            }, 500);
+        });
+        
+    } else {
+        // No active session, just create new email
+        console.log('📭 No active session, creating new email directly...');
+        
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.classList.add('btn-loading');
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
+        
         createEmail('');
-    }, 100);
+        
+        // Restore button state after creation
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.classList.remove('btn-loading');
+            btn.innerHTML = '<i class="fas fa-random mr-2 md:mr-3 text-lg md:text-xl"></i>Generate Random Email';
+        }, 2000);
+    }
 });
+
+function endSessionForNewEmail() {
+    return new Promise((resolve, reject) => {
+        console.log('🔄 Ending session for new email creation...');
+        
+        // Save current session data for backend call
+        const endEmail = currentEmail;
+        const endToken = sessionToken;
+
+        // Clear frontend state immediately
+        currentEmail = '';
+        sessionToken = '';
+        sessionStartTime = null;
+        
+        // Clear localStorage
+        localStorage.removeItem('tempMailSession');
+        
+        // Stop all refresh intervals
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+        if (timeUpdateInterval) {
+            clearInterval(timeUpdateInterval);
+            timeUpdateInterval = null;
+        }
+        
+        // Clear any session expiration timeout
+        if (window.sessionExpirationTimeout) {
+            clearTimeout(window.sessionExpirationTimeout);
+            window.sessionExpirationTimeout = null;
+        }
+        
+        // Clear any pending email fetch requests
+        if (window.emailFetchController) {
+            window.emailFetchController.abort();
+            window.emailFetchController = null;
+        }
+        
+        // Reset UI immediately
+        document.getElementById('username-input').value = '';
+        document.getElementById('domain-select').selectedIndex = 0;
+        document.getElementById('email-display').classList.add('hidden');
+        document.getElementById('end-session-btn').classList.add('hidden');
+        document.getElementById('email-count').textContent = '0 emails';
+        document.getElementById('email-list').innerHTML = '';
+        document.getElementById('no-emails-default').style.display = 'flex';
+        
+        // Reset email view
+        document.getElementById('desktop-email-placeholder').style.display = 'flex';
+        document.getElementById('desktop-email-content-inner').classList.add('hidden');
+        
+        // Reset title
+        document.title = 'TempMail - AMMZ';
+        
+        console.log('✅ Frontend session cleared for new email');
+
+        // Notify backend to end session
+        if (endEmail && endToken) {
+            console.log('📡 Notifying backend to end previous session...');
+            fetch(API_URL + '/api/session/end', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    session_token: endToken,
+                    email_address: endEmail
+                })
+            })
+            .then(res => {
+                if (!res.ok) {
+                    console.log('⚠️ Backend session end failed, but continuing');
+                } else {
+                    console.log('✅ Backend session ended');
+                }
+                return res.json();
+            })
+            .then(data => {
+                console.log('✅ Backend confirmed session end');
+                resolve(); // Resolve the promise to continue
+            })
+            .catch(err => {
+                console.log('❌ Backend session end error (ignoring):', err);
+                resolve(); // Still resolve to continue creation
+            });
+        } else {
+            // No session to end, just resolve
+            console.log('📭 No backend session to end');
+            resolve();
+        }
+    });
+}
 
 // Add this function to properly end session in backend
 function endSessionBackend() {
