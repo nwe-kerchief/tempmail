@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -990,6 +991,7 @@ function loadDomains() {
     });
 }
 
+// Update the createEmail function to handle admin mode properly
 function createEmail(customName) {
     const btn = document.getElementById('create-btn');
     const originalText = btn.innerHTML;
@@ -999,7 +1001,15 @@ function createEmail(customName) {
     // Clear any previous error states
     document.getElementById('username-input').classList.remove('border-red-500');
     
-    // Security: Include session ID and security key in request
+    // Include admin mode in request
+    const requestData = {
+        name: customName,
+        sessionId: sessionId,
+        admin_mode: isAdminMode
+    };
+    
+    console.log('📧 Creating email with data:', requestData);
+    
     fetch(API_URL + '/api/create', {
         method: 'POST',
         headers: {
@@ -1007,11 +1017,7 @@ function createEmail(customName) {
             'X-Session-ID': sessionId,
             'X-Security-Key': emailSecurityKey
         },
-        body: JSON.stringify({
-            name: customName,
-            sessionId: sessionId,
-            admin_mode: isAdminMode
-        })
+        body: JSON.stringify(requestData)
     })
     .then(res => {
         if (!res.ok) {
@@ -1035,9 +1041,14 @@ function createEmail(customName) {
         currentEmail = data.email;
         sessionToken = data.session_token;
         sessionStartTime = Date.now();
-        console.log('📧 Email created, calling saveSession...');
-        saveSession();
-
+        
+        console.log('✅ Email created, admin mode:', isAdminMode);
+        
+        // Only save session if not in admin mode
+        if (!isAdminMode) {
+            saveSession();
+        }
+        
         const parts = currentEmail.split('@');
         
         document.getElementById('username-input').value = parts[0];
@@ -1046,65 +1057,65 @@ function createEmail(customName) {
         document.getElementById('email-display').classList.remove('hidden');
         document.getElementById('end-session-btn').classList.remove('hidden');
 
-        // Reset email view to placeholder
+        // Reset email view
         document.getElementById('desktop-email-placeholder').style.display = 'flex';
         document.getElementById('desktop-email-content-inner').classList.add('hidden');
         
         showNotification('✅ Email created: ' + data.email, 'success');
         
-        // Save session and start timers
-        saveSession();
-        
-        // Wait a moment for the server to register the email, then load emails
-        setTimeout(() => {
-            loadEmails();
-        }, 1000);
-        
-        startAutoRefresh();
-        startTimeUpdate();
-        setupSessionExpiration();
+        // Start email loading and timers (only if not admin mode)
+        if (!isAdminMode) {
+            setTimeout(() => {
+                loadEmails();
+            }, 1000);
+            
+            startAutoRefresh();
+            startTimeUpdate();
+            setupSessionExpiration();
+        }
     })
     .catch(err => {
         console.error('Error creating email:', err);
-        
-        // Handle specific error cases
-        if (err.code === 'EMAIL_SELF_USED') {
-            showNotification('📧 You are already using this email in your current session', 'info');
-        } else if (err.code === 'EMAIL_IN_USE') {
-            showModal('Email Currently in Use', err.error, function() {
-                document.getElementById('username-input').focus();
-            });
-        } else if (err.code === 'USERNAME_BLACKLISTED') {
-            showNotification('🚫 ' + err.error, 'error');
-            document.getElementById('username-input').value = '';
-            document.getElementById('username-input').classList.add('border-red-500');
-            document.getElementById('username-input').focus();
-            
-            showModal(
-                'Reserved Username',
-                'This username is reserved for the system owner. Please choose a different username.',
-                function() {
-                    document.getElementById('username-input').focus();
-                }
-            );
-        } else if (err.code === 'INVALID_USERNAME') {
-            showNotification('❌ ' + err.error, 'error');
-            document.getElementById('username-input').classList.add('border-red-500');
-            document.getElementById('username-input').focus();
-        } else {
-            handleApiError(err, 'Failed to create email');
-            if (!err.message || (!err.message.includes('409') && err.code !== 'EMAIL_IN_USE' && err.code !== 'USERNAME_BLACKLISTED')) {
-                createEmailLocally(customName);
-            }
-        }
+        handleApiError(err, 'Failed to create email');
     })
     .finally(function() {
-        // Reset button state PROPERLY
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create';
-        btn.classList.remove('opacity-50');
+        btn.innerHTML = originalText;
     });
 }
+
+// Add admin session validation on page load
+function validateAdminSession() {
+    if (isAdminMode) {
+        fetch('/api/admin/validate', {
+            method: 'GET',
+            credentials: 'include'
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.authenticated) {
+                console.log('🔒 Admin session expired');
+                deactivateAdminMode();
+            }
+        })
+        .catch(err => {
+            console.error('Admin validation error:', err);
+            deactivateAdminMode();
+        });
+    }
+}
+
+// Call this in your DOMContentLoaded
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('📄 DOM loaded');
+    
+    // Validate admin session on load
+    setTimeout(validateAdminSession, 1000);
+    
+    // Your existing initialization code...
+    initApp();
+    setupEventListeners();
+});
 
 // Fallback function to create email locally if API fails
 function createEmailLocally(customName) {
@@ -1344,22 +1355,59 @@ function endSession() {
     }
 }
 
+// Replace the toggleAdminMode function
 function toggleAdminMode() {
-    console.log('Toggle admin mode, current:', isAdminMode);
+    console.log('🔄 Toggle admin mode, current:', isAdminMode);
     
     if (!isAdminMode) {
-        // Simple approach for now - just show password modal
-        showPasswordModal();
+        // Switching TO admin mode - end user session first
+        if (currentEmail && sessionToken) {
+            showModal(
+                'Switch to Admin Mode', 
+                'This will end your current email session. Continue?',
+                function() {
+                    endSessionForAdminSwitch();
+                }
+            );
+        } else {
+            // No active session, just show password modal
+            showPasswordModal();
+        }
     } else {
-        // Leaving admin mode
-        fetch('/api/admin/logout', {
+        // Switching FROM admin mode - just deactivate
+        deactivateAdminMode();
+    }
+}
+
+// Add function to end session for admin switch
+function endSessionForAdminSwitch() {
+    console.log('🔚 Ending session for admin switch');
+    
+    const savedEmail = currentEmail;
+    const savedToken = sessionToken;
+    
+    // Clear frontend immediately
+    clearSession();
+    
+    // Tell backend to end session
+    if (savedEmail && savedToken) {
+        fetch(API_URL + '/api/session/end', {
             method: 'POST',
-            credentials: 'include'
-        }).then(() => {
-            deactivateAdminMode();
-        }).catch(() => {
-            deactivateAdminMode();
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Session-Token': savedToken
+            },
+            body: JSON.stringify({
+                session_token: savedToken,
+                email_address: savedEmail
+            })
+        })
+        .catch(err => console.log('Backend session end error:', err))
+        .finally(() => {
+            showPasswordModal();
         });
+    } else {
+        showPasswordModal();
     }
 }
 
@@ -1371,10 +1419,12 @@ function clearAdminSessions() {
     }).catch(err => console.log('Admin sessions cleared'));
 }
 
+// Replace the activateAdminMode function
 function activateAdminMode() {
     isAdminMode = true;
+    localStorage.setItem('adminMode', 'true');
     
-    // Clear frontend session
+    // Clear any user session data
     clearSession();
     
     // Change UI colors
@@ -1391,6 +1441,10 @@ function activateAdminMode() {
     if (subtitle) {
         subtitle.innerHTML = '<span class="admin-text">Admin Mode Active - Blacklist Bypass Enabled</span>';
     }
+    
+    // Update the create button to show admin mode
+    const createBtn = document.getElementById('create-btn');
+    createBtn.innerHTML = '<i class="fas fa-shield-alt mr-2"></i>Create (Admin)';
     
     showNotification('🔓 Admin Mode Activated', 'success');
 }
@@ -1493,17 +1547,19 @@ function activateAdminMode() {
     showNotification('🔓 Admin Mode Activated - Session cleared', 'success');
 }
 
+// Replace the deactivateAdminMode function
 function deactivateAdminMode() {
+    console.log('🔚 Deactivating admin mode');
+    
     isAdminMode = false;
+    localStorage.removeItem('adminMode');
+    localStorage.removeItem('tempMailSession');
     
-    // Clear any admin-created session
-    clearSession();
-    
-    // Force logout from admin backend
+    // Clear admin session on backend
     fetch('/api/admin/logout', {
         method: 'POST',
         credentials: 'include'
-    }).catch(err => console.log('Admin logout completed'));
+    }).catch(err => console.log('Admin logout error:', err));
     
     // Restore normal UI
     document.body.classList.remove('admin-mode');
@@ -1524,12 +1580,16 @@ function deactivateAdminMode() {
         subtitle.classList.remove('admin-text');
     }
     
+    // Restore create button
+    const createBtn = document.getElementById('create-btn');
+    createBtn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create';
+    
     showNotification('🔓 Admin Mode Deactivated', 'success');
     
-    // Force page reload after a short delay to ensure clean state
+    // Force page reload after a short delay
     setTimeout(() => {
         window.location.reload();
-    }, 1000);
+    }, 1500);
 }
 
 function validateCurrentSession() {
@@ -1548,40 +1608,70 @@ function validateCurrentSession() {
     return true;
 }
 
+// Replace the initApp function
 function initApp() {
   console.log('🚀 Init app...');
+  
+  // Check if we're on admin page
   const isAdminPage = window.location.pathname.includes('/admin');
-  if (isAdminPage) { isAdminMode = true; return; }
+  if (isAdminPage) { 
+    isAdminMode = true; 
+    console.log('🔧 Admin page detected');
+    return; 
+  }
+
+  // Check for admin mode in localStorage
+  const savedAdminMode = localStorage.getItem('adminMode');
+  if (savedAdminMode === 'true') {
+    console.log('🔧 Restoring admin mode from storage');
+    isAdminMode = true;
+    activateAdminMode();
+  }
 
   loadDomains().then(() => {
     const saved = localStorage.getItem('tempMailSession');
     console.log('📦 Checking saved session...', saved ? 'FOUND' : 'NOT FOUND');
-    if (!saved) return;
+    
+    if (!saved) {
+      console.log('❌ No saved session found');
+      return;
+    }
 
     try {
       const data = JSON.parse(saved);
-      if (data.isAdmin || isAdminMode) {
+      
+      // Don't restore if this was an admin session
+      if (data.isAdmin) {
+        console.log('🚫 Not restoring admin session');
         localStorage.removeItem('tempMailSession');
         return;
       }
+      
       currentEmail = data.email;
       sessionToken = data.token;
       sessionStartTime = data.startTime || Date.now();
-      console.log('✅ Restored:', { currentEmail, hasToken: !!sessionToken });
+      
+      console.log('✅ Restored session:', { 
+        currentEmail, 
+        hasToken: !!sessionToken,
+        startTime: new Date(sessionStartTime).toLocaleString()
+      });
 
-      // Update UI
-      document.getElementById('current-email').textContent = currentEmail;
-      document.getElementById('email-display').classList.remove('hidden');
-      document.getElementById('end-session-btn').classList.remove('hidden');
+      // Validate session with backend before restoring
+      validateSessionWithBackend()
+        .then(isValid => {
+          if (isValid) {
+            restoreSessionUI();
+          } else {
+            console.log('❌ Session validation failed, clearing');
+            clearSession();
+          }
+        })
+        .catch(err => {
+          console.error('❌ Session validation error:', err);
+          clearSession();
+        });
 
-      const [user, domain] = currentEmail.split('@');
-      document.getElementById('username-input').value = user || '';
-      document.getElementById('domain-select').value = domain || '';
-
-      // Start polling AFTER token is set
-      loadEmails();
-      startAutoRefresh();
-      startTimeUpdate();
     } catch (e) {
       console.error('❌ Restore error:', e);
       localStorage.removeItem('tempMailSession');
@@ -1591,24 +1681,84 @@ function initApp() {
   setInterval(validateCurrentSession, 30000);
 }
 
+// Add session validation function
+function validateSessionWithBackend() {
+  return new Promise((resolve) => {
+    if (!currentEmail || !sessionToken) {
+      resolve(false);
+      return;
+    }
+
+    fetch(API_URL + '/api/session/validate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        email_address: currentEmail,
+        session_token: sessionToken
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      console.log('🔐 Session validation result:', data);
+      resolve(data.valid === true);
+    })
+    .catch(err => {
+      console.error('❌ Session validation request failed:', err);
+      resolve(false); // Assume invalid on error
+    });
+  });
+}
+
+// Add function to restore UI after validation
+function restoreSessionUI() {
+  document.getElementById('current-email').textContent = currentEmail;
+  document.getElementById('email-display').classList.remove('hidden');
+  document.getElementById('end-session-btn').classList.remove('hidden');
+
+  const [user, domain] = currentEmail.split('@');
+  document.getElementById('username-input').value = user || '';
+  document.getElementById('domain-select').value = domain || '';
+
+  // Start email loading and timers
+  loadEmails();
+  startAutoRefresh();
+  startTimeUpdate();
+  setupSessionExpiration();
+  
+  showNotification('✅ Session restored', 'success');
+}
 
 
 
-// Save after create
+
+// Replace the saveSession function
 function saveSession() {
   console.log('💾 saveSession called:', {
     currentEmail,
     hasToken: !!sessionToken,
     isAdminMode
   });
-  if (isAdminMode) return;
-  if (!currentEmail || !sessionToken) return;
+  
+  // Don't save admin sessions
+  if (isAdminMode) {
+    console.log('🚫 Not saving admin session');
+    return;
+  }
+  
+  if (!currentEmail || !sessionToken) {
+    console.log('❌ Cannot save - missing email or token');
+    return;
+  }
+  
   const sessionData = {
     email: currentEmail,
     token: sessionToken,
     startTime: sessionStartTime || Date.now(),
     isAdmin: false
   };
+  
   try {
     localStorage.setItem('tempMailSession', JSON.stringify(sessionData));
     console.log('✅ Session saved:', sessionData);
@@ -1617,12 +1767,44 @@ function saveSession() {
   }
 }
 
-// Call this right after a successful create
-// response JSON must contain these fields
-currentEmail = resp.email_address;       // map to your response
-sessionToken = resp.session_token;       // map to your response
-sessionStartTime = Date.now();
-saveSession();
+// Replace the clearSession function
+function clearSession() {
+  console.log('🧹 Clearing session');
+  
+  currentEmail = '';
+  sessionToken = '';
+  sessionStartTime = null;
+  
+  // Clear from localStorage
+  localStorage.removeItem('tempMailSession');
+  
+  // Reset UI
+  document.getElementById('email-display').classList.add('hidden');
+  document.getElementById('end-session-btn').classList.add('hidden');
+  document.getElementById('username-input').value = '';
+  document.getElementById('domain-select').selectedIndex = 0;
+  document.getElementById('email-count').textContent = '0 emails';
+  document.getElementById('email-list').innerHTML = '';
+  document.getElementById('no-emails-default').style.display = 'flex';
+  
+  // Stop intervals
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval);
+    autoRefreshInterval = null;
+  }
+  if (timeUpdateInterval) {
+    clearInterval(timeUpdateInterval);
+    timeUpdateInterval = null;
+  }
+  
+  // Clear session expiration timeout
+  if (window.sessionExpirationTimeout) {
+    clearTimeout(window.sessionExpirationTimeout);
+    window.sessionExpirationTimeout = null;
+  }
+  
+  console.log('✅ Session cleared');
+}
 
 
 
