@@ -1158,6 +1158,17 @@ function createEmail(customName) {
     // Clear any previous error states
     document.getElementById('username-input').classList.remove('border-red-500');
     
+    // Include current session token if available (for recreation)
+    const requestData = {
+        name: customName,
+        sessionId: sessionId,
+        admin_mode: isAdminMode
+    };
+    
+    if (sessionToken) {
+        requestData.current_session_token = sessionToken;
+    }
+    
     // Security: Include session ID and security key in request
     fetch(API_URL + '/api/create', {
         method: 'POST',
@@ -1166,11 +1177,7 @@ function createEmail(customName) {
             'X-Session-ID': sessionId,
             'X-Security-Key': emailSecurityKey
         },
-        body: JSON.stringify({
-            name: customName,
-            sessionId: sessionId,
-            admin_mode: isAdminMode
-        })
+        body: JSON.stringify(requestData)
     })
     .then(res => {
         if (!res.ok) {
@@ -1228,7 +1235,7 @@ function createEmail(customName) {
         // Handle specific error cases
         if (err.code === 'EMAIL_SELF_USED') {
             showNotification('📧 You are already using this email in your current session', 'info');
-        } else if (err.code === 'EMAIL_IN_USE') {
+        } else if (err.code === 'EMAIL_IN_USE' || err.code === 'EMAIL_IN_USE_ACTIVE') {
             showModal('Email Currently in Use', err.error, function() {
                 document.getElementById('username-input').focus();
             });
