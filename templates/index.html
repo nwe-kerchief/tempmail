@@ -1091,8 +1091,32 @@ function loadEmails() {
         if (newCount === 0) {
             list.innerHTML = `<div class="text-center py-8 text-gray-300 h-full flex flex-col justify-center"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>`;
         } else {
-            // Render email list...
-            // ... your existing email rendering code ...
+            data.emails.forEach((email, index) => {
+                const emailItem = document.createElement('div');
+                emailItem.className = 'email-list-item bg-gray-800 rounded-lg p-3 md:p-4 border border-gray-700 cursor-pointer transition-all hover:bg-gray-700';
+                emailItem.setAttribute('data-timestamp', email.timestamp || email.received_at);
+                
+                const subject = email.subject || 'No subject';
+                const sender = email.sender || 'Unknown sender';
+                const preview = email.body ? email.body.substring(0, 100) + '...' : 'No content';
+                const time = formatTime(email.timestamp || email.received_at);
+                
+                emailItem.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="font-semibold text-white text-sm md:text-base truncate flex-1 mr-2">${escapeHtml(subject)}</div>
+                        <div class="text-xs text-gray-400 whitespace-nowrap">${time}</div>
+                    </div>
+                    <div class="text-xs text-gray-300 mb-1 truncate">
+                        <strong>From:</strong> ${escapeHtml(sender)}
+                    </div>
+                    <div class="text-xs text-gray-400 email-preview">
+                        ${escapeHtml(preview)}
+                    </div>
+                `;
+                
+                emailItem.addEventListener('click', () => viewEmail(email, emailItem));
+                list.appendChild(emailItem);
+            });
         }
     })
     .catch(err => {
@@ -1181,6 +1205,13 @@ function createEmail(customName) {
     })
     .then(res => {
         if (!res.ok) {
+            // If it's a 409 error (email in use), handle it specially
+            if (res.status === 409) {
+                return res.json().then(errorData => {
+                    // Don't throw here - we'll handle it in the next .then
+                    return { error: errorData, status: 409 };
+                });
+            }
             return res.text().then(text => {
                 let errorData;
                 try {
@@ -1194,10 +1225,22 @@ function createEmail(customName) {
         return res.json();
     })
     .then(data => {
+        // 🚨 CRITICAL FIX: Check if this is an error response from 409
+        if (data && data.status === 409) {
+            // This is a 409 error - email in use
+            const errorData = data.error;
+            showModal('Email Currently in Use', errorData.error, function() {
+                document.getElementById('username-input').focus();
+            });
+            return; // STOP HERE - don't proceed with email creation
+        }
+        
+        // Only proceed if we have a valid email (success case)
         if (!data.email) {
             throw new Error('No email returned from server');
         }
         
+        // SUCCESS: Email created successfully
         currentEmail = data.email;
         sessionToken = data.session_token;
         sessionStartTime = Date.now();
@@ -1270,7 +1313,6 @@ function createEmail(customName) {
         btn.classList.remove('opacity-50');
     });
 }
-
 // Fallback function to create email locally if API fails
 function createEmailLocally(customName) {
     const domain = document.getElementById('domain-select').value || 'aungmyomyatzaw.online';
