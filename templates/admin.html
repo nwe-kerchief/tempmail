@@ -289,6 +289,92 @@ cursor: pointer;
 background: rgba(255, 255, 255, 0.1);
 transform: translateY(-1px);
 }
+
+/* BEAUTIFUL EMAIL STYLES */
+.beautiful-email {
+    font-family: 'Inter', sans-serif;
+}
+
+.verification-hero {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 16px;
+    padding: 30px;
+    text-align: center;
+    margin-bottom: 20px;
+    color: white;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+.verification-badge {
+    background: rgba(255,255,255,0.2);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 600;
+    display: inline-block;
+    margin-bottom: 15px;
+}
+
+.verification-code-large {
+    font-size: 42px;
+    font-weight: bold;
+    letter-spacing: 8px;
+    margin: 15px 0;
+    font-family: 'Courier New', monospace;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.verification-hint {
+    font-size: 14px;
+    opacity: 0.9;
+    margin-top: 10px;
+}
+
+.html-email-container {
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    padding: 20px;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.text-email-container {
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    padding: 20px;
+    line-height: 1.6;
+}
+
+.email-content-text {
+    line-height: 1.6;
+}
+
+.email-content-text p {
+    margin-bottom: 1rem;
+    color: #e5e7eb;
+}
+
+.text-link {
+    color: #60a5fa;
+    text-decoration: underline;
+}
+
+.text-link:hover {
+    color: #93c5fd;
+}
+
+.no-content {
+    text-align: center;
+    color: #9ca3af;
+    font-style: italic;
+    padding: 40px 20px;
+}
+
+.safe-image {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+}
 </style>
 </head>
 <body class="text-gray-100 min-h-screen p-4">
@@ -783,6 +869,8 @@ function improvedCleanEmailBody(rawBody) {
     
     return rawBody;
 }
+
+
 // View full email in admin panel
 function viewFullAdminEmail(email) {
     currentViewingEmail = email;
