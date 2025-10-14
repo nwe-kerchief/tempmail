@@ -1099,15 +1099,8 @@ function loadEmails() {
         const subject = email.subject || 'No subject';
         const sender = email.sender || 'Unknown sender';
         
-        // 🚨 FIX: Create plain text preview without HTML
-        let preview = 'No content';
-        if (email.body) {
-            // Remove HTML tags for preview
-            preview = email.body.replace(/<[^>]*>/g, '');
-            // Trim and limit length
-            preview = preview.substring(0, 100);
-            if (preview.length === 100) preview += '...';
-        }
+
+        const preview = extractEmailPreview(email.body);
         
         const time = formatTime(email.timestamp || email.received_at);
         
@@ -1152,6 +1145,71 @@ function loadEmails() {
         window.emailFetchController = null;
     });
 }
+
+function extractEmailPreview(body) {
+    if (!body) return 'No content';
+    
+    let text = body;
+    
+    // Remove HTML tags
+    text = text.replace(/<[^>]*>/g, '');
+    
+    // Decode common HTML entities and email encoding
+    text = text
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&#8217;/g, "'")
+        .replace(/=3D/g, '=')
+        .replace(/=20/g, ' ')
+        .replace(/=2E/g, '.')
+        .replace(/=\r?\n/g, '');
+    
+    // Remove email headers and technical content
+    const unwantedPatterns = [
+        /@font-face.*/gi,
+        /font-family:.*/gi,
+        /Content-Type:.*/gi,
+        /charset=.*/gi,
+        /MIME-Version:.*/gi,
+        /Content-Transfer-Encoding:.*/gi,
+        /boundary=.*/gi,
+        /Received:.*/gi,
+        /Return-Path:.*/gi,
+        /Message-ID:.*/gi
+    ];
+    
+    unwantedPatterns.forEach(pattern => {
+        text = text.replace(pattern, '');
+    });
+    
+    // Clean up whitespace
+    text = text.replace(/\s+/g, ' ').trim();
+    
+    // Find the first meaningful sentence
+    const sentences = text.split(/[.!?]/).filter(sentence => {
+        const cleanSentence = sentence.trim();
+        return cleanSentence.length > 10 && 
+               !cleanSentence.includes('charset') &&
+               !cleanSentence.includes('utf-8') &&
+               !cleanSentence.includes('Content-Type');
+    });
+    
+    if (sentences.length > 0) {
+        text = sentences[0].trim();
+    }
+    
+    // Limit length
+    if (text.length > 100) {
+        text = text.substring(0, 100) + '...';
+    }
+    
+    return text || 'No readable content';
+}
+
 function loadDomains() {
     return fetch(API_URL + '/api/domains')
     .then(res => {
@@ -1375,11 +1433,18 @@ function createEmail(customName) {
         }
     })
     .finally(function() {
-        // Reset button state PROPERLY
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create Mail';
-        btn.classList.remove('opacity-50');
-    });
+    // Reset button state PROPERLY for both buttons
+    const createBtn = document.getElementById('create-btn');
+    const randomBtn = document.getElementById('big-random-btn');
+    
+    createBtn.disabled = false;
+    createBtn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create Mail';
+    createBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    
+    randomBtn.disabled = false;
+    randomBtn.innerHTML = '<i class="fas fa-random mr-2 md:mr-3 text-lg md:text-xl"></i>Generate Random Email';
+    randomBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'btn-loading');
+});
 }
 
 // 🆕 NEW FUNCTION: Reset UI when session creation fails
@@ -2039,7 +2104,9 @@ function initApp() {
 
 function setupEventListeners() {
 // Create button
+// Create button
 document.getElementById('create-btn').addEventListener('click', function() {
+    const btn = this;
     const username = document.getElementById('username-input').value.trim();
     
     // If no username provided, show error
@@ -2057,7 +2124,16 @@ document.getElementById('create-btn').addEventListener('click', function() {
         return;
     }
     
-    createEmail(username);
+    // 🚨 IMMEDIATELY show loading state
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
+    btn.classList.add('opacity-50', 'cursor-not-allowed');
+    
+    // Use setTimeout to ensure UI updates before API call
+    setTimeout(() => {
+        createEmail(username);
+    }, 10);
 });
 
 // Enter key in username field - works exactly like Create button
@@ -2085,30 +2161,24 @@ document.getElementById('username-input').addEventListener('keypress', function(
     }
 });
     
-// Random email button - FIXED VERSION
-// Add these CSS class toggles in the random button event listener:
-// Random email button - FIXED VERSION
+// Random email button - FIXED loading state
 document.getElementById('big-random-btn').addEventListener('click', function() {
+    const btn = this;
     console.log('🎲 Random button clicked - checking current session...');
     
-    const btn = document.getElementById('big-random-btn');
+    // 🚨 IMMEDIATELY show loading state
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
+    btn.classList.add('opacity-50', 'cursor-not-allowed');
     
     // If there's an active session, end it first
     if (currentEmail && sessionToken) {
         console.log('🔄 Ending current session before creating new one...');
         
-        // Show loading state on the button
-        const originalText = btn.innerHTML;
-        btn.disabled = true;
-        btn.classList.add('btn-loading');
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Ending Session...';
-        
         // End current session first
         endSessionForNewEmail().then(() => {
             console.log('✅ Current session ended, now creating new email...');
-            
-            // Update button to show creating state
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
             
             // Generate random username and set it in the input
             const randomUsername = generateRandomUsername();
@@ -2117,32 +2187,17 @@ document.getElementById('big-random-btn').addEventListener('click', function() {
             // Wait a moment for cleanup to complete, then create new random email
             setTimeout(() => {
                 createEmail(randomUsername);
-                
-                // Restore button state after creation
-                setTimeout(() => {
-                    btn.disabled = false;
-                    btn.classList.remove('btn-loading');
-                    btn.innerHTML = '<i class="fas fa-random mr-2 md:mr-3 text-lg md:text-xl"></i>Generate Random Email';
-                }, 2000);
             }, 500);
             
         }).catch(err => {
             console.error('❌ Error ending session:', err);
             
             // Still try to create new email even if ending fails
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
-            
-            // Generate random username and set it in the input
             const randomUsername = generateRandomUsername();
             document.getElementById('username-input').value = randomUsername;
             
             setTimeout(() => {
                 createEmail(randomUsername);
-                setTimeout(() => {
-                    btn.disabled = false;
-                    btn.classList.remove('btn-loading');
-                    btn.innerHTML = '<i class="fas fa-random mr-2 md:mr-3 text-lg md:text-xl"></i>Generate Random Email';
-                }, 2000);
             }, 500);
         });
         
@@ -2150,24 +2205,14 @@ document.getElementById('big-random-btn').addEventListener('click', function() {
         // No active session, generate random username and create
         console.log('📭 No active session, creating new email directly...');
         
-        const originalText = btn.innerHTML;
-        btn.disabled = true;
-        btn.classList.add('btn-loading');
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
-        
         // Generate random username and set it in the input
         const randomUsername = generateRandomUsername();
         document.getElementById('username-input').value = randomUsername;
         
-        // Create the email with the random username
-        createEmail(randomUsername);
-        
-        // Restore button state after creation
+        // Small delay to ensure UI updates
         setTimeout(() => {
-            btn.disabled = false;
-            btn.classList.remove('btn-loading');
-            btn.innerHTML = '<i class="fas fa-random mr-2 md:mr-3 text-lg md:text-xl"></i>Generate Random Email';
-        }, 2000);
+            createEmail(randomUsername);
+        }, 10);
     }
 });
 
