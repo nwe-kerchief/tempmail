@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -508,6 +509,17 @@ let emailSecurityKey = generateSecurityKey();
 let sessionStartTime = null;
 let domainsLoaded = false;
 let isAdminMode = false;
+
+// ✅ Clear admin mode flags on every page load (user page only)
+(function() {
+    if (!window.location.pathname.includes('/admin')) {
+        localStorage.removeItem('tempMailSession');
+        localStorage.removeItem('adminMode');
+        localStorage.removeItem('admin_authenticated');
+        console.log('🧹 Cleared any admin data on user page load');
+    }
+})();
+
 
 document.addEventListener('DOMContentLoaded', function() {
     // ✅ FORCE CLEAR ADMIN MODE ON USER PAGE
@@ -1066,6 +1078,9 @@ function createEmailLocally(customName) {
     const username = customName || generateRandomUsername();
     currentEmail = username + '@' + domain;
     sessionStartTime = Date.now();
+    sessionStartTime = Date.now();
+    saveSession();  // ← ADD THIS LINE
+
     
     document.getElementById('username-input').value = username;
     document.getElementById('domain-select').value = domain;
@@ -1502,11 +1517,85 @@ function validateCurrentSession() {
 function initApp() {
     console.log('🚀 Initializing app...');
     
-    loadDomains();
+    // ✅ Double-check we're not on admin page
+    const isAdminPage = window.location.pathname.includes('/admin');
     
-    // ✅ Set up periodic session validation
-    setInterval(validateCurrentSession, 30000); // Check every 30 seconds
+    if (isAdminPage) {
+        console.log('🔒 Admin page - session restore disabled');
+        isAdminMode = true;
+        return;  // Don't restore anything on admin page
+    }
+    
+    // Load domains first
+    loadDomains().then(() => {
+        // ✅ RESTORE SESSION from localStorage (ONLY on user page)
+        const saved = localStorage.getItem('tempMailSession');
+        
+        if (saved) {
+            try {
+                const data = JSON.parse(saved);
+                
+                // ✅ Triple-check: Skip if ANY admin flag
+                if (data.isAdmin === true || isAdminMode) {
+                    console.log('🚫 Skipping admin session restore');
+                    localStorage.removeItem('tempMailSession');
+                    return;
+                }
+                
+                // Restore session variables
+                currentEmail = data.email;
+                sessionToken = data.token;
+                sessionStartTime = data.startTime ? new Date(data.startTime) : Date.now();
+                
+                console.log('✅ Session restored:', currentEmail);
+                
+                // Update UI
+                document.getElementById('current-email').textContent = currentEmail;
+                document.getElementById('email-display').classList.remove('hidden');
+                document.getElementById('end-session-btn').classList.remove('hidden');
+                
+                // Update input fields
+                const parts = currentEmail.split('@');
+                document.getElementById('username-input').value = parts[0];
+                document.getElementById('domain-select').value = parts[1];
+                
+                // Start loading emails
+                loadEmails();
+                startAutoRefresh();
+                startTimeUpdate();
+                
+            } catch (e) {
+                console.error('Session restore error:', e);
+                localStorage.removeItem('tempMailSession');
+            }
+        }
+    });
+    
+    // Set up periodic session validation
+    setInterval(validateCurrentSession, 30000);
 }
+
+
+function saveSession() {
+    // ✅ NEVER save admin sessions
+    if (isAdminMode) {
+        console.log('🚫 Admin session - not saving to localStorage');
+        return;
+    }
+    
+    if (currentEmail && sessionToken) {
+        const sessionData = {
+            email: currentEmail,
+            token: sessionToken,
+            startTime: sessionStartTime,
+            isAdmin: false  // Explicitly mark as non-admin
+        };
+        localStorage.setItem('tempMailSession', JSON.stringify(sessionData));
+        console.log('✅ Session saved to localStorage');
+    }
+}
+
+
 
 
 function setupEventListeners() {
@@ -1537,14 +1626,48 @@ function setupEventListeners() {
 document.getElementById('big-random-btn').addEventListener('click', function() {
     console.log('🎲 Generating random email...');
     
-    // Clear any existing session first
-    clearSession();
-    
-    // Wait a moment for cleanup, then create new random email
-    setTimeout(() => {
+    // ✅ END CURRENT SESSION FIRST (both frontend and backend)
+    if (currentEmail && sessionToken) {
+        const savedToken = sessionToken;
+        const savedEmail = currentEmail;
+        
+        // Clear frontend immediately
+        currentEmail = '';
+        sessionToken = '';
+        sessionStartTime = null;
+        localStorage.removeItem('tempMailSession');
+        
+        // Clear UI
+        document.getElementById('username-input').value = '';
+        document.getElementById('domain-select').selectedIndex = 0;
+        document.getElementById('email-display').classList.add('hidden');
+        document.getElementById('end-session-btn').classList.add('hidden');
+        
+        // Stop intervals
+        if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+        if (timeUpdateInterval) clearInterval(timeUpdateInterval);
+        
+        // ✅ Tell backend to end session
+        fetch(API_URL + '/api/session/end', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Session-Token': savedToken
+            },
+            body: JSON.stringify({
+                'session_token': savedToken,
+                'email_address': savedEmail
+            })
+        }).catch(err => console.log('End session error:', err));
+        
+        // Wait a moment for cleanup, then create new
+        setTimeout(() => createEmail(''), 500);
+    } else {
+        // No existing session, create immediately
         createEmail('');
-    }, 100);
+    }
 });
+
 
 // Add this function to properly end session in backend
 function endSessionBackend() {
