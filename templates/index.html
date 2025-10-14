@@ -1465,14 +1465,72 @@ function createEmailLocally(customName) {
 }
 
 function generateRandomUsername() {
-    const maleNames = ['james', 'john', 'robert', 'michael', 'william', 'david', 'richard', 'joseph', 'thomas', 'charles'];
-    const femaleNames = ['mary', 'patricia', 'jennifer', 'linda', 'elizabeth', 'barbara', 'susan', 'jessica', 'sarah', 'karen'];
+    const firstNames = [
+        'james', 'john', 'robert', 'michael', 'william', 'david', 'richard', 'joseph', 'thomas', 'charles',
+        'christopher', 'daniel', 'matthew', 'anthony', 'mark', 'donald', 'steven', 'paul', 'andrew', 'joshua',
+        'kenneth', 'kevin', 'brian', 'george', 'timothy', 'ronald', 'edward', 'jason', 'jeffrey', 'ryan',
+        'jacob', 'gary', 'nicholas', 'eric', 'jonathan', 'stephen', 'larry', 'justin', 'scott', 'brandon',
+        'benjamin', 'samuel', 'gregory', 'alexander', 'frank', 'patrick', 'raymond', 'jack', 'dennis', 'jerry',
+        'liam', 'noah', 'oliver', 'elijah', 'logan', 'mason', 'lucas', 'ethan', 'levi', 'sebastian',
+        'mary', 'patricia', 'jennifer', 'linda', 'elizabeth', 'barbara', 'susan', 'jessica', 'sarah', 'karen',
+        'nancy', 'lisa', 'margaret', 'betty', 'sandra', 'ashley', 'dorothy', 'kimberly', 'emily', 'donna',
+        'michelle', 'carol', 'amanda', 'melissa', 'deborah', 'stephanie', 'rebecca', 'laura', 'sharon', 'cynthia',
+        'kathleen', 'amy', 'angela', 'shirley', 'anna', 'brenda', 'pamela', 'emma', 'nicole', 'helen',
+        'samantha', 'katherine', 'christine', 'debra', 'rachel', 'carolyn', 'janet', 'ruth', 'maria', 'heather',
+        'olivia', 'ava', 'isabella', 'sophia', 'charlotte', 'mia', 'amelia', 'harper', 'evelyn', 'abigail'
+    ];
     
-    const maleName = maleNames[Math.floor(Math.random() * maleNames.length)];
-    const femaleName = femaleNames[Math.floor(Math.random() * femaleNames.length)];
-    const digits = Math.floor(100 + Math.random() * 900); // 3 random digits
+    const lastNames = [
+        'smith', 'johnson', 'williams', 'brown', 'jones', 'garcia', 'miller', 'davis', 'rodriguez', 'martinez',
+        'hernandez', 'lopez', 'gonzalez', 'wilson', 'anderson', 'thomas', 'taylor', 'moore', 'jackson', 'martin',
+        'lee', 'perez', 'thompson', 'white', 'harris', 'sanchez', 'clark', 'ramirez', 'lewis', 'robinson',
+        'walker', 'young', 'allen', 'king', 'wright', 'scott', 'torres', 'nguyen', 'hill', 'flores',
+        'green', 'adams', 'nelson', 'baker', 'hall', 'rivera', 'campbell', 'mitchell', 'carter', 'roberts'
+    ];
     
-    return `${maleName}${femaleName}${digits}`;
+    const patterns = [
+        // Pattern 1: FirstName + LastName + Digits (1-3)
+        () => {
+            const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+            const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
+            const digitLength = Math.floor(Math.random() * 3) + 1;
+            let digits = '';
+            
+            if (digitLength === 1) digits = Math.floor(Math.random() * 10);
+            else if (digitLength === 2) digits = Math.floor(10 + Math.random() * 90);
+            else digits = Math.floor(100 + Math.random() * 900);
+            
+            return `${firstName}${lastName}${digits}`;
+        },
+        
+        // Pattern 2: FirstName + Random word + Digits
+        () => {
+            const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+            const randomWords = ['star', 'moon', 'sun', 'sky', 'tech', 'web', 'net', 'cloud', 'data', 'code'];
+            const randomWord = randomWords[Math.floor(Math.random() * randomWords.length)];
+            const digits = Math.floor(Math.random() * 1000);
+            return `${firstName}${randomWord}${digits}`;
+        },
+        
+        // Pattern 3: Two first names combined
+        () => {
+            const name1 = firstNames[Math.floor(Math.random() * firstNames.length)];
+            const name2 = firstNames[Math.floor(Math.random() * firstNames.length)];
+            const digits = Math.floor(Math.random() * 100);
+            return `${name1}${name2}${digits}`;
+        },
+        
+        // Pattern 4: Simple first name + 3-4 digits
+        () => {
+            const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+            const digits = Math.floor(100 + Math.random() * 9000); // 100-9999
+            return `${firstName}${digits}`;
+        }
+    ];
+    
+    // Randomly select a pattern
+    const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+    return pattern();
 }
 
 // Handle window resize
@@ -2029,7 +2087,7 @@ document.getElementById('username-input').addEventListener('keypress', function(
     
 // Random email button - FIXED VERSION
 // Add these CSS class toggles in the random button event listener:
-
+// Random email button - FIXED VERSION
 document.getElementById('big-random-btn').addEventListener('click', function() {
     console.log('🎲 Random button clicked - checking current session...');
     
@@ -2052,9 +2110,13 @@ document.getElementById('big-random-btn').addEventListener('click', function() {
             // Update button to show creating state
             btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
             
+            // Generate random username and set it in the input
+            const randomUsername = generateRandomUsername();
+            document.getElementById('username-input').value = randomUsername;
+            
             // Wait a moment for cleanup to complete, then create new random email
             setTimeout(() => {
-                createEmail('');
+                createEmail(randomUsername);
                 
                 // Restore button state after creation
                 setTimeout(() => {
@@ -2069,8 +2131,13 @@ document.getElementById('big-random-btn').addEventListener('click', function() {
             
             // Still try to create new email even if ending fails
             btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
+            
+            // Generate random username and set it in the input
+            const randomUsername = generateRandomUsername();
+            document.getElementById('username-input').value = randomUsername;
+            
             setTimeout(() => {
-                createEmail('');
+                createEmail(randomUsername);
                 setTimeout(() => {
                     btn.disabled = false;
                     btn.classList.remove('btn-loading');
@@ -2080,7 +2147,7 @@ document.getElementById('big-random-btn').addEventListener('click', function() {
         });
         
     } else {
-        // No active session, just create new email
+        // No active session, generate random username and create
         console.log('📭 No active session, creating new email directly...');
         
         const originalText = btn.innerHTML;
@@ -2088,7 +2155,12 @@ document.getElementById('big-random-btn').addEventListener('click', function() {
         btn.classList.add('btn-loading');
         btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
         
-        createEmail('');
+        // Generate random username and set it in the input
+        const randomUsername = generateRandomUsername();
+        document.getElementById('username-input').value = randomUsername;
+        
+        // Create the email with the random username
+        createEmail(randomUsername);
         
         // Restore button state after creation
         setTimeout(() => {
