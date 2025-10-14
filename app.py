@@ -549,17 +549,21 @@ def create_email():
         logger.error(f"❌ Error creating email: {e}")
         return jsonify({'error': 'Failed to create session', 'code': 'SERVER_ERROR'}), 500
     
+# In your Flask app, improve the get_emails endpoint:
 @app.route('/api/emails/<email_address>', methods=['GET'])
 def get_emails(email_address):
     session_token = request.headers.get('X-Session-Token', '')
     
-    # Skip validation if missing (backward compatibility)
+    # Enhanced session validation
     if session_token:
         is_valid, msg = validate_session(email_address, session_token)
-        if not is_valid and "expired" in msg:
-            return jsonify({'error': 'Session expired'}), 403
+        if not is_valid:
+            if "expired" in msg.lower() or "ended" in msg.lower():
+                return jsonify({'error': 'Session expired'}), 403
+            elif "not found" in msg.lower():
+                return jsonify({'error': 'Invalid session'}), 401
     
-    # Get emails regardless (for compatibility)
+    # Get emails
     with get_db() as conn:
         c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT * FROM emails WHERE recipient = %s ORDER BY received_at DESC LIMIT 50', 
