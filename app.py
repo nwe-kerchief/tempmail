@@ -277,8 +277,10 @@ def validate_session(email_address, session_token):
         conn.close()
         
         if not session_data:
+            logger.warning(f"❌ Session validation failed for {email_address}")
             return False, "Invalid or expired session"
         
+        logger.info(f"✅ Session validated for {email_address}")
         return True, "Valid session"
         
     except Exception as e:
@@ -482,6 +484,7 @@ def get_emails(email_address):
         # Validate session
         is_valid, message = validate_session(email_address, session_token)
         if not is_valid:
+            logger.warning(f"Session invalid for {email_address}: {message}")
             return jsonify({'error': message}), 403
         
         conn = get_db()
@@ -507,10 +510,11 @@ def get_emails(email_address):
             })
         
         conn.close()
+        logger.info(f"✅ Retrieved {len(emails)} emails for {email_address}")
         return jsonify({'emails': emails})
         
     except Exception as e:
-        logger.error(f"âŒ Error getting emails: {e}")
+        logger.error(f"❌ Error getting emails: {e}")
         return jsonify({'error': str(e)}), 500
     
 @app.route('/api/debug/create-test', methods=['POST'])
