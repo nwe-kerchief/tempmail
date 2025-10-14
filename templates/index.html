@@ -713,19 +713,18 @@ function handleApiError(error, defaultMessage = "An error occurred") {
 }
 
 function clearSession() {
-    console.log('🔄 Clearing session...');
+    console.log('🔄 Clearing session (internal function)...');
     
-    // Save current session data for backend call
-    const endEmail = currentEmail;
-    const endToken = sessionToken;
-
+    // This function should NOT clear localStorage or reload the page
+    // It's only for internal cleanup when sessions expire or fail
+    
     // Clear frontend state
     currentEmail = '';
     sessionToken = '';
     sessionStartTime = null;
 
-    // ✅ DON'T clear localStorage here - let endSession handle that
-    // localStorage.clear();
+    // DON'T clear localStorage here - only endSession should do that
+    // localStorage.removeItem('tempMailSession');
 
     // Stop refresh intervals
     if (autoRefreshInterval) {
@@ -765,20 +764,7 @@ function clearSession() {
     // Reset title
     document.title = 'TempMail - AMMZ';
     
-    // Notify backend to end session (fire and forget)
-    if (endEmail && endToken) {
-        fetch(API_URL + '/api/session/end', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                session_token: endToken,
-                email_address: endEmail
-            }),
-            keepalive: true // Ensure request completes
-        }).catch(err => console.log('Backend session end attempted'));
-    }
-    
-    console.log('✅ Session cleared completely');
+    console.log('✅ Internal session cleared (no localStorage cleared)');
 }
 
 function loadSession() {
@@ -1394,17 +1380,41 @@ function showEmailList() {
 
 // Auto-refresh functions
 function startAutoRefresh() {
-    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+    
     autoRefreshInterval = setInterval(() => {
-        // ✅ Only refresh if we have an active session
+        // Double-check we still have a valid session
         if (currentEmail && sessionToken) {
             loadEmails();
         } else {
-            // ✅ Stop refreshing if no session
+            // Session ended, stop refreshing
+            console.log('🛑 Auto-refresh stopped: no active session');
             clearInterval(autoRefreshInterval);
             autoRefreshInterval = null;
         }
-    }, 5000); // Refresh every 5 seconds
+    }, 5000);
+}
+
+function startTimeUpdate() {
+    if (timeUpdateInterval) {
+        clearInterval(timeUpdateInterval);
+        timeUpdateInterval = null;
+    }
+    
+    timeUpdateInterval = setInterval(() => {
+        // Double-check we still have a valid session
+        if (currentEmail && sessionToken) {
+            updateEmailTimes();
+        } else {
+            // Session ended, stop time updates
+            console.log('🛑 Time updates stopped: no active session');
+            clearInterval(timeUpdateInterval);
+            timeUpdateInterval = null;
+        }
+    }, 1000);
 }
 
 function startTimeUpdate() {
@@ -1447,34 +1457,44 @@ function setupAMMZDoor() {
 
 
 function endSession() {
+    console.log('🛑 Ending session...');
+    
+    // Save current session data for backend call BEFORE clearing
+    const endEmail = currentEmail;
+    const endToken = sessionToken;
+
     // Clear frontend state immediately
     currentEmail = '';
     sessionToken = '';
     sessionStartTime = null;
     
-    // ✅ Clear localStorage ONLY when user explicitly ends session
+    // Clear localStorage
     localStorage.removeItem('tempMailSession');
     
     // Stop all refresh intervals
     if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval);
         autoRefreshInterval = null;
+        console.log('✅ Auto-refresh stopped');
     }
     if (timeUpdateInterval) {
         clearInterval(timeUpdateInterval);
         timeUpdateInterval = null;
+        console.log('✅ Time update stopped');
     }
     
-    // Also clear any session expiration timeout
+    // Clear any session expiration timeout
     if (window.sessionExpirationTimeout) {
         clearTimeout(window.sessionExpirationTimeout);
         window.sessionExpirationTimeout = null;
+        console.log('✅ Session expiration timer stopped');
     }
     
     // Clear any pending email fetch requests
     if (window.emailFetchController) {
         window.emailFetchController.abort();
         window.emailFetchController = null;
+        console.log('✅ Pending requests cancelled');
     }
     
     // Reset UI immediately
@@ -1493,43 +1513,44 @@ function endSession() {
     // Reset title
     document.title = 'TempMail - AMMZ';
     
-    // Try to notify backend, but don't wait for it
-    if (currentEmail && sessionToken) {
+    console.log('✅ Frontend session cleared');
+
+    // Notify backend to end session (fire and forget - don't wait for response)
+    if (endEmail && endToken) {
+        console.log('📡 Notifying backend to end session...');
         fetch(API_URL + '/api/session/end', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                session_token: sessionToken,
-                email_address: currentEmail
+                session_token: endToken,
+                email_address: endEmail
             })
         })
         .then(res => {
             if (!res.ok) {
-                console.log('Backend session end failed, but continuing');
+                console.log('⚠️ Backend session end failed, but continuing');
+            } else {
+                console.log('✅ Backend session ended');
             }
             return res.json();
         })
         .then(data => {
-            console.log('✅ Backend session ended');
+            console.log('✅ Backend confirmed session end');
         })
         .catch(err => {
             console.log('❌ Backend session end error (ignoring):', err);
         })
         .finally(() => {
-            // Always show success and reload
+            // Show success notification WITHOUT reloading the page
             showNotification('✅ Session ended successfully', 'success');
-            setTimeout(() => {
-                window.location.reload();
-            }, 1000);
+            console.log('🎯 Session end process complete - NO PAGE RELOAD');
         });
     } else {
-        // No session data, just reload
+        // No session data, just show success
         showNotification('✅ Session cleared', 'success');
-        setTimeout(() => {
-            window.location.reload();
-        }, 1000);
+        console.log('🎯 Session cleared - NO PAGE RELOAD');
     }
 }
 
@@ -1871,16 +1892,17 @@ function endSessionBackend() {
         });
     });
     
-    // End session button
-    document.getElementById('end-session-btn').addEventListener('click', function() {
-        showModal(
-            'End Session',
-            'Are you sure you want to end this session? All emails will be cleared.',
-            function() {
-                endSession();
-            }
-        );
-    });
+// End session button
+document.getElementById('end-session-btn').addEventListener('click', function() {
+    showModal(
+        'End Session',
+        'Are you sure you want to end this session? All emails will be cleared.',
+        function() {
+            console.log('🎯 User confirmed session end');
+            endSession(); // This will now work without page reload
+        }
+    );
+});
 
     document.addEventListener('click', function(e) {
         // Check if clicked element is the AMMZ text in the marquee
@@ -1934,35 +1956,6 @@ document.getElementById('refresh-btn').addEventListener('click', function() {
             loadEmails();
         }
     });
-    
-    // Handle beforeunload to save session
-    // End session when page refreshes or closes
-window.addEventListener('beforeunload', function() {
-    if (currentEmail && sessionToken && !isAdminMode) {
-        // Try to end session (may not complete due to page unload)
-        fetch(API_URL + '/api/session/end', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                session_token: sessionToken,
-                email_address: currentEmail
-            }),
-            keepalive: true // Helps request complete during unload
-        }).catch(() => {});
-    }
-});
-
-// End session when visibility changes (tab switch, minimize, etc)
-document.addEventListener('visibilitychange', function() {
-    if (document.hidden && currentEmail && sessionToken && !isAdminMode) {
-        // User switched tabs or minimized window - end session after delay
-        setTimeout(() => {
-            if (document.hidden) { // Still not visible
-                endSessionBackend();
-            }
-        }, 30000); // 30 seconds
-    }
-});
 }
 </script>
 </body>
