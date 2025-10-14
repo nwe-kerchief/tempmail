@@ -302,6 +302,7 @@ def create_email():
         data = request.get_json() or {}
         custom_name = data.get('name', '').strip()
         admin_mode = data.get('admin_mode', False)
+        current_session_token = data.get('current_session_token')
         
         # Validate security headers
         session_id = request.headers.get('X-Session-ID')
@@ -336,7 +337,7 @@ def create_email():
         conn = get_db()
         c = conn.cursor()
         
-        # 🚨 SECURITY FIX: Check if email is currently in use by an ACTIVE session
+        # 🚨 CRITICAL FIX: Check if email is currently in use by an ACTIVE session
         c.execute('''
             SELECT session_token, created_at 
             FROM sessions 
@@ -348,29 +349,37 @@ def create_email():
         active_session = c.fetchone()
         
         if active_session:
-            conn.close()
-            return jsonify({
-                'error': 'This email address is currently in use by another session. Please choose a different username or try again later.',
-                'code': 'EMAIL_IN_USE_ACTIVE'
-            }), 409
-        
-        # (allow users to recreate their own sessions)
-        current_session_token = data.get('current_session_token')
-        if current_session_token:
-            c.execute('''
-                SELECT session_token 
-                FROM sessions 
-                WHERE email_address = %s AND session_token = %s
-            ''', (email_address, current_session_token))
+            active_session_token = active_session[0]
             
-            same_user = c.fetchone()
-            if same_user:
-                # Same user recreating their own email - allow it but end previous session
+            # 🆕 CHECK: If this is the SAME USER trying to recreate their own email
+            if current_session_token and current_session_token == active_session_token:
+                # Same user recreating their own email - allow it and return existing session
+                logger.info(f"✅ User recreating their own email: {email_address}")
+                
+                # Update session expiration
+                new_expires_at = datetime.now() + timedelta(hours=1)
                 c.execute('''
                     UPDATE sessions 
-                    SET is_active = FALSE 
-                    WHERE email_address = %s AND session_token != %s
-                ''', (email_address, current_session_token))
+                    SET expires_at = %s, last_activity = %s
+                    WHERE session_token = %s
+                ''', (new_expires_at, datetime.now(), active_session_token))
+                
+                conn.commit()
+                conn.close()
+                
+                return jsonify({
+                    'email': email_address,
+                    'session_token': active_session_token,
+                    'expires_at': new_expires_at.isoformat(),
+                    'existing_session': True
+                })
+            else:
+                # Different user trying to use this email - reject
+                conn.close()
+                return jsonify({
+                    'error': 'This email address is currently in use by another session. Please choose a different username or try again later.',
+                    'code': 'EMAIL_IN_USE_ACTIVE'
+                }), 409
         
         # Create session token
         session_token = secrets.token_urlsafe(32)
@@ -410,7 +419,8 @@ def create_email():
         return jsonify({
             'email': email_address,
             'session_token': session_token,
-            'expires_at': expires_at.isoformat()
+            'expires_at': expires_at.isoformat(),
+            'existing_session': False
         })
         
     except Exception as e:
