@@ -523,32 +523,30 @@ let isAdminMode = false;
     
     if (isAdminPage) {
         // ===== GOING TO ADMIN PAGE =====
-        // Clear user session if exists
         if (hasSession) {
             console.log('🧹 Clearing user session (entering admin)');
             
             try {
                 const data = JSON.parse(hasSession);
                 
-                // Tell backend to end session
+                // ✅ Tell backend to end session (use sendBeacon for reliability)
                 if (data.token && data.email) {
-                    fetch('/api/session/end', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Session-Token': data.token
-                        },
-                        body: JSON.stringify({
-                            session_token: data.token,
-                            email_address: data.email
-                        })
-                    }).catch(err => console.log('End session error:', err));
+                    const payload = JSON.stringify({
+                        session_token: data.token,
+                        email_address: data.email
+                    });
+                    
+                    // sendBeacon works even if page navigates away
+                    const blob = new Blob([payload], { type: 'application/json' });
+                    navigator.sendBeacon('/api/session/end', blob);
+                    
+                    console.log('📤 Sent session end request via beacon');
                 }
             } catch (e) {
                 console.error('Parse error:', e);
             }
             
-            // Clear user data
+            // Clear localStorage
             localStorage.removeItem('tempMailSession');
         }
         
@@ -559,11 +557,11 @@ let isAdminMode = false;
         // ===== GOING TO USER PAGE =====
         console.log('🧹 Clearing admin mode (entering user page)');
         
-        // Only clear admin flags, NOT user session!
+        // Clear admin flags
         localStorage.removeItem('adminMode');
         localStorage.removeItem('admin_authenticated');
         
-        // ✅ If there's a user session with admin flag, remove it
+        // Remove admin-flagged sessions
         if (hasSession) {
             try {
                 const data = JSON.parse(hasSession);
@@ -572,12 +570,48 @@ let isAdminMode = false;
                     localStorage.removeItem('tempMailSession');
                 }
             } catch (e) {
-                // If corrupted, just remove it
                 localStorage.removeItem('tempMailSession');
             }
         }
     }
 })();
+
+// ✅ Intercept admin link clicks to end session
+document.addEventListener('DOMContentLoaded', function() {
+    // Find any links to /admin
+    const adminLinks = document.querySelectorAll('a[href*="admin"]');
+    
+    adminLinks.forEach(link => {
+        link.addEventListener('click', function(e) {
+            const hasSession = localStorage.getItem('tempMailSession');
+            
+            if (hasSession) {
+                try {
+                    const data = JSON.parse(hasSession);
+                    
+                    // End session before navigation
+                    if (data.token && data.email) {
+                        const payload = JSON.stringify({
+                            session_token: data.token,
+                            email_address: data.email
+                        });
+                        
+                        const blob = new Blob([payload], { type: 'application/json' });
+                        navigator.sendBeacon('/api/session/end', blob);
+                        
+                        console.log('🔚 Ending session before going to admin');
+                    }
+                    
+                    localStorage.removeItem('tempMailSession');
+                } catch (e) {
+                    console.error('Error ending session:', e);
+                }
+            }
+        });
+    });
+});
+
+
 
 
 
@@ -1062,6 +1096,7 @@ function createEmail(customName) {
         currentEmail = data.email;
         sessionToken = data.session_token;
         sessionStartTime = Date.now();
+        console.log('📧 Email created, calling saveSession...');
         saveSession();
 
         const parts = currentEmail.split('@');
@@ -1577,7 +1612,6 @@ function validateCurrentSession() {
 function initApp() {
     console.log('🚀 Initializing app...');
     
-    // Check if we're on admin page
     const isAdminPage = window.location.pathname.includes('/admin');
     
     if (isAdminPage) {
@@ -1586,15 +1620,15 @@ function initApp() {
         return;
     }
     
-    // Load domains first
     loadDomains().then(() => {
-        // ✅ RESTORE SESSION from localStorage
+        // ✅ RESTORE SESSION
         const saved = localStorage.getItem('tempMailSession');
+        console.log('📦 Checking for saved session...', saved ? 'FOUND' : 'NOT FOUND');
         
         if (saved) {
             try {
                 const data = JSON.parse(saved);
-                console.log('📦 Found saved session:', data);
+                console.log('📋 Parsed session data:', data);
                 
                 // Skip admin sessions
                 if (data.isAdmin === true || isAdminMode) {
@@ -1603,14 +1637,18 @@ function initApp() {
                     return;
                 }
                 
-                // ✅ Restore all session variables
+                // ✅ Restore session
                 currentEmail = data.email;
                 sessionToken = data.token;
                 sessionStartTime = data.startTime || Date.now();
                 
-                console.log('✅ Session restored:', currentEmail);
+                console.log('✅ Session restored successfully:', {
+                    email: currentEmail,
+                    hasToken: !!sessionToken,
+                    startTime: sessionStartTime
+                });
                 
-                // ✅ Update ALL UI elements
+                // Update UI
                 document.getElementById('current-email').textContent = currentEmail;
                 document.getElementById('email-display').classList.remove('hidden');
                 document.getElementById('end-session-btn').classList.remove('hidden');
@@ -1622,7 +1660,7 @@ function initApp() {
                     document.getElementById('domain-select').value = domain;
                 }
                 
-                // ✅ Start ALL intervals and loaders
+                // Start intervals
                 loadEmails();
                 startAutoRefresh();
                 startTimeUpdate();
@@ -1632,13 +1670,13 @@ function initApp() {
                 localStorage.removeItem('tempMailSession');
             }
         } else {
-            console.log('ℹ️ No saved session found');
+            console.log('ℹ️ No saved session - user needs to create new email');
         }
     });
     
-    // Set up periodic validation
     setInterval(validateCurrentSession, 30000);
 }
+
 
 
 
