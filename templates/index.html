@@ -510,7 +510,7 @@ let sessionStartTime = null;
 let domainsLoaded = false;
 let isAdminMode = false;
 
-// ✅ HANDLE PAGE TRANSITIONS (User ↔ Admin)
+// ===== PAGE LOAD HANDLER - FINAL CORRECT VERSION =====
 (function() {
     const isAdminPage = window.location.pathname.includes('/admin');
     const hasSession = localStorage.getItem('tempMailSession');
@@ -522,59 +522,68 @@ let isAdminMode = false;
     });
     
     if (isAdminPage) {
-        // ===== GOING TO ADMIN PAGE =====
+        // ===== ON ADMIN PAGE (includes refresh and first visit) =====
+        console.log('🔒 Admin page - checking for sessions to end');
+        
+        // ALWAYS end any user session when on admin page
         if (hasSession) {
-            console.log('🧹 Clearing user session (entering admin)');
-            
             try {
                 const data = JSON.parse(hasSession);
                 
-                // ✅ Tell backend to end session (use sendBeacon for reliability)
-                if (data.token && data.email) {
+                // End session on backend if it has valid credentials
+                if (data.email && data.token) {
+                    console.log('🧹 Ending user session on admin page:', data.email);
+                    
                     const payload = JSON.stringify({
                         session_token: data.token,
                         email_address: data.email
                     });
                     
-                    // sendBeacon works even if page navigates away
                     const blob = new Blob([payload], { type: 'application/json' });
                     navigator.sendBeacon('/api/session/end', blob);
                     
-                    console.log('📤 Sent session end request via beacon');
+                    console.log('📤 Session end request sent');
                 }
             } catch (e) {
                 console.error('Parse error:', e);
             }
             
-            // Clear localStorage
+            // Always clear localStorage on admin page
             localStorage.removeItem('tempMailSession');
+            console.log('🗑️ Cleared session from localStorage');
+        } else {
+            console.log('ℹ️ No session to end');
         }
         
         // Set admin flag
         localStorage.setItem('adminMode', 'true');
         
     } else {
-        // ===== GOING TO USER PAGE =====
-        console.log('🧹 Clearing admin mode (entering user page)');
+        // ===== ON USER PAGE =====
+        console.log('👤 User page loaded');
         
         // Clear admin flags
         localStorage.removeItem('adminMode');
         localStorage.removeItem('admin_authenticated');
         
-        // Remove admin-flagged sessions
+        // Only remove admin-flagged sessions
         if (hasSession) {
             try {
                 const data = JSON.parse(hasSession);
                 if (data.isAdmin === true) {
                     console.log('🚫 Removing admin-flagged session');
                     localStorage.removeItem('tempMailSession');
+                } else {
+                    console.log('✅ Keeping user session for restore');
                 }
             } catch (e) {
+                console.error('Parse error:', e);
                 localStorage.removeItem('tempMailSession');
             }
         }
     }
 })();
+
 
 // ✅ Intercept admin link clicks to end session
 document.addEventListener('DOMContentLoaded', function() {
