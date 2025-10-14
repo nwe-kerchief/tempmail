@@ -310,7 +310,6 @@ def create_email():
         if not session_id or not security_key:
             logger.warning("Missing security headers in create request")
         
-        # ðŸš¨ FIX: Define username variable at the start
         username = ""
         
         if custom_name:
@@ -330,43 +329,49 @@ def create_email():
             male_name = random.choice(MALE_NAMES)
             female_name = random.choice(FEMALE_NAMES)
             three_digits = ''.join(random.choices(string.digits, k=3))
-            username = f"{male_name}{female_name}{three_digits}"  # ðŸš¨ This should work now
+            username = f"{male_name}{female_name}{three_digits}"
         
         email_address = f"{username}@{DOMAIN}"
-        
-        # ... rest of your create_email code ...
         
         conn = get_db()
         c = conn.cursor()
         
-        # ðŸš¨ FORCE END ALL SESSIONS for this email (more aggressive)
-        try:
-            # Method 1: Set is_active to FALSE
-            c.execute('''
-                UPDATE sessions 
-                SET is_active = FALSE 
-                WHERE email_address = %s
-            ''', (email_address,))
-            
-            # Method 2: Set expires_at to past
-            c.execute('''
-                UPDATE sessions 
-                SET expires_at = NOW() - INTERVAL '1 minute'
-                WHERE email_address = %s AND expires_at > NOW()
-            ''', (email_address,))
-            
-            # Method 3: For any remaining active sessions
-            c.execute('''
-                DELETE FROM sessions 
-                WHERE email_address = %s
-            ''', (email_address,))
-            
-        except Exception as e:
-            logger.warning(f"Error ending existing sessions: {e}")
+        # 🚨 SECURITY FIX: Check if email is currently in use by an ACTIVE session
+        c.execute('''
+            SELECT session_token, created_at 
+            FROM sessions 
+            WHERE email_address = %s AND expires_at > NOW() AND is_active = TRUE
+            ORDER BY created_at DESC 
+            LIMIT 1
+        ''', (email_address,))
         
-        # ... rest of your create_email code ...
-            # Fallback - delete sessions
-            c.execute('DELETE FROM sessions WHERE email_address = %s', (email_address,))
+        active_session = c.fetchone()
+        
+        if active_session:
+            conn.close()
+            return jsonify({
+                'error': 'This email address is currently in use by another session. Please choose a different username or try again later.',
+                'code': 'EMAIL_IN_USE_ACTIVE'
+            }), 409
+        
+        # 🚨 Also check if this is the SAME user trying to recreate their own email
+        # (allow users to recreate their own sessions)
+        current_session_token = data.get('current_session_token')
+        if current_session_token:
+            c.execute('''
+                SELECT session_token 
+                FROM sessions 
+                WHERE email_address = %s AND session_token = %s
+            ''', (email_address, current_session_token))
+            
+            same_user = c.fetchone()
+            if same_user:
+                # Same user recreating their own email - allow it but end previous session
+                c.execute('''
+                    UPDATE sessions 
+                    SET is_active = FALSE 
+                    WHERE email_address = %s AND session_token != %s
+                ''', (email_address, current_session_token))
         
         # Create session token
         session_token = secrets.token_urlsafe(32)
@@ -394,14 +399,14 @@ def create_email():
                     VALUES (%s, %s, %s)
                     ON CONFLICT (username) DO NOTHING
                 ''', (username.lower(), datetime.now(), 'admin_auto'))
-                logger.info(f"âœ… Automatically blacklisted username: {username}")
+                logger.info(f"✅ Automatically blacklisted username: {username}")
             except Exception as e:
                 logger.error(f"Error auto-blacklisting username: {e}")
         
         conn.commit()
         conn.close()
         
-        logger.info(f"âœ… Created email: {email_address}")
+        logger.info(f"✅ Created email: {email_address}")
         
         return jsonify({
             'email': email_address,
@@ -410,7 +415,7 @@ def create_email():
         })
         
     except Exception as e:
-        logger.error(f"âŒ Error creating email: {e}")
+        logger.error(f"❌ Error creating email: {e}")
         return jsonify({'error': 'Failed to create session', 'code': 'SERVER_ERROR'}), 500
     
 @app.route('/api/session/end', methods=['POST'])
