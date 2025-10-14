@@ -481,7 +481,7 @@ def get_emails(email_address):
     try:
         session_token = request.headers.get('X-Session-Token', '')
         
-        # Validate session
+        # Validate session for regular users
         is_valid, message = validate_session(email_address, session_token)
         if not is_valid:
             logger.warning(f"Session invalid for {email_address}: {message}")
@@ -490,7 +490,7 @@ def get_emails(email_address):
         conn = get_db()
         c = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Get emails for this session
+        # Get emails for this session (regular users only see their session emails)
         c.execute('''
             SELECT id, sender, subject, body, timestamp, received_at
             FROM emails 
@@ -590,7 +590,7 @@ def webhook_inbound():
         if not json_data:
             return jsonify({'error': 'No JSON data'}), 400
         
-        logger.info("ðŸ“§ INCOMING EMAIL")
+        logger.info("📧 INCOMING EMAIL")
         
         recipient = json_data.get('to', 'unknown@unknown.com')
         sender = json_data.get('from', 'unknown')
@@ -627,9 +627,9 @@ def webhook_inbound():
         # Clean headers
         body = clean_raw_email(body)
         
-        logger.info(f"  âœ‰ï¸  From: {sender} â†’ {recipient}")
-        logger.info(f"  ðŸ“ Subject: {subject}")
-        logger.info(f"  ðŸ“„ Body: {len(body)} chars")
+        logger.info(f"  📨 From: {sender} → {recipient}")
+        logger.info(f"  📝 Subject: {subject}")
+        logger.info(f"  📄 Body: {len(body)} chars")
         
         # Store timestamps
         received_at = datetime.now()
@@ -638,6 +638,8 @@ def webhook_inbound():
         # Find active session for this recipient
         conn = get_db()
         c = conn.cursor()
+        
+        session_token = None
         
         # Check if is_active column exists
         try:
@@ -674,32 +676,34 @@ def webhook_inbound():
         
         if session_data:
             session_token = session_data[0]
-            
-            # Store email
-            c.execute('''
-                INSERT INTO emails (recipient, sender, subject, body, timestamp, received_at, session_token)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ''', (recipient, sender, subject, body, original_timestamp, received_at, session_token))
-            
-            # Update session last_activity
+            logger.info(f"  ✅ Found active session for {recipient}")
+        else:
+            logger.info(f"  ℹ️ No active session found for {recipient}, but storing email anyway")
+        
+        # 🚨 CRITICAL FIX: ALWAYS STORE THE EMAIL, EVEN IF NO ACTIVE SESSION EXISTS
+        # Store email (with session_token if available, otherwise NULL)
+        c.execute('''
+            INSERT INTO emails (recipient, sender, subject, body, timestamp, received_at, session_token)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ''', (recipient, sender, subject, body, original_timestamp, received_at, session_token))
+        
+        # Update session last_activity if session exists
+        if session_data:
             c.execute('''
                 UPDATE sessions 
                 SET last_activity = %s 
                 WHERE session_token = %s
             ''', (received_at, session_token))
-            
-            conn.commit()
-            conn.close()
-            
-            logger.info(f"âœ… Email stored: {sender} â†’ {recipient}")
-            return '', 204
-        else:
-            conn.close()
-            logger.warning(f"âš ï¸ No active session for {recipient}")
-            return '', 204
+            logger.info(f"  ✅ Updated session activity for {recipient}")
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"✅ Email stored permanently: {sender} → {recipient}")
+        return '', 204
         
     except Exception as e:
-        logger.error(f"âŒ Webhook error: {e}")
+        logger.error(f"❌ Webhook error: {e}")
         return jsonify({'error': str(e)}), 400
 
 def cleanup_expired_sessions():
