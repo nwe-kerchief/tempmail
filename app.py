@@ -288,26 +288,68 @@ def parse_email_body(raw_body):
         logger.error(f"Email parsing error: {e}")
         return "Error parsing email content"
 
-# FIX 1: Session validation 
+# Replace the validate_session function with this improved version
 def validate_session(email_address, session_token):
-    if not session_token: return False, "No token"
+    """Proper session validation with timezone handling"""
+    if not session_token or not email_address:
+        return False, "Missing credentials"
     
     try:
         with get_db() as conn:
             c = conn.cursor()
-            c.execute('SELECT expires_at FROM sessions WHERE email_address = %s AND session_token = %s', 
-                     (email_address, session_token))
+            c.execute('''
+                SELECT expires_at, is_active 
+                FROM sessions 
+                WHERE email_address = %s AND session_token = %s AND expires_at > NOW()
+            ''', (email_address, session_token))
             result = c.fetchone()
             
-            if not result: return False, "Session not found"
+            if not result:
+                return False, "Session not found or expired"
             
-            # Simple expiry check
-            if datetime.now(MYANMAR_TZ) > result[0].astimezone(MYANMAR_TZ):
-                return False, "Session expired"
+            expires_at = result[0]
+            is_active = result[1] if len(result) > 1 else True
+            
+            # Check if session is still active
+            if not is_active:
+                return False, "Session ended"
+            
+            # Update last activity
+            c.execute('''
+                UPDATE sessions 
+                SET last_activity = %s 
+                WHERE email_address = %s AND session_token = %s
+            ''', (datetime.now(MYANMAR_TZ), email_address, session_token))
+            conn.commit()
             
             return True, "Valid"
-    except:
-        return True, "Fallback allow"  # Prevent blocking on errors
+    except Exception as e:
+        logger.error(f"Session validation error: {e}")
+        return False, f"Validation error: {str(e)}"
+
+# Add this new endpoint for session validation
+@app.route('/api/session/validate', methods=['POST'])
+def validate_session_endpoint():
+    """Validate if a session is still active"""
+    try:
+        data = request.get_json() or {}
+        email_address = data.get('email_address')
+        session_token = data.get('session_token')
+        
+        if not email_address or not session_token:
+            return jsonify({'valid': False, 'error': 'Missing credentials'}), 400
+        
+        is_valid, message = validate_session(email_address, session_token)
+        
+        return jsonify({
+            'valid': is_valid,
+            'message': message,
+            'email_address': email_address if is_valid else None
+        })
+        
+    except Exception as e:
+        logger.error(f"Session validation endpoint error: {e}")
+        return jsonify({'valid': False, 'error': str(e)}), 500
 
 # FIX 2: Get emails endpoint
 
@@ -404,20 +446,21 @@ def index():
 def get_domains():
     return jsonify({'domains': [DOMAIN]})
 
+# Update the create_email function
 @app.route('/api/create', methods=['POST'])
 def create_email():
-    """Create new email with proper validation and session handling"""
+    """Create new email with proper admin/user session handling"""
     try:
         data = request.get_json() or {}
         custom_name = data.get('name', '').strip()
-        admin_mode = data.get('admin_mode', False) and session.get('admin_authenticated', False)
+        
+        # Check if we're in admin mode
+        admin_mode = session.get('admin_authenticated', False)
+        logger.info(f"📧 Create request - Admin mode: {admin_mode}, Custom name: {custom_name}")
         
         # Validate security headers
         session_id = request.headers.get('X-Session-ID')
         security_key = request.headers.get('X-Security-Key')
-        
-        if not session_id or not security_key:
-            logger.warning("Missing security headers in create request")
         
         # Define username variable
         username = ""
@@ -439,7 +482,7 @@ def create_email():
                     'code': 'USERNAME_BLACKLISTED'
                 }), 403
         else:
-            # Generate random name: malename + femalename + 3 digits
+            # Generate random name
             male_name = random.choice(MALE_NAMES)
             female_name = random.choice(FEMALE_NAMES)
             three_digits = ''.join(random.choices(string.digits, k=3))
@@ -447,8 +490,9 @@ def create_email():
         
         email_address = f"{username}@{DOMAIN}"
         
-        # Invalidate existing sessions for this email
-        invalidate_existing_sessions(email_address)
+        # Invalidate existing sessions for this email (unless admin mode)
+        if not admin_mode:
+            invalidate_existing_sessions(email_address)
         
         # Create new session with proper timezone
         session_token = secrets.token_urlsafe(32)
@@ -457,11 +501,13 @@ def create_email():
         
         with get_db() as conn:
             c = conn.cursor()
-            c.execute(
-                "UPDATE sessions SET expires_at = NOW() WHERE email_address = %s AND expires_at > NOW()",
-                (email_address,)
-            )
-            conn.commit()
+            
+            # For non-admin mode, clear existing sessions
+            if not admin_mode:
+                c.execute(
+                    "UPDATE sessions SET expires_at = NOW() WHERE email_address = %s AND expires_at > NOW()",
+                    (email_address,)
+                )
             
             # Insert new session
             try:
@@ -495,13 +541,14 @@ def create_email():
         return jsonify({
             'email': email_address,
             'session_token': session_token,
-            'expires_at': expires_at.isoformat()
+            'expires_at': expires_at.isoformat(),
+            'admin_mode': admin_mode
         })
         
     except Exception as e:
         logger.error(f"❌ Error creating email: {e}")
         return jsonify({'error': 'Failed to create session', 'code': 'SERVER_ERROR'}), 500
-
+    
 @app.route('/api/emails/<email_address>', methods=['GET'])
 def get_emails(email_address):
     session_token = request.headers.get('X-Session-Token', '')
@@ -667,21 +714,58 @@ def admin_login():
         return jsonify({'success': True})
     return jsonify({'success': False}), 401
 
+# Replace the admin login verification
 @app.route('/api/verify-admin', methods=['POST'])
 def verify_admin():
-    """Alternative endpoint for frontend admin verification"""
+    """Enhanced admin verification with proper session handling"""
     try:
         data = request.get_json() or {}
         password = data.get('password', '')
         
         if password == APP_PASSWORD:
             session['admin_authenticated'] = True
+            session['admin_login_time'] = datetime.now(MYANMAR_TZ).isoformat()
+            
+            # Clear any existing user sessions when entering admin mode
+            try:
+                with get_db() as conn:
+                    c = conn.cursor()
+                    # End all active user sessions
+                    c.execute('''
+                        UPDATE sessions 
+                        SET expires_at = NOW() - INTERVAL '1 minute'
+                        WHERE expires_at > NOW()
+                    ''')
+                    conn.commit()
+                    logger.info("✅ Cleared all user sessions for admin mode")
+            except Exception as e:
+                logger.error(f"Error clearing user sessions: {e}")
+            
             return jsonify({'success': True})
         return jsonify({'success': False, 'error': 'Invalid password'}), 401
         
     except Exception as e:
         logger.error(f"Admin verification error: {e}")
         return jsonify({'error': str(e)}), 500
+
+# Add admin session validation
+@app.route('/api/admin/validate', methods=['GET'])
+def validate_admin_session():
+    """Check if admin session is still valid"""
+    if session.get('admin_authenticated'):
+        # Check if admin session is still within timeout (1 hour)
+        login_time_str = session.get('admin_login_time')
+        if login_time_str:
+            try:
+                login_time = datetime.fromisoformat(login_time_str)
+                if datetime.now(MYANMAR_TZ) - login_time > timedelta(hours=1):
+                    session.clear()
+                    return jsonify({'authenticated': False}), 401
+            except:
+                pass
+        
+        return jsonify({'authenticated': True})
+    return jsonify({'authenticated': False}), 401
 
 @app.route('/api/admin/status', methods=['GET'])
 def admin_status():
@@ -1157,6 +1241,7 @@ if __name__ == '__main__':
     finally:
         if db_pool:
             db_pool.closeall()
+
 
 
 
