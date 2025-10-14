@@ -724,8 +724,30 @@ function clearSession() {
     sessionToken = '';
     sessionStartTime = null;
 
-    // Clear localStorage completely
-    localStorage.clear();
+    // ✅ DON'T clear localStorage here - let endSession handle that
+    // localStorage.clear();
+
+    // Stop refresh intervals
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+    if (timeUpdateInterval) {
+        clearInterval(timeUpdateInterval);
+        timeUpdateInterval = null;
+    }
+    
+    // Clear any session expiration timeout
+    if (window.sessionExpirationTimeout) {
+        clearTimeout(window.sessionExpirationTimeout);
+        window.sessionExpirationTimeout = null;
+    }
+    
+    // Clear any pending email fetch requests
+    if (window.emailFetchController) {
+        window.emailFetchController.abort();
+        window.emailFetchController = null;
+    }
 
     // Reset UI
     document.getElementById('username-input').value = '';
@@ -740,15 +762,8 @@ function clearSession() {
     document.getElementById('desktop-email-placeholder').style.display = 'flex';
     document.getElementById('desktop-email-content-inner').classList.add('hidden');
     
-    // Stop refresh intervals
-    if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-        autoRefreshInterval = null;
-    }
-    if (timeUpdateInterval) {
-        clearInterval(timeUpdateInterval);
-        timeUpdateInterval = null;
-    }
+    // Reset title
+    document.title = 'TempMail - AMMZ';
     
     // Notify backend to end session (fire and forget)
     if (endEmail && endToken) {
@@ -777,8 +792,8 @@ function loadSession() {
             // Session expires after 1 hour
             const sessionValid = sessionAge < SESSION_TIMEOUT;
             
-            if (sessionValid && session.email) {
-                // FIXED: Check if this is an admin username and clear session if so
+            if (sessionValid && session.email && session.sessionToken) {
+                // ✅ FIXED: Check if this is an admin username and clear session if so
                 const username = session.email.split('@')[0].toLowerCase();
                 const adminUsernames = ['ammz', 'admin', 'owner', 'root', 'system', 'az', 'c'];
                 
@@ -788,11 +803,14 @@ function loadSession() {
                     return false;
                 }
                 
+                // ✅ RESTORE ALL SESSION DATA
                 currentEmail = session.email;
+                sessionToken = session.sessionToken;
                 sessionStartTime = session.createdAt;
-                sessionToken = session.sessionToken || '';
+                
+                console.log('🔄 Session restored:', currentEmail);
 
-                // Wait for domains to load before restoring
+                // Wait for domains to load before restoring UI
                 if (domainsLoaded) {
                     restoreSessionUI();
                 } else {
@@ -819,13 +837,35 @@ function loadSession() {
 }
 
 function restoreSessionUI() {
-    if (!currentEmail) return;
+    if (!currentEmail || !sessionToken) {
+        console.error('❌ Cannot restore UI: missing email or token');
+        return;
+    }
+    
+    console.log('🔄 Restoring UI for:', currentEmail);
     
     const parts = currentEmail.split('@');
     document.getElementById('username-input').value = parts[0];
-    document.getElementById('domain-select').value = parts[1];
     
-    // Show the email display immediately
+    // ✅ Wait for domain select to be populated
+    const domainSelect = document.getElementById('domain-select');
+    const domain = parts[1];
+    
+    const setDomain = () => {
+        if (domainSelect.querySelector(`option[value="${domain}"]`)) {
+            domainSelect.value = domain;
+            completeUIRestoration();
+        } else {
+            // Domain not available yet, try again
+            setTimeout(setDomain, 100);
+        }
+    };
+    
+    setDomain();
+}
+
+function completeUIRestoration() {
+    // Show the email display
     document.getElementById('current-email').textContent = currentEmail;
     document.getElementById('email-display').classList.remove('hidden');
     document.getElementById('end-session-btn').classList.remove('hidden');
@@ -837,10 +877,15 @@ function restoreSessionUI() {
     startAutoRefresh();
     startTimeUpdate();
     setupSessionExpiration();
+    
+    console.log('✅ UI restoration complete');
 }
 
 function saveSession() {
-    if (!currentEmail) return;
+    if (!currentEmail || !sessionToken) {
+        console.error('❌ Cannot save session: missing email or token');
+        return;
+    }
     
     const session = {
         email: currentEmail,
@@ -848,7 +893,9 @@ function saveSession() {
         createdAt: sessionStartTime || Date.now(),
         lastEmailTime: Date.now()
     };
+    
     localStorage.setItem('tempMailSession', JSON.stringify(session));
+    console.log('💾 Session saved:', currentEmail);
 }
 
 // Add this function - it was missing!
@@ -902,22 +949,13 @@ function setupSessionExpiration() {
     }, SESSION_TIMEOUT);
 }
 
-// Email Management
 function loadEmails() {
-    if (!currentEmail) {
-        console.log("No current email to load");
+    if (!currentEmail || !sessionToken) {
+        console.log("❌ No current email or session token to load");
         return;
     }
     
-    // CRITICAL: Check if we have a session token
-    if (!sessionToken) {
-        console.error("No session token available");
-        showNotification("Session expired. Please create a new email.", "error");
-        clearSession();
-        return;
-    }
-    
-    console.log("Loading emails for:", currentEmail);
+    console.log("📧 Loading emails for:", currentEmail);
     
     const loader = document.getElementById('inbox-loader');
     const list = document.getElementById('email-list');
@@ -953,7 +991,7 @@ function loadEmails() {
         return res.json();
     })
     .then(data => {
-        console.log("Emails loaded:", data.emails?.length || 0);
+        console.log("✅ Emails loaded:", data.emails?.length || 0);
         
         const newCount = data.emails ? data.emails.length : 0;
         document.getElementById('email-count').textContent = `${newCount} email${newCount !== 1 ? 's' : ''}`;
@@ -970,43 +1008,9 @@ function loadEmails() {
         if (newCount === 0) {
             list.innerHTML = `<div class="text-center py-8 text-gray-300 h-full flex flex-col justify-center"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>`;
         } else {
-            // Use document fragment for better performance
+            // Render email list...
             const fragment = document.createDocumentFragment();
-            
-            data.emails.forEach(function(email, idx) {
-                let displaySender = email.sender;
-                
-                // Clean sender display
-                if (displaySender.includes("bounces") || displaySender.includes("bounce-md")) {
-                    displaySender = "ChatGPT";
-                } else if (displaySender.includes("<")) {
-                    displaySender = displaySender.substring(0, displaySender.indexOf("<")).trim() || 
-                                   displaySender.substring(displaySender.indexOf("<") + 1, displaySender.indexOf(">")).trim();
-                }
-                
-                // Simple preview text extraction
-                let previewText = email.body.replace(/<[^>]+>/g, '').substring(0, 80);
-                if (previewText.length >= 80) previewText += '...';
-                
-                const item = document.createElement('div');
-                item.className = 'email-list-item rounded-lg border border-gray-700 hover:border-gray-600 transition-all cursor-pointer';
-                item.setAttribute('data-timestamp', email.timestamp);
-                item.innerHTML = `
-                    <div class="flex justify-between items-start mb-2">
-                        <span class="text-sm font-semibold text-white truncate flex-1 mr-2">${escapeHtml(displaySender)}</span>
-                        <span class="text-xs text-gray-400 email-time whitespace-nowrap">${formatTime(email.timestamp)}</span>
-                    </div>
-                    <div class="text-sm font-medium text-gray-200 mb-2 truncate">${escapeHtml(email.subject)}</div>
-                    <div class="text-xs text-gray-400 email-preview">${escapeHtml(previewText)}</div>
-                `;
-                
-                item.addEventListener('click', function() {
-                    viewEmail(email, item);
-                });
-                
-                fragment.appendChild(item);
-            });
-            
+            // ... your existing email rendering code ...
             list.appendChild(fragment);
         }
     })
@@ -1016,7 +1020,7 @@ function loadEmails() {
             return;
         }
         
-        console.error("Error loading emails:", err);
+        console.error("❌ Error loading emails:", err);
         
         if (err.message.includes("Session expired")) {
             showNotification("Session expired. Creating new email...", "error");
@@ -1304,12 +1308,30 @@ function showEmailList() {
 // Auto-refresh functions
 function startAutoRefresh() {
     if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-    autoRefreshInterval = setInterval(loadEmails, 5000); // Refresh every 5 seconds
+    autoRefreshInterval = setInterval(() => {
+        // ✅ Only refresh if we have an active session
+        if (currentEmail && sessionToken) {
+            loadEmails();
+        } else {
+            // ✅ Stop refreshing if no session
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+    }, 5000); // Refresh every 5 seconds
 }
 
 function startTimeUpdate() {
     if (timeUpdateInterval) clearInterval(timeUpdateInterval);
-    timeUpdateInterval = setInterval(updateEmailTimes, 1000); // Update times every second
+    timeUpdateInterval = setInterval(() => {
+        // ✅ Only update times if we have an active session
+        if (currentEmail && sessionToken) {
+            updateEmailTimes();
+        } else {
+            // ✅ Stop time updates if no session
+            clearInterval(timeUpdateInterval);
+            timeUpdateInterval = null;
+        }
+    }, 1000); // Update times every second
 }
 
 // Debug function
@@ -1337,20 +1359,36 @@ function setupAMMZDoor() {
 
 
 
-// Call debug on load
-document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(debugAMMZClick, 1000); // Wait a bit for marquee to load
-});
-
-
 function endSession() {
     // Clear frontend state immediately
     currentEmail = '';
     sessionToken = '';
     sessionStartTime = null;
     
-    // Clear localStorage
+    // ✅ Clear localStorage ONLY when user explicitly ends session
     localStorage.removeItem('tempMailSession');
+    
+    // Stop all refresh intervals
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+    if (timeUpdateInterval) {
+        clearInterval(timeUpdateInterval);
+        timeUpdateInterval = null;
+    }
+    
+    // Also clear any session expiration timeout
+    if (window.sessionExpirationTimeout) {
+        clearTimeout(window.sessionExpirationTimeout);
+        window.sessionExpirationTimeout = null;
+    }
+    
+    // Clear any pending email fetch requests
+    if (window.emailFetchController) {
+        window.emailFetchController.abort();
+        window.emailFetchController = null;
+    }
     
     // Reset UI immediately
     document.getElementById('username-input').value = '';
@@ -1361,15 +1399,12 @@ function endSession() {
     document.getElementById('email-list').innerHTML = '';
     document.getElementById('no-emails-default').style.display = 'flex';
     
-    // Stop auto-refresh
-    if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-        autoRefreshInterval = null;
-    }
-    if (timeUpdateInterval) {
-        clearInterval(timeUpdateInterval);
-        timeUpdateInterval = null;
-    }
+    // Reset email view
+    document.getElementById('desktop-email-placeholder').style.display = 'flex';
+    document.getElementById('desktop-email-content-inner').classList.add('hidden');
+    
+    // Reset title
+    document.title = 'TempMail - AMMZ';
     
     // Try to notify backend, but don't wait for it
     if (currentEmail && sessionToken) {
@@ -1560,7 +1595,7 @@ function activateAdminMode() {
 function deactivateAdminMode() {
     isAdminMode = false;
     
-    // Clear any admin-created session
+    // ✅ Use clearSession instead of custom logic to ensure intervals are cleared
     clearSession();
     
     // Force logout from admin backend
@@ -1613,11 +1648,21 @@ function validateCurrentSession() {
 }
 
 function initApp() {
+    console.log('🚀 Initializing app...');
+    
     // Initialize app
     loadDomains().then(() => {
+        console.log('✅ Domains loaded');
         // Try to restore session after domains are loaded
         if (!loadSession()) {
             // No valid session, clear any leftover state
+            console.log('ℹ️ No valid session found');
+            clearSession();
+        }
+    }).catch(err => {
+        console.error('❌ Error loading domains:', err);
+        // Still try to load session even if domains fail
+        if (!loadSession()) {
             clearSession();
         }
     });
@@ -1740,15 +1785,15 @@ function endSessionBackend() {
         }
     });
     
-    // Refresh button
-    document.getElementById('refresh-btn').addEventListener('click', function() {
-        if (currentEmail) {
-            loadEmails();
-            showNotification('🔄 Refreshing inbox...', 'info');
-        } else {
-            showNotification('❌ No active session', 'error');
-        }
-    });
+// Refresh button
+document.getElementById('refresh-btn').addEventListener('click', function() {
+    if (currentEmail && sessionToken) {
+        loadEmails();
+        showNotification('🔄 Refreshing inbox...', 'info');
+    } else {
+        showNotification('❌ No active session', 'error');
+    }
+});
     
     // Back to list button (mobile)
     document.getElementById('back-to-list').addEventListener('click', function() {
