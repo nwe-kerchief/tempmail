@@ -14,6 +14,9 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import logging
 import re
+import mailparser
+import html2text
+from bs4 import BeautifulSoup
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -143,104 +146,252 @@ def is_username_blacklisted(username):
         logger.error(f"Error checking blacklist: {e}")
         return username.lower() in INITIAL_BLACKLIST
 
-def extract_content_from_mime(msg):
-    """Extract content from MIME message"""
-    html_content = None
-    text_content = None
-    
-    if msg.is_multipart():
-        for part in msg.walk():
-            content_type = part.get_content_type()
-            content_disposition = str(part.get("Content-Disposition", ""))
-            
-            # Skip attachments
-            if "attachment" in content_disposition:
-                continue
-            
-            try:
-                payload = part.get_payload(decode=True)
-                if payload:
-                    decoded = payload.decode('utf-8', errors='ignore')
-                    
-                    if content_type == 'text/html' and not html_content:
-                        html_content = decoded
-                    elif content_type == 'text/plain' and not text_content:
-                        text_content = decoded
-            except Exception as e:
-                logger.warning(f"Failed to decode part: {e}")
-                continue
-    else:
-        payload = msg.get_payload(decode=True)
-        if payload:
-            decoded = payload.decode('utf-8', errors='ignore')
-            if msg.get_content_type() == 'text/html':
-                html_content = decoded
-            else:
-                text_content = decoded
-    
-    return html_content or text_content
 
-def clean_raw_email(raw_body):
-    """Clean raw email body by removing headers"""
-    header_patterns = [
-        'Received:', 'Received-SPF:', 'ARC-Seal:', 'ARC-Message-Signature:', 
-        'ARC-Authentication-Results:', 'DKIM-Signature:', 'Authentication-Results:',
-        'Return-Path:', 'Delivered-To:', 'X-', 'Message-ID:', 'Date:', 
-        'MIME-Version:', 'Content-Type:', 'Content-Transfer-Encoding:',
-        'Content-ID:', 'Reply-To:', 'List-', 'Precedence:'
-    ]
-    
-    lines = raw_body.split('\n')
-    clean_lines = []
-    skip_mode = True
-    empty_line_count = 0
-    
-    for line in lines:
-        stripped = line.strip()
-        
-        if stripped == '':
-            empty_line_count += 1
-            if empty_line_count >= 2:
-                skip_mode = False
-            continue
-        else:
-            empty_line_count = 0
-        
-        is_header = False
-        for pattern in header_patterns:
-            if stripped.startswith(pattern) or (skip_mode and ':' in stripped[:50]):
-                is_header = True
-                break
-        
-        if skip_mode and (line.startswith(' ') or line.startswith('\t')):
-            is_header = True
-        
-        if not is_header:
-            skip_mode = False
-        
-        if not skip_mode and not is_header:
-            clean_lines.append(line)
-    
-    return '\n'.join(clean_lines).strip()
-
-def parse_email_body(raw_body):
-    """Parse MIME email and extract clean HTML/text"""
+def parse_email_with_mailparser(raw_email):
+    """Parse email using mail-parser library - MAIN PARSING FUNCTION"""
     try:
-        # If it's already clean HTML/text, return as is
-        if '<html' in raw_body.lower() or '<body' in raw_body.lower():
-            return raw_body
+        mail = mailparser.parse_from_string(raw_email)
         
-        if 'Content-Type:' in raw_body:
-            msg = email.message_from_string(raw_body, policy=policy.default)
-            content = extract_content_from_mime(msg)
-            if content:
-                return content
+        parsed_data = {
+            'subject': mail.subject or 'No subject',
+            'from_email': get_clean_sender(mail),
+            'to': get_clean_recipient(mail),
+            'date': mail.date.isoformat() if mail.date else None,
+            'body_plain': '',
+            'body_html': '',
+            'verification_codes': [],
+            'attachments': len(mail.attachments)
+        }
         
-        return clean_raw_email(raw_body)
+        # Get plain text body
+        if mail.text_plain:
+            parsed_data['body_plain'] = '\n'.join(mail.text_plain)
+        elif mail.body:
+            parsed_data['body_plain'] = mail.body
+        
+        # Get HTML body
+        if mail.text_html:
+            parsed_data['body_html'] = '\n'.join(mail.text_html)
+        
+        # Extract verification codes
+        parsed_data['verification_codes'] = extract_verification_codes(
+            parsed_data['body_plain'] or parsed_data['body_html'] or ''
+        )
+        
+        logger.info(f"✅ Email parsed: {parsed_data['from_email']} -> {len(parsed_data['body_plain'])} chars")
+        return parsed_data
         
     except Exception as e:
-        logger.error(f"Email parsing error: {e}")
-        return clean_raw_email(raw_body)
+        logger.error(f"❌ mail-parser error: {e}")
+        return parse_email_fallback(raw_email)
+
+def get_clean_sender(mail):
+    """Extract clean sender address"""
+    if mail.from_:
+        if isinstance(mail.from_[0], (list, tuple)):
+            return mail.from_[0][1] if len(mail.from_[0]) > 1 else str(mail.from_[0][0])
+        elif hasattr(mail.from_[0], 'email'):
+            return mail.from_[0].email
+        else:
+            return str(mail.from_[0])
+    return 'Unknown'
+
+def get_clean_recipient(mail):
+    """Extract clean recipient address"""
+    if mail.to:
+        if isinstance(mail.to[0], (list, tuple)):
+            return mail.to[0][1] if len(mail.to[0]) > 1 else str(mail.to[0][0])
+        elif hasattr(mail.to[0], 'email'):
+            return mail.to[0].email
+        else:
+            return str(mail.to[0])
+    return 'Unknown'
+
+def extract_verification_codes(text):
+    """Extract verification codes from email text"""
+    if not text:
+        return []
+    
+    codes = []
+    patterns = [
+        r'\b\d{4,8}\b',
+        r'code[:\s]*[#]?(\d{4,8})',
+        r'verification[:\s]*[#]?(\d{4,8})',
+        r'code\s*is\s*[#]?(\d{4,8})',
+        r'verify[:\s]*[#]?(\d{4,8})'
+    ]
+    
+    for pattern in patterns:
+        matches = re.finditer(pattern, text, re.IGNORECASE)
+        for match in matches:
+            code = match.group(1) if match.groups() else match.group(0)
+            if code and code not in codes:
+                codes.append(code)
+    
+    return codes
+
+def parse_email_fallback(raw_email):
+    """Fallback parsing when mail-parser fails"""
+    try:
+        msg = email.message_from_string(raw_email, policy=policy.default)
+        
+        # Use your old extract_content_from_mime logic but simplified
+        body_content = ""
+        if msg.is_multipart():
+            for part in msg.walk():
+                content_type = part.get_content_type()
+                content_disposition = str(part.get("Content-Disposition", ""))
+                
+                if "attachment" in content_disposition:
+                    continue
+                
+                try:
+                    payload = part.get_payload(decode=True)
+                    if payload:
+                        decoded = payload.decode('utf-8', errors='ignore')
+                        if content_type == 'text/plain' and not body_content:
+                            body_content = decoded
+                        elif content_type == 'text/html' and not body_content:
+                            body_content = decoded
+                except Exception:
+                    continue
+        else:
+            payload = msg.get_payload(decode=True)
+            if payload:
+                body_content = payload.decode('utf-8', errors='ignore')
+        
+        return {
+            'subject': msg.get('subject', 'No subject'),
+            'from_email': clean_sender_address(msg.get('from', 'Unknown')),
+            'to': msg.get('to', 'Unknown'),
+            'date': msg.get('date', ''),
+            'body_plain': body_content or 'No content',
+            'body_html': '',
+            'verification_codes': extract_verification_codes(body_content or ''),
+            'attachments': 0
+        }
+    except Exception as e:
+        logger.error(f"❌ Fallback parsing failed: {e}")
+        return {
+            'subject': 'Failed to parse email',
+            'from_email': 'Unknown',
+            'to': 'Unknown', 
+            'date': '',
+            'body_plain': 'This email could not be parsed properly.',
+            'body_html': '',
+            'verification_codes': [],
+            'attachments': 0
+        }
+
+def clean_sender_address(sender):
+    """Clean sender address from common formats"""
+    if not sender:
+        return 'Unknown'
+    
+    if '<' in sender and '>' in sender:
+        email_match = re.search(r'<([^>]+)>', sender)
+        if email_match:
+            return email_match.group(1)
+    
+    if 'bounce' in sender.lower():
+        if '@' in sender:
+            domain_part = sender.split('@')[1]
+            if 'openai.com' in domain_part or 'mandrillapp.com' in domain_part:
+                return 'ChatGPT'
+            elif 'afraid.org' in domain_part:
+                return 'FreeDNS'
+            else:
+                return 'Notification'
+    
+    return sender.strip()
+
+def get_display_body(parsed_email):
+    """Convert parsed email to display-ready format"""
+    raw_content = parsed_email['body_plain']
+    
+    if not raw_content and parsed_email['body_html']:
+        h = html2text.HTML2Text()
+        h.ignore_links = False
+        h.ignore_images = True
+        h.body_width = 0
+        raw_content = h.handle(parsed_email['body_html'])
+    
+    if not raw_content:
+        return {
+            'content': '<p class="text-gray-400">No readable content found</p>',
+            'verification_codes': []
+        }
+    
+    clean_content = format_email_content(raw_content, parsed_email['verification_codes'])
+    
+    return {
+        'content': clean_content,
+        'verification_codes': parsed_email['verification_codes']
+    }
+
+def format_email_content(text, verification_codes):
+    """Format email content for HTML display"""
+    if not text:
+        return '<p class="text-gray-400">No content</p>'
+    
+    text = text.strip()
+    
+    header_patterns = [
+        'Received:', 'Received-SPF:', 'ARC-Seal:', 'ARC-Message-Signature:',
+        'DKIM-Signature:', 'Authentication-Results:', 'Return-Path:',
+        'Delivered-To:', 'Content-Type:', 'MIME-Version:'
+    ]
+    
+    lines = text.split('\n')
+    clean_lines = []
+    skip_mode = False
+    
+    for line in lines:
+        line = line.rstrip()
+        if not line:
+            if clean_lines:
+                clean_lines.append('')
+            continue
+            
+        is_header = any(line.startswith(pattern) for pattern in header_patterns)
+        
+        if is_header:
+            skip_mode = True
+            continue
+            
+        if skip_mode and line and not line.startswith(' ') and not line.startswith('\t'):
+            skip_mode = False
+            
+        if not skip_mode:
+            clean_lines.append(line)
+    
+    text = '\n'.join(clean_lines)
+    
+    html_parts = []
+    
+    for code in verification_codes:
+        html_parts.append(f'<div class="verification-code">{code}</div>')
+    
+    paragraphs = re.split(r'\n\s*\n', text)
+    
+    for paragraph in paragraphs:
+        paragraph = paragraph.strip()
+        if len(paragraph) > 10:
+            paragraph = re.sub(
+                r'(https?://[^\s]+)', 
+                r'<a href="\1" target="_blank" class="text-blue-400 hover:underline">\1</a>', 
+                paragraph
+            )
+            
+            for code in verification_codes:
+                paragraph = paragraph.replace(code, f'<strong class="text-yellow-300">{code}</strong>')
+            
+            html_parts.append(f'<p class="mb-4 leading-relaxed text-gray-200">{paragraph}</p>')
+    
+    if not html_parts:
+        html_parts.append('<p class="text-gray-400">No readable content found in this email.</p>')
+    
+    return '\n'.join(html_parts)
 
 def validate_session(email_address, session_token):
     """Validate if session is valid"""
@@ -610,40 +761,29 @@ def webhook_inbound():
         sender = json_data.get('from', 'unknown')
         subject = json_data.get('subject', 'No subject')
         
-        # Clean sender
-        if '<' in sender and '>' in sender:
-            sender = sender[sender.find('<')+1:sender.find('>')]
+        # Clean sender using new function
+        sender = clean_sender_address(sender)
         
-        if 'bounce' in sender.lower():
-            if '@' in sender:
-                domain_part = sender.split('@')[1]
-                if 'openai.com' in domain_part or 'mandrillapp.com' in domain_part:
-                    sender = 'ChatGPT'
-                elif 'afraid.org' in domain_part:
-                    sender = 'FreeDNS'
-                else:
-                    sender = 'Notification'
+        # Get body - try multiple fields
+        body = json_data.get('html_body') or json_data.get('plain_body') or 'No content'
         
-        # Get body
-        body = json_data.get('html_body', None)
-        if not body or body.strip() == '':
-            body = json_data.get('plain_body', 'No content')
+        # PARSE EMAIL WITH NEW MAIL-PARSER SYSTEM
+        parsed_email = parse_email_with_mailparser(body)
+        display_content = get_display_body(parsed_email)
+        
+        # Use parsed subject if available and better
+        if parsed_email['subject'] and parsed_email['subject'] != 'No subject':
+            subject = parsed_email['subject']
         
         recipient = recipient.strip()
-        sender = sender.strip()
+        sender = sender.strip() 
         subject = subject.strip()
-        body = body.strip()
-        
-        # Parse MIME if needed
-        if 'Content-Type:' in body and 'multipart' in body:
-            body = parse_email_body(body)
-        
-        # Clean headers
-        body = clean_raw_email(body)
         
         logger.info(f"  📨 From: {sender} → {recipient}")
         logger.info(f"  📝 Subject: {subject}")
-        logger.info(f"  📄 Body: {len(body)} chars")
+        logger.info(f"  📄 Body: {len(display_content['content'])} chars")
+        if display_content['verification_codes']:
+            logger.info(f"  🔑 Verification codes: {display_content['verification_codes']}")
         
         # Store timestamps
         received_at = datetime.now()
@@ -693,13 +833,12 @@ def webhook_inbound():
             logger.info(f"  ✅ Found active session for {recipient}")
         else:
             logger.info(f"  ℹ️ No active session found for {recipient}, but storing email anyway")
-        
-        # 🚨 CRITICAL FIX: ALWAYS STORE THE EMAIL, EVEN IF NO ACTIVE SESSION EXISTS
-        # Store email (with session_token if available, otherwise NULL)
+
+                # Store email (with session_token if available, otherwise NULL)
         c.execute('''
             INSERT INTO emails (recipient, sender, subject, body, timestamp, received_at, session_token)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
-        ''', (recipient, sender, subject, body, original_timestamp, received_at, session_token))
+        ''', (recipient, sender, subject, display_content['content'], original_timestamp, received_at, session_token))
         
         # Update session last_activity if session exists
         if session_data:
