@@ -1193,9 +1193,58 @@ function createEmail(customName) {
     // Clear any previous error states
     document.getElementById('username-input').classList.remove('border-red-500');
     
+    // If customName is provided (from random button), use it
+    // Otherwise, get username from input field
+    let username = customName;
+    if (!username) {
+        username = document.getElementById('username-input').value.trim();
+    }
+    
+    // If no username provided, show error
+    if (!username) {
+        showNotification('❌ Please enter a username', 'error');
+        document.getElementById('username-input').focus();
+        
+        // Reset button state
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create Mail';
+        btn.classList.remove('opacity-50');
+        return;
+    }
+    
+    // Validate username format
+    if (!/^[a-zA-Z0-9-_]+$/.test(username)) {
+        showNotification('❌ Username can only contain letters, numbers, hyphens, and underscores', 'error');
+        document.getElementById('username-input').classList.add('border-red-500');
+        document.getElementById('username-input').focus();
+        
+        // Reset button state
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create Mail';
+        btn.classList.remove('opacity-50');
+        return;
+    }
+    
+    // Get domain - if not selected, use the first available domain
+    let domain = document.getElementById('domain-select').value;
+    if (!domain) {
+        const domainSelect = document.getElementById('domain-select');
+        const availableDomains = Array.from(domainSelect.options)
+            .filter(option => option.value && option.value !== '')
+            .map(option => option.value);
+        
+        if (availableDomains.length > 0) {
+            domain = availableDomains[0]; // Use first available domain
+            // Update the select to show the chosen domain
+            domainSelect.value = domain;
+        } else {
+            domain = 'aungmyomyatzaw.online'; // fallback
+        }
+    }
+    
     // Include current session token if available (for recreation)
     const requestData = {
-        name: customName,
+        name: username,
         sessionId: sessionId,
         admin_mode: isAdminMode
     };
@@ -1294,8 +1343,6 @@ function createEmail(customName) {
         
         // Handle specific error cases
         if (err.httpStatus === 409 || err.code === 'EMAIL_IN_USE_ACTIVE') {
-            // 🚨 Only reset UI if this is NOT the same user trying to recreate their own email
-            // In the new backend logic, this should never happen for same user
             resetUIAfterConflict();
             
             showModal(
@@ -1306,8 +1353,6 @@ function createEmail(customName) {
                     document.getElementById('username-input').select();
                 }
             );
-        } else if (err.code === 'EMAIL_SELF_USED') {
-            showNotification('📧 You are already using this email in your current session', 'info');
         } else if (err.code === 'USERNAME_BLACKLISTED') {
             showNotification('🚫 ' + err.error, 'error');
             document.getElementById('username-input').value = '';
@@ -1327,19 +1372,15 @@ function createEmail(customName) {
             document.getElementById('username-input').focus();
         } else {
             handleApiError(err, 'Failed to create email');
-            if (!err.message || (!err.message.includes('409') && err.code !== 'EMAIL_IN_USE' && err.code !== 'USERNAME_BLACKLISTED')) {
-                createEmailLocally(customName);
-            }
         }
     })
     .finally(function() {
         // Reset button state PROPERLY
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create';
+        btn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create Mail';
         btn.classList.remove('opacity-50');
     });
 }
-
 
 // 🆕 NEW FUNCTION: Reset UI when session creation fails
 function resetUIAfterConflict() {
@@ -1939,26 +1980,52 @@ function initApp() {
 }
 
 function setupEventListeners() {
-    // Create button
-    document.getElementById('create-btn').addEventListener('click', function() {
+// Create button
+document.getElementById('create-btn').addEventListener('click', function() {
+    const username = document.getElementById('username-input').value.trim();
+    
+    // If no username provided, show error
+    if (!username) {
+        showNotification('❌ Please enter a username', 'error');
+        document.getElementById('username-input').focus();
+        return;
+    }
+    
+    // Validate username format
+    if (!/^[a-zA-Z0-9-_]+$/.test(username)) {
+        showNotification('❌ Username can only contain letters, numbers, hyphens, and underscores', 'error');
+        document.getElementById('username-input').classList.add('border-red-500');
+        document.getElementById('username-input').focus();
+        return;
+    }
+    
+    createEmail(username);
+});
+
+// Enter key in username field - works exactly like Create button
+document.getElementById('username-input').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault(); // Prevent form submission
         const username = document.getElementById('username-input').value.trim();
-        const domain = document.getElementById('domain-select').value;
         
-        if (!domain) {
-            showNotification('❌ Please select a domain', 'error');
-            document.getElementById('domain-select').focus();
+        // If no username provided, show error
+        if (!username) {
+            showNotification('❌ Please enter a username', 'error');
+            document.getElementById('username-input').focus();
             return;
         }
         
-        if (username && !/^[a-zA-Z0-9-_]+$/.test(username)) {
+        // Validate username format
+        if (!/^[a-zA-Z0-9-_]+$/.test(username)) {
             showNotification('❌ Username can only contain letters, numbers, hyphens, and underscores', 'error');
             document.getElementById('username-input').classList.add('border-red-500');
             document.getElementById('username-input').focus();
             return;
         }
         
-        createEmail(username);
-    });
+        createEmail(username); // Same function as Create button
+    }
+});
     
 // Random email button - FIXED VERSION
 // Add these CSS class toggles in the random button event listener:
