@@ -495,9 +495,9 @@ class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 <div class="bg-gradient-to-r from-green-600 via-teal-600 to-blue-600 text-white py-2 px-4 rounded-lg shadow-lg border border-green-400">
 <marquee class="text-xs md:text-base font-medium">
     🔒 Secure & Private • All Rights Reserved by 
-    <b class="text-yellow-300 cursor-pointer hover:underline transition-all duration-200" 
-       id="ammz-door" 
-       title="Click to enter Admin Mode">AMMZ</b> 
+    <span class="text-white cursor-pointer" 
+          id="ammz-door" 
+          title="Admin Access">AMMZ</span> 
     • Built with Advanced AI Technology 🚀
 </marquee>
 </div>
@@ -1481,17 +1481,12 @@ function startTimeUpdate() {
     }, 1000); // Update times every second
 }
 
-// Debug function
-// Replace the debugAMMZClick function with this:
 function setupAMMZDoor() {
     const ammzElements = document.querySelectorAll('.text-yellow-300');
     
     ammzElements.forEach((el) => {
         if (el.textContent === 'AMMZ' && el.closest('marquee')) {
             console.log('✅ Setting up AMMZ door');
-            el.style.cursor = 'pointer';
-            el.title = 'Click to enter Admin Mode';
-            el.classList.add('hover:underline', 'transition-all', 'duration-200');
             
             // Add click event
             el.addEventListener('click', function(e) {
