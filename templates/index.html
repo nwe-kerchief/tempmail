@@ -808,8 +808,8 @@ function loadSession() {
                 sessionToken = session.sessionToken;
                 sessionStartTime = session.createdAt;
                 
-                console.log('🔄 Session restored:', currentEmail);
-
+                console.log('🔄 Session restored from localStorage:', currentEmail);
+                
                 // Wait for domains to load before restoring UI
                 if (domainsLoaded) {
                     restoreSessionUI();
@@ -825,17 +825,19 @@ function loadSession() {
                 return true;
             } else {
                 // Session expired
+                console.log('🕒 Session expired, clearing localStorage');
                 localStorage.removeItem('tempMailSession');
                 showNotification('🕒 Session expired', 'error');
             }
         } catch (e) {
-            console.error('Error parsing saved session:', e);
+            console.error('❌ Error parsing saved session:', e);
             localStorage.removeItem('tempMailSession');
         }
+    } else {
+        console.log('ℹ️ No saved session found in localStorage');
     }
     return false;
 }
-
 function restoreSessionUI() {
     if (!currentEmail || !sessionToken) {
         console.error('❌ Cannot restore UI: missing email or token');
@@ -854,7 +856,9 @@ function restoreSessionUI() {
     const setDomain = () => {
         if (domainSelect.querySelector(`option[value="${domain}"]`)) {
             domainSelect.value = domain;
-            completeUIRestoration();
+            
+            // ✅ Validate session with backend before completing restoration
+            validateSessionWithBackend();
         } else {
             // Domain not available yet, try again
             setTimeout(setDomain, 100);
@@ -862,6 +866,53 @@ function restoreSessionUI() {
     };
     
     setDomain();
+}
+
+function validateSessionWithBackend() {
+    console.log('🔐 Validating session with backend...');
+    
+    fetch(`${API_URL}/api/emails/${encodeURIComponent(currentEmail)}`, {
+        headers: {
+            'X-Session-Token': sessionToken,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(res => {
+        if (res.ok) {
+            console.log('✅ Backend session validation successful');
+            completeUIRestoration();
+        } else if (res.status === 403) {
+            console.log('❌ Backend session validation failed - session expired');
+            showNotification('Session expired. Creating new session...', 'error');
+            // Clear the invalid session and create a new one
+            localStorage.removeItem('tempMailSession');
+            clearSession();
+        } else {
+            console.log('⚠️ Backend validation issue, proceeding anyway');
+            completeUIRestoration();
+        }
+    })
+    .catch(err => {
+        console.log('⚠️ Network error during validation, proceeding:', err);
+        completeUIRestoration();
+    });
+}
+
+function completeUIRestoration() {
+    // Show the email display
+    document.getElementById('current-email').textContent = currentEmail;
+    document.getElementById('email-display').classList.remove('hidden');
+    document.getElementById('end-session-btn').classList.remove('hidden');
+    
+    showNotification('✅ Session restored', 'success');
+    
+    // Load emails immediately
+    loadEmails();
+    startAutoRefresh();
+    startTimeUpdate();
+    setupSessionExpiration();
+    
+    console.log('✅ UI restoration complete');
 }
 
 function completeUIRestoration() {
@@ -1008,9 +1059,43 @@ function loadEmails() {
         if (newCount === 0) {
             list.innerHTML = `<div class="text-center py-8 text-gray-300 h-full flex flex-col justify-center"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>`;
         } else {
-            // Render email list...
+            // Use document fragment for better performance
             const fragment = document.createDocumentFragment();
-            // ... your existing email rendering code ...
+            
+            data.emails.forEach(function(email, idx) {
+                let displaySender = email.sender;
+                
+                // Clean sender display
+                if (displaySender.includes("bounces") || displaySender.includes("bounce-md")) {
+                    displaySender = "ChatGPT";
+                } else if (displaySender.includes("<")) {
+                    displaySender = displaySender.substring(0, displaySender.indexOf("<")).trim() || 
+                                   displaySender.substring(displaySender.indexOf("<") + 1, displaySender.indexOf(">")).trim();
+                }
+                
+                // Simple preview text extraction
+                let previewText = email.body.replace(/<[^>]+>/g, '').substring(0, 80);
+                if (previewText.length >= 80) previewText += '...';
+                
+                const item = document.createElement('div');
+                item.className = 'email-list-item rounded-lg border border-gray-700 hover:border-gray-600 transition-all cursor-pointer';
+                item.setAttribute('data-timestamp', email.timestamp);
+                item.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-sm font-semibold text-white truncate flex-1 mr-2">${escapeHtml(displaySender)}</span>
+                        <span class="text-xs text-gray-400 email-time whitespace-nowrap">${formatTime(email.timestamp)}</span>
+                    </div>
+                    <div class="text-sm font-medium text-gray-200 mb-2 truncate">${escapeHtml(email.subject)}</div>
+                    <div class="text-xs text-gray-400 email-preview">${escapeHtml(previewText)}</div>
+                `;
+                
+                item.addEventListener('click', function() {
+                    viewEmail(email, item);
+                });
+                
+                fragment.appendChild(item);
+            });
+            
             list.appendChild(fragment);
         }
     })
@@ -1023,7 +1108,9 @@ function loadEmails() {
         console.error("❌ Error loading emails:", err);
         
         if (err.message.includes("Session expired")) {
-            showNotification("Session expired. Creating new email...", "error");
+            showNotification("Session expired. Creating new session...", "error");
+            // Clear the invalid session
+            localStorage.removeItem('tempMailSession');
             clearSession();
         } else {
             handleApiError(err, "Failed to load emails");
@@ -1649,6 +1736,26 @@ function validateCurrentSession() {
 
 function initApp() {
     console.log('🚀 Initializing app...');
+    console.log('💾 Checking localStorage for session...');
+    
+    // Check what's actually in localStorage
+    const savedSession = localStorage.getItem('tempMailSession');
+    if (savedSession) {
+        console.log('📦 Found saved session in localStorage');
+        try {
+            const session = JSON.parse(savedSession);
+            console.log('🔍 Session data:', {
+                email: session.email,
+                hasToken: !!session.sessionToken,
+                createdAt: new Date(session.createdAt).toISOString(),
+                age: Date.now() - session.createdAt
+            });
+        } catch (e) {
+            console.error('❌ Invalid session data in localStorage:', e);
+        }
+    } else {
+        console.log('📭 No session found in localStorage');
+    }
     
     // Initialize app
     loadDomains().then(() => {
@@ -1656,7 +1763,7 @@ function initApp() {
         // Try to restore session after domains are loaded
         if (!loadSession()) {
             // No valid session, clear any leftover state
-            console.log('ℹ️ No valid session found');
+            console.log('ℹ️ No valid session found or restored');
             clearSession();
         }
     }).catch(err => {
