@@ -1238,7 +1238,7 @@ function createEmail(customName) {
         }
     })
     .then(data => {
-        // SUCCESS: Email created successfully
+        // SUCCESS: Email created successfully or existing session reused
         if (!data.email) {
             throw new Error('No email returned from server');
         }
@@ -1259,7 +1259,13 @@ function createEmail(customName) {
         document.getElementById('desktop-email-placeholder').style.display = 'flex';
         document.getElementById('desktop-email-content-inner').classList.add('hidden');
         
-        showNotification('✅ Email created: ' + data.email, 'success');
+        if (data.existing_session) {
+            showNotification('✅ Session restored: ' + data.email, 'success');
+            console.log('🔄 Existing session reused for:', data.email);
+        } else {
+            showNotification('✅ Email created: ' + data.email, 'success');
+            console.log('🆕 New session created for:', data.email);
+        }
         
         // Save session and start timers
         saveSession();
@@ -1276,11 +1282,12 @@ function createEmail(customName) {
     .catch(err => {
         console.error('Error creating email:', err);
         
-        // 🚨 Clear UI state on any error
-        resetUIAfterConflict();
-        
         // Handle specific error cases
         if (err.httpStatus === 409 || err.code === 'EMAIL_IN_USE_ACTIVE') {
+            // 🚨 Only reset UI if this is NOT the same user trying to recreate their own email
+            // In the new backend logic, this should never happen for same user
+            resetUIAfterConflict();
+            
             showModal(
                 'Email Currently in Use', 
                 err.error || 'This email address is currently in use by another session. Please choose a different username or try again later.',
