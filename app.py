@@ -1,1043 +1,1222 @@
-from flask import Flask, request, jsonify, render_template, session
-from flask_cors import CORS
-import os
-import random
-import string
-from datetime import datetime, timedelta
-import email
-from email import policy
-from functools import wraps
-import secrets
-from threading import Thread
-import time
-import psycopg2
-from psycopg2.extras import RealDictCursor
-import logging
-import re
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Panel - TempMail</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+<style>
+body {
+font-family: 'Inter', sans-serif;
+background: linear-gradient(135deg, #1e3a8a 0%, #7e22ce 100%);
+min-height: 100vh;
+}
+.glass-effect {
+background: rgba(255, 255, 255, 0.15);
+backdrop-filter: blur(12px);
+border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.address-item {
+transition: all 0.2s ease;
+cursor: pointer;
+}
+.address-item:hover {
+background: rgba(255, 255, 255, 0.2);
+transform: translateY(-1px);
+}
+.fade-in {
+animation: fadeIn 0.5s ease-in;
+}
+@keyframes fadeIn {
+from { opacity: 0; transform: translateY(10px); }
+to { opacity: 1; transform: translateY(0); }
+}
+#login-screen {
+display: flex;
+justify-content: center;
+align-items: center;
+min-height: 100vh;
+}
+.login-box {
+background: rgba(255, 255, 255, 0.15);
+backdrop-filter: blur(12px);
+border: 1px solid rgba(255, 255, 255, 0.2);
+padding: 40px;
+border-radius: 20px;
+text-align: center;
+max-width: 400px;
+width: 100%;
+}
+.login-box input {
+width: 100%;
+padding: 15px;
+margin-bottom: 20px;
+background: rgba(0, 0, 0, 0.3);
+border: 2px solid rgba(255, 255, 255, 0.2);
+border-radius: 10px;
+color: white;
+font-size: 16px;
+}
+.login-box input::placeholder {
+color: rgba(255, 255, 255, 0.5);
+}
+.login-box button {
+width: 100%;
+padding: 15px;
+background: linear-gradient(135deg, #a855f7, #ec4899);
+border: none;
+border-radius: 10px;
+color: white;
+font-size: 16px;
+font-weight: bold;
+cursor: pointer;
+transition: all 0.3s ease;
+}
+.login-box button:hover {
+transform: translateY(-2px);
+box-shadow: 0 4px 12px rgba(168, 85, 247, 0.4);
+}
+.error {
+color: #fca5a5;
+margin-top: 10px;
+font-size: 14px;
+}
 
-MALE_NAMES = ['james', 'john', 'robert', 'michael', 'william', 'david', 'richard', 'joseph', 'thomas', 'charles', 
-              'daniel', 'matthew', 'anthony', 'mark', 'paul', 'steven', 'andrew', 'joshua', 'kevin', 'brian',
-              'george', 'kenneth', 'edward', 'ryan', 'jacob', 'nicholas', 'tyler', 'samuel', 'benjamin', 'alexander']
+/* Custom Modal */
+.modal-overlay {
+position: fixed;
+top: 0;
+left: 0;
+right: 0;
+bottom: 0;
+background: rgba(0, 0, 0, 0.7);
+display: flex;
+align-items: center;
+justify-content: center;
+z-index: 1000;
+backdrop-filter: blur(5px);
+}
+.modal-content {
+background: linear-gradient(135deg, #1e293b 0%, #374151 100%);
+border-radius: 16px;
+padding: 2rem;
+max-width: 400px;
+width: 90%;
+border: 1px solid rgba(255, 255, 255, 0.1);
+box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+}
+.modal-buttons {
+display: flex;
+gap: 12px;
+margin-top: 1.5rem;
+}
+.modal-btn {
+flex: 1;
+padding: 12px 20px;
+border-radius: 10px;
+font-weight: 600;
+transition: all 0.2s ease;
+border: none;
+cursor: pointer;
+}
+.modal-btn-confirm {
+background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+color: white;
+}
+.modal-btn-confirm:hover {
+transform: translateY(-2px);
+box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+}
+.modal-btn-cancel {
+background: rgba(255, 255, 255, 0.1);
+color: white;
+border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.modal-btn-cancel:hover {
+background: rgba(255, 255, 255, 0.2);
+transform: translateY(-2px);
+}
 
-FEMALE_NAMES = ['mary', 'patricia', 'jennifer', 'linda', 'elizabeth', 'barbara', 'susan', 'jessica', 'sarah', 'karen',
-                'nancy', 'lisa', 'betty', 'margaret', 'sandra', 'ashley', 'kimberly', 'emily', 'donna', 'michelle',
-                'dorothy', 'carol', 'amanda', 'melissa', 'deborah', 'stephanie', 'rebecca', 'sharon', 'laura', 'grace']
+/* Scrollbar styling */
+.custom-scrollbar::-webkit-scrollbar {
+width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+background: rgba(255, 255, 255, 0.1);
+border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+background: rgba(255, 255, 255, 0.3);
+border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+background: rgba(255, 255, 255, 0.5);
+}
 
-# Initial blacklist - will be stored in database
-INITIAL_BLACKLIST = ['ammz', 'admin', 'owner', 'root', 'system', 'az', 'c']
+/* Responsive Design */
+@media (max-width: 768px) {
+.mobile-stack { flex-direction: column; }
+.mobile-full { width: 100%; }
+.mobile-text-center { text-align: center; }
+.mobile-inbox-container { flex-direction: column; height: auto; }
+.mobile-inbox-list { height: 300px; max-height: 300px; }
+.mobile-email-content { height: 400px; max-height: 400px; }
+.login-box { padding: 20px; margin: 10px; }
+}
 
-app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', secrets.token_urlsafe(32))
-CORS(app, origins=[os.getenv('FRONTEND_URL', '*')], supports_credentials=True)
+@media (min-width: 768px) {
+#email-content-container {
+height: 550px;
+max-height: 550px;
+}
+#email-body {
+height: 350px;
+max-height: 350px;
+}
+}
 
-APP_PASSWORD = os.getenv('APP_PASSWORD', 'admin123')
-DOMAIN = os.getenv('DOMAIN', 'aungmyomyatzaw.online')
-DATABASE_URL = os.getenv('DATABASE_URL')
+.verification-code {
+background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+color: white;
+padding: 20px;
+border-radius: 12px;
+font-size: 28px;
+font-weight: bold;
+text-align: center;
+letter-spacing: 4px;
+margin-bottom: 20px;
+box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
 
-# Database connection helper
-def get_db():
-    try:
-        return psycopg2.connect(DATABASE_URL, sslmode='require')
-    except Exception as e:
-        logger.error(f"Database connection error: {e}")
-        raise
+.email-content-container {
+background: rgba(31, 41, 55, 0.3);
+border-radius: 12px;
+padding: 20px;
+line-height: 1.6;
+color: #e5e7eb;
+}
 
-def init_db():
-    try:
-        conn = get_db()
-        conn.autocommit = True
-        c = conn.cursor()
-        
-        # Sessions table
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS sessions (
-                session_token TEXT PRIMARY KEY,
-                email_address TEXT NOT NULL,
-                created_at TIMESTAMP NOT NULL,
-                expires_at TIMESTAMP NOT NULL,
-                last_activity TIMESTAMP NOT NULL,
-                is_active BOOLEAN DEFAULT TRUE
-            )
-        ''')
+.email-content-container p {
+margin-bottom: 1rem;
+}
 
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS emails (
-                id SERIAL PRIMARY KEY,
-                recipient TEXT NOT NULL,
-                sender TEXT NOT NULL,
-                subject TEXT,
-                body TEXT,
-                timestamp TEXT,
-                received_at TIMESTAMP NOT NULL,
-                session_token TEXT,
-                FOREIGN KEY (session_token) REFERENCES sessions(session_token) ON DELETE SET NULL
-            )
-        """)
-        
-        # Blacklist table
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS blacklist (
-                id SERIAL PRIMARY KEY,
-                username TEXT UNIQUE NOT NULL,
-                added_at TIMESTAMP NOT NULL,
-                added_by TEXT DEFAULT 'system'
-            )
-        ''')
-        
-        # Insert initial blacklist
-        for username in INITIAL_BLACKLIST:
-            try:
-                c.execute('''
-                    INSERT INTO blacklist (username, added_at) 
-                    VALUES (%s, %s)
-                    ON CONFLICT (username) DO NOTHING
-                ''', (username, datetime.now()))
-            except Exception as e:
-                logger.warning(f"Could not insert blacklist user {username}: {e}")
-        
-        # Indexes for performance
-        indexes = [
-            'CREATE INDEX IF NOT EXISTS idx_recipient ON emails(recipient)',
-            'CREATE INDEX IF NOT EXISTS idx_session ON emails(session_token)',
-            'CREATE INDEX IF NOT EXISTS idx_received_at ON emails(received_at)',
-            'CREATE INDEX IF NOT EXISTS idx_email_address ON sessions(email_address)',
-            'CREATE INDEX IF NOT EXISTS idx_is_active ON sessions(is_active)',
-            'CREATE INDEX IF NOT EXISTS idx_blacklist_username ON blacklist(username)'
-        ]
-        
-        for index_sql in indexes:
-            try:
-                c.execute(index_sql)
-            except Exception as e:
-                logger.warning(f"Could not create index: {e}")
-        
-        conn.close()
-        logger.info("✅ Database initialized successfully")
-    except Exception as e:
-        logger.error(f"❌ Database initialization failed: {e}")
+#admin-inbox-container {
+background: rgba(0, 0, 0, 0.3);
+}
 
-# Admin required decorator
-def admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not session.get('admin_authenticated'):
-            return jsonify({'error': 'Unauthorized'}), 401
-        return f(*args, **kwargs)
-    return decorated_function
+#email-content-container {
+height: 500px;
+max-height: 500px;
+overflow: hidden;
+}
+#email-body {
+height: 300px;
+max-height: 300px;
+overflow-y: auto;
+overflow-x: hidden;
+}
+#email-body * {
+max-width: 100%;
+word-wrap: break-word;
+}
+.border-red-500 {
+border-color: #ef4444 !important;
+}
+.bg-blue-600 {
+background-color: #2563eb;
+}
+.bg-blue-600:hover {
+background-color: #1d4ed8;
+}
 
-init_db()
+.verification-code {
+background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+color: white;
+padding: 20px;
+border-radius: 12px;
+font-size: 32px;
+font-weight: bold;
+text-align: center;
+letter-spacing: 4px;
+margin-bottom: 20px;
+box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
 
-def is_username_blacklisted(username):
-    """Check if username is blacklisted in database"""
-    try:
-        conn = get_db()
-        c = conn.cursor()
-        c.execute('SELECT username FROM blacklist WHERE username = %s', (username.lower(),))
-        result = c.fetchone()
-        conn.close()
-        return result is not None
-    except Exception as e:
-        logger.error(f"Error checking blacklist: {e}")
-        return username.lower() in INITIAL_BLACKLIST
+.email-viewer-container {
+background: rgba(31, 41, 55, 0.5);
+border-radius: 12px;
+padding: 20px;
+max-height: 500px;
+overflow-y: auto;
+}
 
-def extract_content_from_mime(msg):
-    """Extract content from MIME message"""
-    html_content = None
-    text_content = None
-    
-    if msg.is_multipart():
-        for part in msg.walk():
-            content_type = part.get_content_type()
-            content_disposition = str(part.get("Content-Disposition", ""))
-            
-            # Skip attachments
-            if "attachment" in content_disposition:
-                continue
-            
-            try:
-                payload = part.get_payload(decode=True)
-                if payload:
-                    decoded = payload.decode('utf-8', errors='ignore')
+.email-header {
+border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+padding-bottom: 15px;
+margin-bottom: 20px;
+}
+
+.email-header-item {
+margin-bottom: 10px;
+}
+
+.email-header-label {
+color: #9ca3af;
+font-size: 12px;
+font-weight: 600;
+text-transform: uppercase;
+margin-bottom: 4px;
+}
+
+.email-header-value {
+color: #ffffff;
+font-size: 14px;
+}
+
+.email-body-content {
+color: #e5e7eb;
+line-height: 1.6;
+}
+
+.session-item {
+transition: all 0.2s ease;
+cursor: pointer;
+}
+.session-item:hover {
+background: rgba(255, 255, 255, 0.1);
+transform: translateY(-1px);
+}
+</style>
+</head>
+<body class="text-gray-100 min-h-screen p-4">
+
+<!-- Custom Modal Structure -->
+<div id="custom-modal" class="modal-overlay hidden">
+<div class="modal-content">
+<div class="text-center mb-4">
+<i class="fas fa-exclamation-triangle text-3xl text-yellow-400 mb-3"></i>
+<h3 class="text-xl font-bold text-white mb-2" id="modal-title">Confirm Action</h3>
+<p class="text-gray-300" id="modal-message">Are you sure you want to proceed?</p>
+</div>
+<div class="modal-buttons">
+<button id="modal-cancel" class="modal-btn modal-btn-cancel">Cancel</button>
+<button id="modal-confirm" class="modal-btn modal-btn-confirm">Confirm</button>
+</div>
+</div>
+</div>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+<div class="login-box">
+<i class="fas fa-shield-alt text-5xl text-white mb-4"></i>
+<h1 class="text-3xl font-bold text-white mb-2">Admin Panel</h1>
+<p class="text-gray-300 mb-6">TempMail System Administration</p>
+<input type="password" id="admin-password" placeholder="Enter admin password" />
+<button id="admin-login-btn">
+<i class="fas fa-sign-in-alt mr-2"></i>Login
+</button>
+<p id="admin-login-error" class="error" style="display:none;">❌ Invalid password</p>
+</div>
+</div>
+
+<!-- ADMIN DASHBOARD (Hidden until logged in) -->
+<div id="admin-dashboard" style="display:none;">
+    <div class="w-full max-w-7xl mx-auto fade-in">
+        <header class="text-center mb-8">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+                <div class="flex items-center mobile-text-center">
+                    <i class="fas fa-shield-alt text-3xl text-white mr-3"></i>
+                    <h1 class="text-2xl md:text-4xl font-bold text-white">Admin Dashboard</h1>
+                </div>
+                <div class="flex gap-2 flex-wrap justify-center">
+                    <a href="/" class="bg-blue-600 hover:bg-blue-700 text-white px-3 md:px-4 py-2 rounded-lg transition-all transform hover:scale-105 text-sm md:text-base">
+                        <i class="fas fa-home mr-2"></i>Main Site
+                    </a>
+                    <button id="logout-btn" class="bg-red-600 hover:bg-red-700 text-white px-3 md:px-4 py-2 rounded-lg transition-all transform hover:scale-105 text-sm md:text-base">
+                        <i class="fas fa-sign-out-alt mr-2"></i>Logout
+                    </button>
+                </div>
+            </div>
+            <p class="text-gray-300 text-sm md:text-base">Monitor and manage all temporary email addresses</p>
+        </header>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="glass-effect rounded-xl p-4 md:p-6 fade-in">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-300 text-sm">Total Emails</p>
+                        <p id="stat-emails" class="text-2xl md:text-3xl font-bold text-white">0</p>
+                    </div>
+                    <i class="fas fa-envelope text-3xl md:text-4xl text-blue-400"></i>
+                </div>
+            </div>
+            <div class="glass-effect rounded-xl p-4 md:p-6 fade-in">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-300 text-sm">Email Addresses</p>
+                        <p id="stat-addresses" class="text-2xl md:text-3xl font-bold text-white">0</p>
+                    </div>
+                    <i class="fas fa-users text-3xl md:text-4xl text-green-400"></i>
+                </div>
+            </div>
+            <div class="glass-effect rounded-xl p-4 md:p-6 fade-in">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-300 text-sm">Last 24 Hours</p>
+                        <p id="stat-recent" class="text-2xl md:text-3xl font-bold text-white">0</p>
+                    </div>
+                    <i class="fas fa-clock text-3xl md:text-4xl text-purple-400"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 mobile-stack">
+            <!-- Email Addresses List -->
+            <div class="glass-effect rounded-xl p-4 md:p-6 fade-in mobile-full">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                    <h2 class="text-lg md:text-xl font-bold text-white">
+                        <i class="fas fa-list mr-2"></i>Email Addresses
+                    </h2>
+                    <button onclick="loadAddresses()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition-all transform hover:scale-105 text-sm">
+                        <i class="fas fa-sync-alt mr-1"></i> Refresh
+                    </button>
+                </div>
+                <div id="address-list" class="space-y-2 max-h-96 overflow-y-auto custom-scrollbar mobile-inbox-list">
+                    <p class="text-gray-400 text-center py-8">Loading addresses...</p>
+                </div>
+            </div>
+
+            <!-- Email Details -->
+            <div class="glass-effect rounded-xl p-4 md:p-6 fade-in mobile-full">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                    <h2 class="text-lg md:text-xl font-bold text-white">
+                        <i class="fas fa-envelope-open mr-2"></i>Emails for: 
+                        <span id="selected-address" class="text-blue-400 text-sm md:text-base">None selected</span>
+                    </h2>
+                    <div id="email-count-badge" class="bg-blue-600 text-white px-3 py-1 rounded-full text-xs md:text-sm font-medium hidden">
+                        0 emails
+                    </div>
+                </div>
+                
+                <!-- Single Container for List and Content View -->
+                <div id="admin-inbox-container" class="w-full bg-gray-900 rounded-xl p-3 overflow-y-auto" style="height: 500px;">
                     
-                    if content_type == 'text/html' and not html_content:
-                        html_content = decoded
-                    elif content_type == 'text/plain' and not text_content:
-                        text_content = decoded
-            except Exception as e:
-                logger.warning(f"Failed to decode part: {e}")
-                continue
-    else:
-        payload = msg.get_payload(decode=True)
-        if payload:
-            decoded = payload.decode('utf-8', errors='ignore')
-            if msg.get_content_type() == 'text/html':
-                html_content = decoded
-            else:
-                text_content = decoded
-    
-    return html_content or text_content
+                    <!-- Email List View -->
+                    <div id="admin-email-list-view" class="h-full">
+                        <div id="email-details" class="space-y-2 h-full overflow-y-auto custom-scrollbar">
+                            <p class="text-gray-400 text-center py-8">Select an address to view emails</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Email Content View (Hidden by default) -->
+                    <div id="admin-email-content-view" class="hidden h-full flex flex-col">
+                        <!-- Back Button -->
+                        <button id="admin-back-btn" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg mb-4 transition-all text-sm flex items-center">
+                            <i class="fas fa-arrow-left mr-2"></i>Back to List
+                        </button>
+                        
+                        <!-- Email Header -->
+                        <div class="border-b border-gray-700 pb-4 mb-4">
+                            <h2 id="admin-email-subject" class="text-lg md:text-xl font-bold text-white mb-2 break-words"></h2>
+                            <div class="flex items-center text-xs md:text-sm text-gray-300 mb-2">
+                                <strong class="mr-2 text-white font-semibold flex items-center">
+                                    <i class="fas fa-user mr-2"></i>From:
+                                </strong>
+                                <span id="admin-email-from" class="font-mono font-medium break-all"></span>
+                            </div>
+                            <span id="admin-email-date" class="text-xs text-gray-400"></span>
+                        </div>
+                        
+                        <!-- Email Body -->
+                        <div id="admin-email-body" class="email-content-container flex-1 overflow-y-auto custom-scrollbar"></div>
+                        
+                        <!-- Delete Button -->
+                        <div class="mt-4 pt-4 border-t border-gray-700">
+                            <button id="admin-delete-email-btn" 
+                                    class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all text-sm">
+                                <i class="fas fa-trash mr-2"></i>Delete Email
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-def clean_raw_email(raw_body):
-    """Clean raw email body by removing headers"""
-    header_patterns = [
-        'Received:', 'Received-SPF:', 'ARC-Seal:', 'ARC-Message-Signature:', 
-        'ARC-Authentication-Results:', 'DKIM-Signature:', 'Authentication-Results:',
-        'Return-Path:', 'Delivered-To:', 'X-', 'Message-ID:', 'Date:', 
-        'MIME-Version:', 'Content-Type:', 'Content-Transfer-Encoding:',
-        'Content-ID:', 'Reply-To:', 'List-', 'Precedence:'
-    ]
-    
-    lines = raw_body.split('\n')
-    clean_lines = []
-    skip_mode = True
-    empty_line_count = 0
-    
-    for line in lines:
-        stripped = line.strip()
-        
-        if stripped == '':
-            empty_line_count += 1
-            if empty_line_count >= 2:
-                skip_mode = False
-            continue
-        else:
-            empty_line_count = 0
-        
-        is_header = False
-        for pattern in header_patterns:
-            if stripped.startswith(pattern) or (skip_mode and ':' in stripped[:50]):
-                is_header = True
-                break
-        
-        if skip_mode and (line.startswith(' ') or line.startswith('\t')):
-            is_header = True
-        
-        if not is_header:
-            skip_mode = False
-        
-        if not skip_mode and not is_header:
-            clean_lines.append(line)
-    
-    return '\n'.join(clean_lines).strip()
+        <!-- Active Sessions Section -->
+        <div class="glass-effect rounded-xl p-4 md:p-6 fade-in mb-6">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                <h2 class="text-lg md:text-xl font-bold text-white">
+                    <i class="fas fa-play-circle mr-2"></i>Active Sessions
+                </h2>
+                <div class="flex gap-2">
+                    <button onclick="loadActiveSessions()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg transition-all transform hover:scale-105 text-sm">
+                        <i class="fas fa-sync-alt mr-1"></i> Refresh
+                    </button>
+                </div>
+            </div>
+            <div id="active-sessions" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+                <p class="text-gray-400 text-center py-8">Loading active sessions...</p>
+            </div>
+        </div>
 
-def parse_email_body(raw_body):
-    """Parse MIME email and extract clean HTML/text"""
-    try:
-        # If it's already clean HTML/text, return as is
-        if '<html' in raw_body.lower() or '<body' in raw_body.lower():
-            return raw_body
-        
-        if 'Content-Type:' in raw_body:
-            msg = email.message_from_string(raw_body, policy=policy.default)
-            content = extract_content_from_mime(msg)
-            if content:
-                return content
-        
-        return clean_raw_email(raw_body)
-        
-    except Exception as e:
-        logger.error(f"Email parsing error: {e}")
-        return clean_raw_email(raw_body)
+        <!-- Blacklist Management Section -->
+        <div class="glass-effect rounded-xl p-4 md:p-6 fade-in">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                <h2 class="text-lg md:text-xl font-bold text-white">
+                    <i class="fas fa-ban mr-2"></i>Blacklisted Usernames
+                </h2>
+                <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                    <input type="text" id="new-blacklist-username" placeholder="Enter username to blacklist" 
+                           class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none w-full sm:w-48 text-sm">
+                    <button onclick="addToBlacklist()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105 whitespace-nowrap text-sm">
+                        <i class="fas fa-plus mr-1"></i> Add to Blacklist
+                    </button>
+                </div>
+            </div>
+            <div id="blacklist-list" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+                <p class="text-gray-400 text-center py-8">Loading blacklist...</p>
+            </div>
+        </div>
+    </div>
+</div>
 
-def validate_session(email_address, session_token):
-    """Validate if session is valid"""
-    try:
-        conn = get_db()
-        c = conn.cursor()
-        
-        # Check if session exists and is active
-        try:
-            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
-            has_is_active = c.fetchone() is not None
-            
-            if has_is_active:
-                c.execute('''
-                    SELECT session_token FROM sessions 
-                    WHERE email_address = %s AND session_token = %s 
-                    AND expires_at > NOW() AND is_active = TRUE
-                ''', (email_address, session_token))
-            else:
-                c.execute('''
-                    SELECT session_token FROM sessions 
-                    WHERE email_address = %s AND session_token = %s 
-                    AND expires_at > NOW()
-                ''', (email_address, session_token))
-        except Exception as e:
-            logger.warning(f"Error checking session: {e}")
-            c.execute('''
-                SELECT session_token FROM sessions 
-                WHERE email_address = %s AND session_token = %s 
-                AND expires_at > NOW()
-            ''', (email_address, session_token))
-        
-        session_data = c.fetchone()
-        conn.close()
-        
-        if not session_data:
-            return False, "Invalid or expired session"
-        
-        return True, "Valid session"
-        
-    except Exception as e:
-        logger.error(f"Session validation error: {e}")
-        return False, str(e)
+<script>
+var API_URL = window.location.origin;
+var selectedAddress = null;
+var autoRefreshInterval = null;
+var DOMAIN = 'aungmyomyatzaw.online';
+var currentViewingEmail = null;
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+// Initialize functions when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Set up event listeners
+    document.getElementById('admin-login-btn').addEventListener('click', adminLogin);
+    document.getElementById('admin-password').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') adminLogin();
+    });
+    document.getElementById('logout-btn').addEventListener('click', adminLogout);
+    document.getElementById('admin-back-btn').addEventListener('click', showAdminEmailList);
+    document.getElementById('admin-delete-email-btn').addEventListener('click', deleteCurrentEmail);
+});
 
-@app.route('/api/domains', methods=['GET'])
-def get_domains():
-    return jsonify({'domains': [DOMAIN]})
-
-@app.route('/api/create', methods=['POST'])
-def create_email():
-    try:
-        data = request.get_json() or {}
-        custom_name = data.get('name', '').strip()
-        admin_mode = data.get('admin_mode', False)
-        
-        # Validate security headers
-        session_id = request.headers.get('X-Session-ID')
-        security_key = request.headers.get('X-Security-Key')
-        
-        if not session_id or not security_key:
-            logger.warning("Missing security headers in create request")
-        
-        if custom_name:
-            username = custom_name.lower()
-            username = ''.join(c for c in username if c.isalnum() or c in '-_')
-            if not username:
-                return jsonify({'error': 'Invalid username', 'code': 'INVALID_USERNAME'}), 400
-            
-            # Skip blacklist check if admin mode is enabled
-            if not admin_mode and is_username_blacklisted(username):
-                return jsonify({
-                    'error': 'This username is reserved for the system owner. Please choose a different username.',
-                    'code': 'USERNAME_BLACKLISTED'
-                }), 403
-        else:
-            # Generate random name
-            male_name = random.choice(MALE_NAMES)
-            female_name = random.choice(FEMALE_NAMES)
-            three_digits = ''.join(random.choices(string.digits, k=3))
-            username = f"{male_name}{female_name}{three_digits}"
-        
-        email_address = f"{username}@{DOMAIN}"
-        
-        conn = get_db()
-        c = conn.cursor()
-        
-        # FIX: Always end any existing sessions for this email first
-        try:
-            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
-            has_is_active = c.fetchone() is not None
-            
-            if has_is_active:
-                c.execute('''
-                    UPDATE sessions 
-                    SET is_active = FALSE 
-                    WHERE email_address = %s AND is_active = TRUE
-                ''', (email_address,))
-            else:
-                # If no is_active column, delete the session
-                c.execute('''
-                    DELETE FROM sessions 
-                    WHERE email_address = %s
-                ''', (email_address,))
-        except Exception as e:
-            logger.warning(f"Error ending existing sessions: {e}")
-            # Fallback - delete sessions
-            c.execute('DELETE FROM sessions WHERE email_address = %s', (email_address,))
-        
-        # Create session token
-        session_token = secrets.token_urlsafe(32)
-        created_at = datetime.now()
-        expires_at = created_at + timedelta(hours=1)
-        
-        # Insert new session
-        try:
-            c.execute('''
-                INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity, is_active)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            ''', (session_token, email_address, created_at, expires_at, created_at, True))
-        except Exception as e:
-            logger.warning(f"Error with is_active column, falling back: {e}")
-            c.execute('''
-                INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity)
-                VALUES (%s, %s, %s, %s, %s)
-            ''', (session_token, email_address, created_at, expires_at, created_at))
-        
-        # NEW FEATURE: If admin mode is enabled, automatically add to blacklist
-        if admin_mode and custom_name:
-            try:
-                c.execute('''
-                    INSERT INTO blacklist (username, added_at, added_by) 
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (username) DO NOTHING
-                ''', (username.lower(), datetime.now(), 'admin_auto'))
-                logger.info(f"✅ Automatically blacklisted username: {username}")
-            except Exception as e:
-                logger.error(f"Error auto-blacklisting username: {e}")
-        
-        conn.commit()
-        conn.close()
-        
-        logger.info(f"✅ Created email: {email_address}")
-        
-        return jsonify({
-            'email': email_address,
-            'session_token': session_token,
-            'expires_at': expires_at.isoformat()
-        })
-        
-    except Exception as e:
-        logger.error(f"❌ Error creating email: {e}")
-        return jsonify({'error': 'Failed to create session', 'code': 'SERVER_ERROR'}), 500
-    
-@app.route('/api/session/end', methods=['POST'])
-def end_session():
-    try:
-        data = request.get_json() or {}
-        session_token = data.get('session_token')
-        email_address = data.get('email_address')
-        
-        if not session_token or not email_address:
-            return jsonify({'error': 'Missing session data'}), 400
-        
-        conn = get_db()
-        c = conn.cursor()
-        
-        # First check if session exists
-        c.execute('''
-            SELECT session_token FROM sessions 
-            WHERE session_token = %s AND email_address = %s
-        ''', (session_token, email_address))
-        
-        session_exists = c.fetchone()
-        
-        if not session_exists:
-            conn.close()
-            return jsonify({'error': 'Session not found'}), 404
-        
-        # FIX: Only mark session as inactive, NEVER delete emails
-        try:
-            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
-            has_is_active = c.fetchone() is not None
-            
-            if has_is_active:
-                c.execute('''
-                    UPDATE sessions 
-                    SET is_active = FALSE 
-                    WHERE session_token = %s AND email_address = %s
-                ''', (session_token, email_address))
-            else:
-                # If is_active column doesn't exist, just update expires_at to now
-                c.execute('''
-                    UPDATE sessions 
-                    SET expires_at = NOW()
-                    WHERE session_token = %s AND email_address = %s
-                ''', (session_token, email_address))
-        except Exception as e:
-            logger.warning(f"Error in session end logic: {e}")
-            # Fallback to updating expires_at
-            c.execute('''
-                UPDATE sessions 
-                SET expires_at = NOW()
-                WHERE session_token = %s AND email_address = %s
-            ''', (session_token, email_address))
-        
-        conn.commit()
-        conn.close()
-        
-        logger.info(f"✅ Session ended for: {email_address} (emails preserved)")
-        return jsonify({'success': True, 'message': 'Session ended successfully'})
-        
-    except Exception as e:
-        logger.error(f"❌ Error ending session: {e}")
-        return jsonify({'error': 'Failed to end session'}), 500
-    
-@app.route('/api/emails/<email_address>', methods=['GET'])
-def get_emails(email_address):
-    """Get emails for a specific email address"""
-    try:
-        session_token = request.headers.get('X-Session-Token', '')
-        
-        # Validate session
-        is_valid, message = validate_session(email_address, session_token)
-        if not is_valid:
-            return jsonify({'error': message}), 403
-        
-        conn = get_db()
-        c = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # Get emails for this session
-        c.execute('''
-            SELECT id, sender, subject, body, timestamp, received_at
-            FROM emails 
-            WHERE recipient = %s AND session_token = %s
-            ORDER BY received_at DESC
-        ''', (email_address, session_token))
-        
-        emails = []
-        for row in c.fetchall():
-            emails.append({
-                'id': row['id'],
-                'sender': row['sender'],
-                'subject': row['subject'],
-                'body': row['body'],
-                'timestamp': row['timestamp'],
-                'received_at': row['received_at'].isoformat() if row['received_at'] else None
-            })
-        
-        conn.close()
-        return jsonify({'emails': emails})
-        
-    except Exception as e:
-        logger.error(f"❌ Error getting emails: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/webhook/inbound', methods=['POST'])
-def webhook_inbound():
-    try:
-        json_data = request.get_json(force=True, silent=True)
-        
-        if not json_data:
-            return jsonify({'error': 'No JSON data'}), 400
-        
-        logger.info("📧 INCOMING EMAIL")
-        
-        recipient = json_data.get('to', 'unknown@unknown.com')
-        sender = json_data.get('from', 'unknown')
-        subject = json_data.get('subject', 'No subject')
-        
-        # Clean sender
-        if '<' in sender and '>' in sender:
-            sender = sender[sender.find('<')+1:sender.find('>')]
-        
-        if 'bounce' in sender.lower():
-            if '@' in sender:
-                domain_part = sender.split('@')[1]
-                if 'openai.com' in domain_part or 'mandrillapp.com' in domain_part:
-                    sender = 'ChatGPT'
-                elif 'afraid.org' in domain_part:
-                    sender = 'FreeDNS'
-                else:
-                    sender = 'Notification'
-        
-        # Get body
-        body = json_data.get('html_body', None)
-        if not body or body.strip() == '':
-            body = json_data.get('plain_body', 'No content')
-        
-        recipient = recipient.strip()
-        sender = sender.strip()
-        subject = subject.strip()
-        body = body.strip()
-        
-        # Parse MIME if needed
-        if 'Content-Type:' in body and 'multipart' in body:
-            body = parse_email_body(body)
-        
-        # Clean headers
-        body = clean_raw_email(body)
-        
-        logger.info(f"  ✉️  From: {sender} → {recipient}")
-        logger.info(f"  📝 Subject: {subject}")
-        logger.info(f"  📄 Body: {len(body)} chars")
-        
-        # Store timestamps
-        received_at = datetime.now()
-        original_timestamp = json_data.get('timestamp', received_at.isoformat())
-        
-        # Find active session for this recipient
-        conn = get_db()
-        c = conn.cursor()
-        
-        # Check if is_active column exists
-        try:
-            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
-            has_is_active = c.fetchone() is not None
-            
-            if has_is_active:
-                c.execute('''
-                    SELECT session_token 
-                    FROM sessions 
-                    WHERE email_address = %s AND expires_at > NOW() AND is_active = TRUE
-                    ORDER BY created_at DESC 
-                    LIMIT 1
-                ''', (recipient,))
-            else:
-                c.execute('''
-                    SELECT session_token 
-                    FROM sessions 
-                    WHERE email_address = %s AND expires_at > NOW()
-                    ORDER BY created_at DESC 
-                    LIMIT 1
-                ''', (recipient,))
-        except Exception as e:
-            logger.warning(f"Error finding session: {e}")
-            c.execute('''
-                SELECT session_token 
-                FROM sessions 
-                WHERE email_address = %s AND expires_at > NOW()
-                ORDER BY created_at DESC 
-                LIMIT 1
-            ''', (recipient,))
-        
-        session_data = c.fetchone()
-        
-        if session_data:
-            session_token = session_data[0]
-            
-            # Store email
-            c.execute('''
-                INSERT INTO emails (recipient, sender, subject, body, timestamp, received_at, session_token)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ''', (recipient, sender, subject, body, original_timestamp, received_at, session_token))
-            
-            # Update session last_activity
-            c.execute('''
-                UPDATE sessions 
-                SET last_activity = %s 
-                WHERE session_token = %s
-            ''', (received_at, session_token))
-            
-            conn.commit()
-            conn.close()
-            
-            logger.info(f"✅ Email stored: {sender} → {recipient}")
-            return '', 204
-        else:
-            conn.close()
-            logger.warning(f"⚠️ No active session for {recipient}")
-            return '', 204
-        
-    except Exception as e:
-        logger.error(f"❌ Webhook error: {e}")
-        return jsonify({'error': str(e)}), 400
-
-def cleanup_expired_sessions():
-    while True:
-        time.sleep(300)  # Every 5 minutes
-        try:
-            conn = get_db()
-            c = conn.cursor()
-            
-            # FIX: Only cleanup expired sessions, NEVER delete emails
-            c.execute("DELETE FROM sessions WHERE expires_at < NOW()")
-            deleted = c.rowcount
-            conn.commit()
-            conn.close()
-            
-            if deleted > 0:
-                logger.info(f"Cleaned up {deleted} expired sessions (emails preserved)")
-        except Exception as e:
-            logger.error(f"Cleanup error: {e}")
-
-# Start cleanup thread
-cleanup_thread = Thread(target=cleanup_expired_sessions, daemon=True)
-cleanup_thread.start()
-
-# Admin routes
-
-@app.route('/admin')
-def admin_panel():
-    return render_template('admin.html')
-
-@app.route('/api/admin/login', methods=['POST'])
-def admin_login():
-    data = request.get_json() or {}
-    password = data.get('password', '')
-    
-    if password == APP_PASSWORD:
-        session['admin_authenticated'] = True
-        return jsonify({'success': True})
-    return jsonify({'success': False}), 401
-
-@app.route('/api/verify-admin', methods=['POST'])
-def verify_admin():
-    """Alternative endpoint for frontend admin verification"""
-    try:
-        data = request.get_json() or {}
-        password = data.get('password', '')
-        
-        if password == APP_PASSWORD:
-            session['admin_authenticated'] = True
-            return jsonify({'success': True})
-        return jsonify({'success': False, 'error': 'Invalid password'}), 401
-        
-    except Exception as e:
-        logger.error(f"Admin verification error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/admin/status', methods=['GET'])
-def admin_status():
-    """Check if user is admin authenticated"""
-    return jsonify({'authenticated': session.get('admin_authenticated', False)})
-
-@app.route('/api/admin/logout', methods=['POST'])
-@admin_required
-def admin_logout():
-    session.clear()
-    return jsonify({'success': True})
-
-@app.route('/api/admin/stats', methods=['GET'])
-@admin_required
-def admin_stats():
-    try:
-        conn = get_db()
-        c = conn.cursor()
-        
-        c.execute('SELECT COUNT(*) FROM emails')
-        total_emails = c.fetchone()[0]
-        
-        c.execute('SELECT COUNT(DISTINCT recipient) FROM emails')
-        total_addresses = c.fetchone()[0]
-        
-        c.execute('''
-            SELECT COUNT(*) FROM emails 
-            WHERE received_at > NOW() - INTERVAL '1 day'
-        ''')
-        recent_emails = c.fetchone()[0]
-        
-        conn.close()
-        
-        return jsonify({
-            'total_emails': total_emails,
-            'total_addresses': total_addresses,
-            'recent_emails': recent_emails
-        })
-        
-    except Exception as e:
-        logger.error(f"❌ Admin stats error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/admin/addresses', methods=['GET'])
-@admin_required
-def admin_addresses():
-    try:
-        conn = get_db()
-        c = conn.cursor(cursor_factory=RealDictCursor)
-        
-        c.execute('''
-            SELECT recipient as address, COUNT(*) as count, MAX(received_at) as last_email
-            FROM emails
-            GROUP BY recipient
-            ORDER BY last_email DESC
-        ''')
-        
-        addresses = []
-        for row in c.fetchall():
-            if row['last_email']:
-                local_time = row['last_email'] + timedelta(hours=6, minutes=30)
-                last_email_str = local_time.isoformat()
-            else:
-                last_email_str = None
-                
-            addresses.append({
-                'address': row['address'],
-                'count': row['count'],
-                'last_email': last_email_str
-            })
-        
-        conn.close()
-        return jsonify({'addresses': addresses})
-        
-    except Exception as e:
-        logger.error(f"❌ Admin addresses error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/admin/emails/<email_address>', methods=['GET'])
-@admin_required
-def admin_get_emails(email_address):
-    try:
-        conn = get_db()
-        c = conn.cursor(cursor_factory=RealDictCursor)
-        
-        c.execute('''
-            SELECT id, sender, subject, body, received_at, timestamp 
-            FROM emails 
-            WHERE recipient = %s 
-            ORDER BY received_at DESC
-        ''', (email_address,))
-        
-        emails = []
-        for row in c.fetchall():
-            emails.append({
-                'id': row['id'],
-                'sender': row['sender'],
-                'subject': row['subject'],
-                'body': row['body'],
-                'received_at': row['received_at'].isoformat() if row['received_at'] else None,
-                'timestamp': row['timestamp']
-            })
-        
-        conn.close()
-        return jsonify({'emails': emails})
-        
-    except Exception as e:
-        logger.error(f"❌ Admin get emails error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/admin/delete/<int:email_id>', methods=['DELETE'])
-@admin_required
-def admin_delete_email(email_id):
-    try:
-        conn = get_db()
-        c = conn.cursor()
-        c.execute('DELETE FROM emails WHERE id = %s', (email_id,))
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'success': True})
-        
-    except Exception as e:
-        logger.error(f"❌ Admin delete email error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/admin/delete-address/<email_address>', methods=['DELETE'])
-@admin_required
-def admin_delete_address(email_address):
-    try:
-        conn = get_db()
-        c = conn.cursor()
-        c.execute('DELETE FROM emails WHERE recipient = %s', (email_address,))
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'success': True})
-        
-    except Exception as e:
-        logger.error(f"❌ Admin delete address error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/admin/sessions', methods=['GET'])
-@admin_required
-def admin_get_sessions():
-    """Get all active sessions"""
-    try:
-        conn = get_db()
-        c = conn.cursor(cursor_factory=RealDictCursor)
-        
-        c.execute('''
-            SELECT session_token, email_address, created_at, expires_at, last_activity
-            FROM sessions 
-            WHERE expires_at > NOW() AND is_active = TRUE
-            ORDER BY last_activity DESC
-        ''')
-        
-        sessions = []
-        for row in c.fetchall():
-            sessions.append({
-                'session_token': row['session_token'],
-                'email': row['email_address'],
-                'created_at': row['created_at'].isoformat(),
-                'expires_at': row['expires_at'].isoformat(),
-                'last_activity': row['last_activity'].isoformat(),
-                'session_age_minutes': int((datetime.now() - row['created_at']).total_seconds() / 60),
-                'time_remaining_minutes': int((row['expires_at'] - datetime.now()).total_seconds() / 60)
-            })
-        
-        conn.close()
-        return jsonify({'sessions': sessions})
-        
-    except Exception as e:
-        logger.error(f"❌ Error fetching sessions: {e}")
-        return jsonify({'error': str(e)}), 500
-
-# End session from admin panel
-@app.route('/api/admin/session/<session_token>/end', methods=['POST'])
-@admin_required
-def admin_end_session(session_token):
-    """End a user session from admin panel"""
-    try:
-        conn = get_db()
-        c = conn.cursor()
-        
-        # Mark session as inactive
-        c.execute('''
-            UPDATE sessions 
-            SET is_active = FALSE 
-            WHERE session_token = %s
-        ''', (session_token,))
-        
-        if c.rowcount == 0:
-            conn.close()
-            return jsonify({'error': 'Session not found'}), 404
-        
-        conn.commit()
-        conn.close()
-        
-        logger.info(f"✅ Admin ended session: {session_token}")
-        return jsonify({'success': True, 'message': 'Session ended successfully'})
-        
-    except Exception as e:
-        logger.error(f"❌ Error ending session from admin: {e}")
-        return jsonify({'error': str(e)}), 500
-
-# Blacklist endpoints with database persistence
-@app.route('/api/admin/blacklist', methods=['GET'])
-@admin_required
-def get_blacklist():
-    """Get current blacklisted usernames from database"""
-    try:
-        conn = get_db()
-        c = conn.cursor(cursor_factory=RealDictCursor)
-        
-        c.execute('''
-            SELECT username, added_at, added_by
-            FROM blacklist
-            ORDER BY username
-        ''')
-        
-        blacklist = []
-        for row in c.fetchall():
-            blacklist.append({
-                'username': row['username'],
-                'added_at': row['added_at'].isoformat() if row['added_at'] else None,
-                'added_by': row['added_by']
-            })
-        
-        conn.close()
-        return jsonify({'blacklist': blacklist})
-    except Exception as e:
-        logger.error(f"❌ Error getting blacklist: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/admin/blacklist', methods=['POST'])
-@admin_required
-def add_to_blacklist():
-    """Add username to blacklist in database"""
-    try:
-        data = request.get_json() or {}
-        username = data.get('username', '').strip().lower()
-        
-        if not username:
-            return jsonify({'error': 'Username is required'}), 400
-        
-        if not re.match(r'^[a-zA-Z0-9-_]+$', username):
-            return jsonify({'error': 'Username can only contain letters, numbers, hyphens, and underscores'}), 400
-        
-        conn = get_db()
-        c = conn.cursor()
-        
-        try:
-            c.execute('''
-                INSERT INTO blacklist (username, added_at, added_by) 
-                VALUES (%s, %s, %s)
-            ''', (username, datetime.now(), 'admin_manual'))
-            conn.commit()
-            conn.close()
-            
-            logger.info(f"✅ Added to blacklist: {username}")
-            return jsonify({'success': True, 'message': f'Username {username} added to blacklist'})
-            
-        except psycopg2.IntegrityError:
-            conn.close()
-            return jsonify({'error': 'Username already in blacklist'}), 409
-        
-    except Exception as e:
-        logger.error(f"❌ Error adding to blacklist: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/admin/blacklist/<username>', methods=['DELETE'])
-@admin_required
-def remove_from_blacklist(username):
-    """Remove username from blacklist in database"""
-    try:
-        username = username.lower()
-        
-        conn = get_db()
-        c = conn.cursor()
-        c.execute('DELETE FROM blacklist WHERE username = %s', (username,))
-        
-        if c.rowcount == 0:
-            conn.close()
-            return jsonify({'error': 'Username not found in blacklist'}), 404
-        
-        conn.commit()
-        conn.close()
-        
-        logger.info(f"✅ Removed from blacklist: {username}")
-        return jsonify({'success': True, 'message': f'Username {username} removed from blacklist'})
-        
-    except Exception as e:
-        logger.error(f"❌ Error removing from blacklist: {e}")
-        return jsonify({'error': str(e)}), 500
-    
-@app.route('/api/admin/clear-sessions', methods=['POST'])
-@admin_required
-def admin_clear_sessions():
-    """Clear all admin-related sessions"""
-    try:
-        conn = get_db()
-        c = conn.cursor()
-        
-        # End all active sessions for admin usernames
-        admin_usernames = ['ammz', 'admin', 'owner', 'root', 'system', 'az', 'c']
-        
-        for username in admin_usernames:
-            email_pattern = f"{username}@%"
-            try:
-                c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
-                has_is_active = c.fetchone() is not None
-                
-                if has_is_active:
-                    c.execute('''
-                        UPDATE sessions 
-                        SET is_active = FALSE 
-                        WHERE email_address LIKE %s AND is_active = TRUE
-                    ''', (email_pattern,))
-                else:
-                    c.execute('''
-                        UPDATE sessions 
-                        SET expires_at = NOW()
-                        WHERE email_address LIKE %s AND expires_at > NOW()
-                    ''', (email_pattern,))
-            except Exception as e:
-                logger.warning(f"Error clearing admin session for {username}: {e}")
-        
-        conn.commit()
-        conn.close()
-        
-        logger.info("✅ All admin sessions cleared")
-        return jsonify({'success': True, 'message': 'Admin sessions cleared'})
-        
-    except Exception as e:
-        logger.error(f"❌ Error clearing admin sessions: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.before_request
-def check_admin_session():
-    """Check and expire admin sessions automatically"""
-    if session.get('admin_authenticated'):
-        # Set session to expire after 1 hour of inactivity
-        session.permanent = True
-        app.permanent_session_lifetime = timedelta(hours=1)
-
-# Error handlers
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({'error': 'Resource not found'}), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    return jsonify({'error': 'Internal server error'}), 500
-
-@app.route('/health')
-def health():
-    return jsonify({
-        'status': 'healthy',
-        'domain': DOMAIN,
-        'timestamp': datetime.utcnow().isoformat()
+// Blacklist management functions
+function loadBlacklist() {
+    fetch(`${API_URL}/api/admin/blacklist`, {
+        credentials: 'include'
     })
+        .then(res => {
+            if (res.status === 401) {
+                location.reload();
+                return;
+            }
+            return res.json();
+        })
+        .then(data => {
+            var blacklistEl = document.getElementById('blacklist-list');
+            
+            if (!data || data.error) {
+                blacklistEl.innerHTML = '<p class="text-red-400 text-center py-8">Error loading blacklist</p>';
+                return;
+            }
+            
+            if (!data.blacklist || data.blacklist.length === 0) {
+                blacklistEl.innerHTML = '<p class="text-gray-400 text-center py-8">No blacklisted usernames</p>';
+                return;
+            }
+            
+            blacklistEl.innerHTML = '';
+            
+            data.blacklist.forEach(item => {
+                let username;
+                if (typeof item === 'string') {
+                    username = item;
+                } else if (typeof item === 'object' && item !== null) {
+                    username = item.username || item.name || item.value || String(item);
+                } else {
+                    username = String(item);
+                }
+                
+                var itemDiv = document.createElement('div');
+                itemDiv.className = 'bg-gray-800 p-3 rounded-lg border border-gray-700 flex justify-between items-center';
+                itemDiv.innerHTML = `
+                    <div>
+                        <span class="text-white font-semibold text-sm">${escapeHtml(username)}</span>
+                        <span class="text-xs text-gray-400 ml-2">@${DOMAIN}</span>
+                    </div>
+                    <button onclick="removeFromBlacklist('${escapeHtml(username)}')" 
+                            class="text-green-400 hover:text-green-300 p-1 rounded transition-colors" 
+                            title="Remove from blacklist">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                blacklistEl.appendChild(itemDiv);
+            });
+        })
+        .catch(err => {
+            console.error('Error loading blacklist:', err);
+            document.getElementById('blacklist-list').innerHTML = 
+                '<p class="text-red-400 text-center py-8">Failed to load blacklist</p>';
+        });
+}
 
-if __name__ == '__main__':
-    port = int(os.getenv('PORT', 5000))
-    debug = os.getenv('FLASK_ENV') == 'development'
-    app.run(host='0.0.0.0', port=port, debug=debug) here is my api make sure email forever delete
+function addToBlacklist() {
+    var usernameInput = document.getElementById('new-blacklist-username');
+    var username = usernameInput.value.trim().toLowerCase();
+    
+    if (!username) {
+        showNotification('❌ Please enter a username', 'error');
+        return;
+    }
+    
+    if (!/^[a-zA-Z0-9-_]+$/.test(username)) {
+        showNotification('❌ Username can only contain letters, numbers, hyphens, and underscores', 'error');
+        return;
+    }
+    
+    showModal(
+        'Add to Blacklist',
+        `Are you sure you want to blacklist the username "<strong>${escapeHtml(username)}</strong>"?<br><br>This will prevent all users from using this username.`,
+        function() {
+            fetch(API_URL + '/api/admin/blacklist', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                credentials: 'include',
+                body: JSON.stringify({username: username})
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(`✅ ${data.message}`, 'success');
+                    usernameInput.value = '';
+                    loadBlacklist();
+                } else {
+                    showNotification(`❌ ${data.error || 'Failed to add to blacklist'}`, 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error adding to blacklist:', err);
+                showNotification('❌ Error adding to blacklist', 'error');
+            });
+        }
+    );
+}
+
+function removeFromBlacklist(username) {
+    showModal(
+        'Remove from Blacklist',
+        `Are you sure you want to remove "<strong>${escapeHtml(username)}</strong>" from the blacklist?<br><br>Users will be able to use this username again.`,
+        function() {
+            fetch(API_URL + '/api/admin/blacklist/' + encodeURIComponent(username), {
+                method: 'DELETE',
+                credentials: 'include'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(`✅ ${data.message}`, 'success');
+                    loadBlacklist();
+                } else {
+                    showNotification(`❌ ${data.error || 'Failed to remove from blacklist'}`, 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error removing from blacklist:', err);
+                showNotification('❌ Error removing from blacklist', 'error');
+            });
+        }
+    );
+}
+
+// End user session from admin
+function endUserSession(sessionToken, email) {
+    showModal(
+        'End User Session',
+        `Are you sure you want to end the session for <strong>${escapeHtml(email)}</strong>?<br><br>The user will be logged out and lose access to their emails.`,
+        function() {
+            fetch(API_URL + '/api/admin/session/' + sessionToken + '/end', {
+                method: 'POST',
+                credentials: 'include'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(`✅ Session ended for ${email}`, 'success');
+                    loadActiveSessions();
+                } else {
+                    showNotification(`❌ ${data.error || 'Failed to end session'}`, 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error ending session:', err);
+                showNotification('❌ Error ending session', 'error');
+            });
+        }
+    );
+}
+
+// Update the startAutoRefresh to include blacklist
+function startAutoRefresh() {
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    autoRefreshInterval = setInterval(() => {
+        loadStats();
+        loadAddresses();
+        loadActiveSessions();
+        loadBlacklist();
+        if (selectedAddress) viewEmails(selectedAddress);
+    }, 10000);
+}
+
+// Custom Modal Functions
+function showModal(title, message, confirmCallback) {
+    const modal = document.getElementById('custom-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalMessage = document.getElementById('modal-message');
+    const modalConfirm = document.getElementById('modal-confirm');
+    const modalCancel = document.getElementById('modal-cancel');
+    
+    modalTitle.textContent = title;
+    modalMessage.innerHTML = message;
+    modal.classList.remove('hidden');
+    
+    // Remove previous event listeners
+    const newConfirm = modalConfirm.cloneNode(true);
+    const newCancel = modalCancel.cloneNode(true);
+    modalConfirm.parentNode.replaceChild(newConfirm, modalConfirm);
+    modalCancel.parentNode.replaceChild(newCancel, modalCancel);
+    
+    // Add new event listeners
+    document.getElementById('modal-confirm').onclick = function() {
+        modal.classList.add('hidden');
+        if (confirmCallback) confirmCallback();
+    };
+    
+    document.getElementById('modal-cancel').onclick = function() {
+        modal.classList.add('hidden');
+    };
+}
+
+// Login handler
+function adminLogin() {
+    var password = document.getElementById('admin-password').value;
+    var errorEl = document.getElementById('admin-login-error');
+    var btn = document.getElementById('admin-login-btn');
+    
+    if (!password) {
+        errorEl.textContent = '❌ Please enter password';
+        errorEl.style.display = 'block';
+        return;
+    }
+    
+    // Show loading state
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Logging in...';
+    btn.disabled = true;
+    
+    fetch(API_URL + '/api/admin/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'include',
+        body: JSON.stringify({password: password})
+    })
+    .then(res => {
+        if (!res.ok) {
+            throw new Error('Login failed');
+        }
+        return res.json();
+    })
+    .then(data => {
+        if (data.success) {
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('admin-dashboard').style.display = 'block';
+            loadStats();
+            loadAddresses();
+            loadActiveSessions();
+            loadBlacklist();
+            startAutoRefresh();
+            showNotification('✅ Successfully logged in', 'success');
+        } else {
+            throw new Error('Invalid password');
+        }
+    })
+    .catch(err => {
+        errorEl.textContent = '❌ ' + (err.message || 'Login failed');
+        errorEl.style.display = 'block';
+        setTimeout(() => errorEl.style.display = 'none', 3000);
+    })
+    .finally(() => {
+        // Reset button state
+        btn.innerHTML = '<i class="fas fa-sign-in-alt mr-2"></i>Login';
+        btn.disabled = false;
+    });
+}
+
+// Logout handler
+function adminLogout() {
+    showModal(
+        'Confirm Logout',
+        'Are you sure you want to logout from the admin panel?',
+        function() {
+            fetch(API_URL + '/api/admin/logout', {
+                method: 'POST',
+                credentials: 'include'
+            })
+            .then(() => {
+                location.reload();
+            })
+            .catch(() => {
+                location.reload();
+            });
+        }
+    );
+}
+
+// Email cleaning function
+function improvedCleanEmailBody(rawBody) {
+    const codeMatch = rawBody.match(/\b\d{4,8}\b/);
+    const verificationCode = codeMatch ? codeMatch[0] : null;
+    
+    let cleanBody = rawBody;
+    
+    cleanBody = cleanBody.replace(/<style[^>]*>.*?<\/style>/gis, '');
+    cleanBody = cleanBody.replace(/style="[^"]*"/gi, '');
+    cleanBody = cleanBody.replace(/class="[^"]*"/gi, '');
+    cleanBody = cleanBody.replace(/<!--.*?-->/gs, '');
+    cleanBody = cleanBody.replace(/<[^>]+>/g, ' ');
+    
+    cleanBody = cleanBody
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&#8217;/g, "'")
+        .replace(/&#160;/g, ' ')
+        .replace(/&copy;/g, '©')
+        .replace(/&reg;/g, '®');
+    
+    cleanBody = cleanBody
+        .replace(/=3D/g, '=')
+        .replace(/=20/g, ' ')
+        .replace(/=2E/g, '.')
+        .replace(/=\r?\n/g, '')
+        .replace(/=\?/g, '');
+    
+    cleanBody = cleanBody
+        .replace(/----==_mimepart_[^\s]*/g, '')
+        .replace(/Content-Type:[^\n]*/gi, '')
+        .replace(/Content-Transfer-Encoding:[^\n]*/gi, '')
+        .replace(/MIME-Version:[^\n]*/gi, '')
+        .replace(/charset=[^\s;]*/gi, '')
+        .replace(/boundary=[^\s;]*/gi, '');
+    
+    const linesToRemove = [
+        /^From:.*/gmi, /^To:.*/gmi, /^Subject:.*/gmi, /^Date:.*/gmi,
+        /^Received:.*/gmi, /^Return-Path:.*/gmi, /^Message-ID:.*/gmi,
+        /^DKIM-Signature:.*/gmi, /^ARC-.*:.*/gmi,
+        /by cloudflare-email\.net.*/gi, /@font-face.*/gi,
+        /font-family:.*/gi, /@media.*/gi, /\.ExternalClass.*/gi,
+        /outlook.*/gi, /-webkit-.*/gi, /-moz-.*/gi, /\*\s*!!!!?.*/g
+    ];
+    
+    linesToRemove.forEach(pattern => {
+        cleanBody = cleanBody.replace(pattern, '');
+    });
+    
+    cleanBody = cleanBody.replace(/\s+/g, ' ').replace(/\s*\.\s*/g, '. ').trim();
+    
+    const sentences = cleanBody.split(/\.\s+/).map(s => s.trim()).filter(s => {
+        if (s.length < 10) return false;
+        const junk = ['charset', 'utf-8', 'helvetica', 'arial', 'sans-serif', 
+                      'margin', 'padding', 'border', 'font-size', 'color',
+                      'text-align', 'display', 'width', 'height'];
+        return !junk.some(j => s.toLowerCase().includes(j));
+    });
+    
+    let html = '';
+    
+    if (verificationCode) {
+        html += `<div class="verification-code">${verificationCode}</div>`;
+    }
+    
+    if (sentences.length > 0) {
+        sentences.forEach(sentence => {
+            if (verificationCode && sentence.includes(verificationCode)) return;
+            html += `<p class="mb-3 leading-relaxed text-gray-200">${escapeHtml(sentence)}.</p>`;
+        });
+    } else {
+        if (cleanBody.length > 20) {
+            html += `<p class="mb-3 leading-relaxed text-gray-200">${escapeHtml(cleanBody)}</p>`;
+        } else {
+            html += '<p class="text-gray-400">No readable content found in this email.</p>';
+        }
+    }
+    
+    return html;
+}
+
+// View full email in admin panel
+function viewFullAdminEmail(email) {
+    currentViewingEmail = email;
+    
+    // Hide list, show content
+    document.getElementById('admin-email-list-view').classList.add('hidden');
+    document.getElementById('admin-email-content-view').classList.remove('hidden');
+    
+    // Populate email details
+    document.getElementById('admin-email-subject').textContent = email.subject || 'No subject';
+    document.getElementById('admin-email-from').textContent = email.sender || 'Unknown';
+    document.getElementById('admin-email-date').textContent = formatTime(email.timestamp);
+    
+    // Clean and display body
+    const cleanBody = improvedCleanEmailBody(email.body || 'No content');
+    document.getElementById('admin-email-body').innerHTML = cleanBody;
+}
+
+// Show email list
+function showAdminEmailList() {
+    document.getElementById('admin-email-list-view').classList.remove('hidden');
+    document.getElementById('admin-email-content-view').classList.add('hidden');
+    currentViewingEmail = null;
+}
+
+// Delete current email
+function deleteCurrentEmail() {
+    if (!currentViewingEmail) return;
+    deleteEmail(currentViewingEmail.id);
+}
+
+// Load addresses
+function loadAddresses() {
+    fetch(API_URL + '/api/admin/addresses', {
+        credentials: 'include'
+    })
+    .then(res => {
+        if (res.status === 401) {
+            location.reload();
+            return;
+        }
+        return res.json();
+    })
+    .then(data => {
+        if (!data || data.error) {
+            document.getElementById('address-list').innerHTML = '<p class="text-red-400 text-center py-8">Error loading addresses</p>';
+            return;
+        }
+        
+        var list = document.getElementById('address-list');
+        list.innerHTML = '';
+        
+        if (!data.addresses || data.addresses.length === 0) {
+            list.innerHTML = '<p class="text-gray-400 text-center py-8">No email addresses yet</p>';
+            return;
+        }
+        
+        data.addresses.forEach(addr => {
+            var item = document.createElement('div');
+            item.className = 'address-item bg-gray-800 p-3 md:p-4 rounded-lg border border-gray-700 hover:border-gray-600';
+            item.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <div class="flex-1">
+                        <p class="text-white font-semibold truncate text-xs md:text-sm">${escapeHtml(addr.address)}</p>
+                        <p class="text-xs text-gray-400 mt-1">
+                            ${addr.count || 0} email${(addr.count || 0) !== 1 ? 's' : ''} • 
+                            ${formatTime(addr.last_email)}
+                        </p>
+                    </div>
+                    <div class="flex gap-1">
+                        <button onclick="viewEmails('${escapeHtml(addr.address)}')" class="text-blue-400 hover:text-blue-300 p-1 md:p-2 rounded transition-colors" title="View emails">
+                            <i class="fas fa-eye text-xs md:text-sm"></i>
+                        </button>
+                        <button onclick="deleteAddress('${escapeHtml(addr.address)}')" class="text-red-400 hover:text-red-300 p-1 md:p-2 rounded transition-colors" title="Delete all emails">
+                            <i class="fas fa-trash text-xs md:text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+            list.appendChild(item);
+        });
+    })
+    .catch(err => {
+        console.error('Error loading addresses:', err);
+        document.getElementById('address-list').innerHTML = '<p class="text-red-400 text-center py-8">Failed to load addresses</p>';
+    });
+}
+
+// View emails for address
+function viewEmails(address) {
+    selectedAddress = address;
+    document.getElementById('selected-address').textContent = address;
+    
+    fetch(API_URL + '/api/admin/emails/' + encodeURIComponent(address), {
+        credentials: 'include'
+    })
+    .then(res => res.json())
+    .then(data => {
+        var details = document.getElementById('email-details');
+        var badge = document.getElementById('email-count-badge');
+        
+        if (!data || data.error) {
+            details.innerHTML = '<p class="text-red-400 text-center py-8">Error loading emails</p>';
+            badge.classList.add('hidden');
+            return;
+        }
+        
+        if (!data.emails || data.emails.length === 0) {
+            details.innerHTML = '<p class="text-gray-400 text-center py-8">No emails for this address</p>';
+            badge.textContent = '0 emails';
+            badge.classList.remove('hidden');
+            return;
+        }
+        
+        // Update badge
+        badge.textContent = data.emails.length + ' email' + (data.emails.length !== 1 ? 's' : '');
+        badge.classList.remove('hidden');
+        
+        details.innerHTML = '';
+        
+        data.emails.forEach(email => {
+            var item = document.createElement('div');
+            item.className = 'bg-gray-800 p-3 md:p-4 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors cursor-pointer';
+            
+            // Make entire card clickable
+            item.onclick = function() {
+                viewFullAdminEmail(email);
+            };
+            
+            // Clean and truncate body for preview
+            var cleanBody = email.body ? email.body.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() : 'No content';
+            var previewBody = cleanBody.length > 100 ? cleanBody.substring(0, 100) + '...' : cleanBody;
+            
+            item.innerHTML = `
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex-1">
+                        <p class="text-white font-semibold text-xs md:text-sm truncate">${escapeHtml(email.sender || 'Unknown')}</p>
+                        <p class="text-gray-300 text-xs md:text-sm font-medium mt-1">${escapeHtml(email.subject || 'No subject')}</p>
+                        <p class="text-xs text-gray-400 mt-1">${formatTime(email.timestamp)}</p>
+                    </div>
+                    <button onclick="event.stopPropagation(); deleteEmail(${email.id})" 
+                            class="text-red-400 hover:text-red-300 p-1 md:p-2 rounded transition-colors ml-2" 
+                            title="Delete email">
+                        <i class="fas fa-trash text-xs md:text-sm"></i>
+                    </button>
+                </div>
+                <p class="text-xs text-gray-400 mt-2">${escapeHtml(previewBody)}</p>
+                <div class="mt-2 text-xs text-blue-400 hover:text-blue-300">
+                    <i class="fas fa-eye mr-1"></i>Click to view full email
+                </div>
+            `;
+            
+            details.appendChild(item);
+        });
+    })
+    .catch(err => {
+        console.error('Error loading emails:', err);
+        document.getElementById('email-details').innerHTML = '<p class="text-red-400 text-center py-8">Failed to load emails</p>';
+    });
+}
+
+// Delete single email
+function deleteEmail(emailId) {
+    showModal(
+        'Delete Email',
+        'Are you sure you want to delete this email? This action cannot be undone.',
+        function() {
+            fetch(API_URL + '/api/admin/delete/' + emailId, {
+                method: 'DELETE',
+                credentials: 'include'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    if (selectedAddress) viewEmails(selectedAddress);
+                    loadStats();
+                    showNotification('✅ Email deleted successfully', 'success');
+                } else {
+                    showNotification('❌ Failed to delete email', 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error deleting email:', err);
+                showNotification('❌ Error deleting email', 'error');
+            });
+        }
+    );
+}
+
+// Delete all emails for address
+function deleteAddress(address) {
+    showModal(
+        'Delete All Emails',
+        `Are you sure you want to delete ALL emails for <strong>${escapeHtml(address)}</strong>?<br><br>This action cannot be undone and will permanently remove all emails for this address.`,
+        function() {
+            fetch(API_URL + '/api/admin/delete-address/' + encodeURIComponent(address), {
+                method: 'DELETE',
+                credentials: 'include'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    loadAddresses();
+                    loadStats();
+                    document.getElementById('email-details').innerHTML = '<p class="text-gray-400 text-center py-8">Select an email address to view emails</p>';
+                    document.getElementById('selected-address').textContent = 'None selected';
+                    document.getElementById('email-count-badge').classList.add('hidden');
+                    showNotification('✅ All emails deleted for ' + address, 'success');
+                } else {
+                    showNotification('❌ Failed to delete emails', 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error deleting address:', err);
+                showNotification('❌ Error deleting emails', 'error');
+            });
+        }
+    );
+}
+
+// Load stats
+function loadStats() {
+    fetch(API_URL + '/api/admin/stats', {
+        credentials: 'include'
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data && !data.error) {
+            document.getElementById('stat-emails').textContent = data.total_emails || 0;
+            document.getElementById('stat-addresses').textContent = data.total_addresses || 0;
+            document.getElementById('stat-recent').textContent = data.recent_emails || 0;
+        }
+    })
+    .catch(err => {
+        console.error('Error loading stats:', err);
+    });
+}
+
+// Load active sessions with end session functionality
+function loadActiveSessions() {
+    fetch(API_URL + '/api/admin/sessions', {
+        credentials: 'include'
+    })
+    .then(res => {
+        if (res.status === 401) {
+            location.reload();
+            return;
+        }
+        return res.json();
+    })
+    .then(data => {
+        var sessionsEl = document.getElementById('active-sessions');
+        
+        if (!data || data.error) {
+            sessionsEl.innerHTML = '<p class="text-red-400 text-center py-8">Error loading sessions</p>';
+            return;
+        }
+        
+        if (!data.sessions || data.sessions.length === 0) {
+            sessionsEl.innerHTML = '<p class="text-gray-400 text-center py-8">No active sessions</p>';
+            return;
+        }
+        
+        sessionsEl.innerHTML = '';
+        
+        data.sessions.forEach(session => {
+            var item = document.createElement('div');
+            item.className = 'session-item bg-gray-800 p-3 md:p-4 rounded-lg border border-gray-700 hover:border-gray-600';
+            item.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <p class="text-white font-semibold text-xs md:text-sm truncate">${escapeHtml(session.email)}</p>
+                        <div class="grid grid-cols-2 gap-2 mt-2 text-xs text-gray-400">
+                            <div>
+                                <i class="fas fa-play-circle mr-1"></i>
+                                ${session.session_age_minutes} min ago
+                            </div>
+                            <div>
+                                <i class="fas fa-clock mr-1"></i>
+                                ${session.time_remaining_minutes} min left
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">
+                            Last active: ${formatTime(session.last_activity)}
+                        </p>
+                    </div>
+                    <button onclick="endUserSession('${session.session_token}', '${escapeHtml(session.email)}')" class="text-red-400 hover:text-red-300 p-1 md:p-2 rounded transition-colors ml-2" title="End Session">
+                        <i class="fas fa-times-circle text-xs md:text-sm"></i>
+                    </button>
+                </div>
+            `;
+            sessionsEl.appendChild(item);
+        });
+    })
+    .catch(err => {
+        console.error('Error loading sessions:', err);
+        document.getElementById('active-sessions').innerHTML = '<p class="text-red-400 text-center py-8">Failed to load sessions</p>';
+    });
+}
+
+// Utility functions
+function escapeHtml(text) {
+    if (!text) return '';
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatTime(timestamp) {
+    if (!timestamp) return 'never';
+    
+    try {
+        var date;
+        if (typeof timestamp === 'string') {
+            date = new Date(timestamp);
+        } else if (timestamp instanceof Date) {
+            date = timestamp;
+        } else {
+            date = new Date(timestamp);
+        }
+        
+        var now = new Date();
+        var diff = now - date;
+        var seconds = Math.floor(diff / 1000);
+        var minutes = Math.floor(seconds / 60);
+        var hours = Math.floor(minutes / 60);
+        var days = Math.floor(hours / 24);
+        
+        if (seconds < 10) return 'just now';
+        if (seconds < 60) return seconds + ' sec ago';
+        if (minutes < 60) return minutes + ' min ago';
+        if (hours < 24) return hours + ' hour ago';
+        if (days < 7) return days + ' day ago';
+        
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    } catch (e) {
+        return 'unknown';
+    }
+}
+
+function showNotification(message, type) {
+    var bgColor = type === 'success' ? 'bg-green-600' : 'bg-red-600';
+    var icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+    
+    var notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 ${bgColor} text-white px-4 md:px-6 py-2 md:py-3 rounded-lg shadow-lg z-50 fade-in flex items-center text-sm md:text-base`;
+    notification.innerHTML = `<i class="fas ${icon} mr-2"></i>${message}`;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.classList.add('opacity-0');
+        notification.classList.add('transition-opacity');
+        setTimeout(() => {
+            notification.remove();
+        }, 300);
+    }, 3000);
+}
+</script>
+</body>
+</html>
