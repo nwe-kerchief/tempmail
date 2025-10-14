@@ -146,178 +146,278 @@ def is_username_blacklisted(username):
         logger.error(f"Error checking blacklist: {e}")
         return username.lower() in INITIAL_BLACKLIST
 
-# =============================================================================
-# BEAUTIFUL EMAIL RENDERING SYSTEM
-# =============================================================================
 
-def parse_email_beautifully(raw_email):
-    """Main function: Parse any email and make it beautiful"""
+def parse_email_with_mailparser(raw_email):
+    """Parse email using mail-parser library - MAIN PARSING FUNCTION"""
     try:
-        # Use mail-parser to get clean content
         mail = mailparser.parse_from_string(raw_email)
         
         parsed_data = {
             'subject': mail.subject or 'No subject',
-            'from_email': extract_simple_sender(mail),
+            'from_email': get_clean_sender(mail),
+            'to': get_clean_recipient(mail),
+            'date': mail.date.isoformat() if mail.date else None,
             'body_plain': '',
             'body_html': '',
+            'verification_codes': [],
             'attachments': len(mail.attachments)
         }
         
-        # Get plain text
+        # Get plain text body
         if mail.text_plain:
             parsed_data['body_plain'] = '\n'.join(mail.text_plain)
         elif mail.body:
             parsed_data['body_plain'] = mail.body
-            
-        # Get HTML
+        
+        # Get HTML body
         if mail.text_html:
             parsed_data['body_html'] = '\n'.join(mail.text_html)
-            
-        logger.info(f"✅ Email parsed: {parsed_data['from_email']}")
+        
+        # Extract verification codes
+        parsed_data['verification_codes'] = extract_verification_codes(
+            parsed_data['body_plain'] or parsed_data['body_html'] or ''
+        )
+        
+        logger.info(f"✅ Email parsed: {parsed_data['from_email']} -> {len(parsed_data['body_plain'])} chars")
         return parsed_data
         
     except Exception as e:
-        logger.error(f"❌ Parse error: {e}")
-        return parse_email_simple_fallback(raw_email)
+        logger.error(f"❌ mail-parser error: {e}")
+        return parse_email_fallback(raw_email)
 
-def extract_simple_sender(mail):
-    """Extract sender simply"""
+def get_clean_sender(mail):
+    """Extract clean sender address"""
     if mail.from_:
-        try:
-            if isinstance(mail.from_[0], (list, tuple)) and len(mail.from_[0]) > 1:
-                return mail.from_[0][1]
+        if isinstance(mail.from_[0], (list, tuple)):
+            return mail.from_[0][1] if len(mail.from_[0]) > 1 else str(mail.from_[0][0])
+        elif hasattr(mail.from_[0], 'email'):
+            return mail.from_[0].email
+        else:
             return str(mail.from_[0])
-        except:
-            pass
     return 'Unknown'
 
-def parse_email_simple_fallback(raw_email):
-    """Simple fallback parsing"""
+def get_clean_recipient(mail):
+    """Extract clean recipient address"""
+    if mail.to:
+        if isinstance(mail.to[0], (list, tuple)):
+            return mail.to[0][1] if len(mail.to[0]) > 1 else str(mail.to[0][0])
+        elif hasattr(mail.to[0], 'email'):
+            return mail.to[0].email
+        else:
+            return str(mail.to[0])
+    return 'Unknown'
+
+def extract_verification_codes(text):
+    """Extract ONLY real verification codes (not CSS/dimensions)"""
+    if not text:
+        return []
+    
+    codes = []
+    
+    # Pattern 1: Codes that are clearly labeled as verification codes
+    labeled_patterns = [
+        r'(?:code|verification|verify|confirmation|security|otp|pin)[\s:\-]*[#]?\s*(\d{4,8})\b',
+        r'\b(\d{4,8})\s*(?:is your|is the|is my|your|code|verification|OTP|PIN)\b',
+        r'\b(?:enter|use|type|input)[\s\w]*[:]?\s*(\d{4,8})\b',
+        r'(?:code|verification)\s*is\s*[#]?\s*(\d{4,8})\b'
+    ]
+    
+    # Pattern 2: Codes in prominent HTML positions
+    html_patterns = [
+        r'<strong[^>]*>(\d{4,8})</strong>',
+        r'<div[^>]*class=["\'][^"\']*code["\'][^>]*>(\d{4,8})</div>',
+        r'<span[^>]*style=["\'][^"\']*font-size[^"\']*["\'][^>]*>(\d{4,8})</span>',
+        r'verification code:?\s*<[^>]*>(\d{4,8})<[^>]*>'
+    ]
+    
+    # First check for clearly labeled codes
+    for pattern in labeled_patterns:
+        matches = re.finditer(pattern, text, re.IGNORECASE)
+        for match in matches:
+            if match.groups():
+                code = match.group(1)
+                if code and code not in codes:
+                    codes.append(code)
+    
+    # If no labeled codes found, check HTML positions
+    if not codes:
+        for pattern in html_patterns:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                if match.groups():
+                    code = match.group(1)
+                    if code and code not in codes:
+                        codes.append(code)
+    
+    # Final fallback: look for standalone codes in clean text
+    if not codes:
+        # Clean the text first to remove common false positives
+        clean_text = re.sub(r'\b(?:width|height|padding|margin|size)=?["\']?\d+["\']?', '', text, flags=re.IGNORECASE)
+        clean_text = re.sub(r'\b\d{1,3}px\b', '', clean_text)
+        clean_text = re.sub(r'#([a-fA-F0-9]{6})', '', clean_text)
+        
+        # Look for codes that appear in meaningful contexts
+        standalone_matches = re.finditer(r'\b(\d{6})\b', clean_text)
+        for match in standalone_matches:
+            code = match.group(1)
+            # Check if this code appears near verification keywords
+            code_pos = match.start()
+            context_start = max(0, code_pos - 100)
+            context_end = min(len(clean_text), code_pos + 100)
+            context = clean_text[context_start:context_end].lower()
+            
+            verification_words = ['code', 'verification', 'verify', 'confirm', 'security', 'otp']
+            if any(word in context for word in verification_words):
+                if code and code not in codes:
+                    codes.append(code)
+    
+    # Remove duplicates and return
+    seen = set()
+    return [code for code in codes if not (code in seen or seen.add(code))]
+
+def clean_sender_address(sender):
+    """Clean sender address from common formats"""
+    if not sender:
+        return 'Unknown'
+    
+    # Extract email from "Name <email@domain.com>" format
+    if '<' in sender and '>' in sender:
+        email_match = re.search(r'<([^>]+)>', sender)
+        if email_match:
+            return email_match.group(1)
+    
+    # Clean bounce addresses
+    if 'bounce' in sender.lower():
+        if '@' in sender:
+            domain_part = sender.split('@')[1]
+            if 'openai.com' in domain_part or 'mandrillapp.com' in domain_part:
+                return 'ChatGPT'
+            elif 'afraid.org' in domain_part:
+                return 'FreeDNS'
+            else:
+                return 'Notification'
+    
+    return sender.strip()
+
+
+def parse_email_fallback(raw_email):
+    """Fallback parsing when mail-parser fails"""
     try:
         msg = email.message_from_string(raw_email, policy=policy.default)
-        return {
-            'subject': msg.get('subject', 'No subject'),
-            'from_email': msg.get('from', 'Unknown'),
-            'body_plain': extract_simple_content(msg),
-            'body_html': '',
-            'attachments': 0
-        }
-    except:
-        return {
-            'subject': 'Failed to parse',
-            'from_email': 'Unknown',
-            'body_plain': 'This email could not be parsed.',
-            'body_html': '',
-            'attachments': 0
-        }
-
-def extract_simple_content(msg):
-    """Extract content from email"""
-    body = ""
-    if msg.is_multipart():
-        for part in msg.walk():
-            content_type = part.get_content_type()
-            if content_type == 'text/plain':
+        
+        # Use your old extract_content_from_mime logic but simplified
+        body_content = ""
+        if msg.is_multipart():
+            for part in msg.walk():
+                content_type = part.get_content_type()
+                content_disposition = str(part.get("Content-Disposition", ""))
+                
+                if "attachment" in content_disposition:
+                    continue
+                
                 try:
                     payload = part.get_payload(decode=True)
                     if payload:
-                        return payload.decode('utf-8', errors='ignore')
-                except:
+                        decoded = payload.decode('utf-8', errors='ignore')
+                        if content_type == 'text/plain' and not body_content:
+                            body_content = decoded
+                        elif content_type == 'text/html' and not body_content:
+                            body_content = decoded
+                except Exception:
                     continue
-    else:
-        payload = msg.get_payload(decode=True)
-        if payload:
-            body = payload.decode('utf-8', errors='ignore')
-    return body
+        else:
+            payload = msg.get_payload(decode=True)
+            if payload:
+                body_content = payload.decode('utf-8', errors='ignore')
+        
+        return {
+            'subject': msg.get('subject', 'No subject'),
+            'from_email': clean_sender_address(msg.get('from', 'Unknown')),
+            'to': msg.get('to', 'Unknown'),
+            'date': msg.get('date', ''),
+            'body_plain': body_content or 'No content',
+            'body_html': '',
+            'verification_codes': extract_verification_codes(body_content or ''),
+            'attachments': 0
+        }
+    except Exception as e:
+        logger.error(f"❌ Fallback parsing failed: {e}")
+        return {
+            'subject': 'Failed to parse email',
+            'from_email': 'Unknown',
+            'to': 'Unknown', 
+            'date': '',
+            'body_plain': 'This email could not be parsed properly.',
+            'body_html': '',
+            'verification_codes': [],
+            'attachments': 0
+        }
 
-def render_beautiful_email(parsed_email):
-    """Make email beautiful based on its content"""
-    text = parsed_email.get('body_plain', '')
-    html = parsed_email.get('body_html', '')
+def clean_sender_address(sender):
+    """Clean sender address from common formats"""
+    if not sender:
+        return 'Unknown'
     
-    # Extract verification code
-    verification_code = extract_single_verification_code(text)
+    if '<' in sender and '>' in sender:
+        email_match = re.search(r'<([^>]+)>', sender)
+        if email_match:
+            return email_match.group(1)
     
-    # Choose rendering method
-    if verification_code:
-        return render_verification_email(text, verification_code)
-    elif html and len(html) > 200:
-        return render_html_email(html)
-    else:
-        return render_text_email(text)
-
-def extract_single_verification_code(text):
-    """Find the real verification code (not false positives)"""
-    # Look for 6-digit codes near verification words
-    lines = text.split('\n')
+    if 'bounce' in sender.lower():
+        if '@' in sender:
+            domain_part = sender.split('@')[1]
+            if 'openai.com' in domain_part or 'mandrillapp.com' in domain_part:
+                return 'ChatGPT'
+            elif 'afraid.org' in domain_part:
+                return 'FreeDNS'
+            else:
+                return 'Notification'
     
-    for i, line in enumerate(lines):
-        line_lower = line.lower()
-        if any(word in line_lower for word in ['code', 'verification', 'verify', 'confirm', 'otp']):
-            # Check this line and next 2 lines for 6-digit code
-            for j in range(i, min(i+3, len(lines))):
-                code_match = re.search(r'\b(\d{6})\b', lines[j])
-                if code_match:
-                    return code_match.group(1)
+    return sender.strip()
+
+def get_display_body(parsed_email):
+    """Convert parsed email to display-ready format"""
+    raw_content = parsed_email['body_plain']
     
-    return None
-
-def render_verification_email(text, verification_code):
-    """Beautiful verification email with big code box"""
-    clean_text = clean_email_text(text)
+    if not raw_content and parsed_email['body_html']:
+        h = html2text.HTML2Text()
+        h.ignore_links = False
+        h.ignore_images = True
+        h.body_width = 0
+        raw_content = h.handle(parsed_email['body_html'])
     
-    return f'''
-    <div class="beautiful-email">
-        <div class="verification-hero">
-            <div class="verification-badge">Verification Code</div>
-            <div class="verification-code-large">{verification_code}</div>
-            <div class="verification-hint">Copy this code to verify your account</div>
-        </div>
-        <div class="email-content-text">
-            {format_text_as_html(clean_text)}
-        </div>
-    </div>
-    '''
+    if not raw_content:
+        return {
+            'content': '<p class="text-gray-400">No readable content found</p>',
+            'verification_codes': []
+        }
+    
+    clean_content = format_email_content(raw_content, parsed_email['verification_codes'])
+    
+    return {
+        'content': clean_content,
+        'verification_codes': parsed_email['verification_codes']
+    }
 
-def render_html_email(html_content):
-    """Safe HTML email display"""
-    safe_html = sanitize_html(html_content)
-    return f'''
-    <div class="beautiful-email">
-        <div class="html-email-container">
-            {safe_html}
-        </div>
-    </div>
-    '''
-
-def render_text_email(text):
-    """Clean text email display"""
-    clean_text = clean_email_text(text)
-    return f'''
-    <div class="beautiful-email">
-        <div class="text-email-container">
-            {format_text_as_html(clean_text)}
-        </div>
-    </div>
-    '''
-
-def clean_email_text(text):
-    """Remove email headers and junk"""
+def format_email_content(text, verification_codes):
+    """Format email content for HTML display"""
     if not text:
-        return "No content"
+        return '<p class="text-gray-400">No content</p>'
+    
+    text = text.strip()
+    
+    header_patterns = [
+        'Received:', 'Received-SPF:', 'ARC-Seal:', 'ARC-Message-Signature:',
+        'DKIM-Signature:', 'Authentication-Results:', 'Return-Path:',
+        'Delivered-To:', 'Content-Type:', 'MIME-Version:'
+    ]
     
     lines = text.split('\n')
     clean_lines = []
-    in_body = False
-    
-    header_patterns = [
-        'Received:', 'From:', 'To:', 'Subject:', 'Date:', 'Return-Path:',
-        'Delivered-To:', 'DKIM-Signature:', 'Content-Type:', 'MIME-Version:'
-    ]
+    skip_mode = False
     
     for line in lines:
-        line = line.strip()
+        line = line.rstrip()
         if not line:
             if clean_lines:
                 clean_lines.append('')
@@ -325,73 +425,43 @@ def clean_email_text(text):
             
         is_header = any(line.startswith(pattern) for pattern in header_patterns)
         
-        if is_header and not in_body:
+        if is_header:
+            skip_mode = True
             continue
             
-        if not is_header:
-            in_body = True
+        if skip_mode and line and not line.startswith(' ') and not line.startswith('\t'):
+            skip_mode = False
             
-        if in_body:
+        if not skip_mode:
             clean_lines.append(line)
     
-    return '\n'.join(clean_lines).strip()
-
-def format_text_as_html(text):
-    """Convert plain text to formatted HTML"""
-    if not text:
-        return '<p class="no-content">No readable content</p>'
+    text = '\n'.join(clean_lines)
+    
+    html_parts = []
+    
+    for code in verification_codes:
+        html_parts.append(f'<div class="verification-code">{code}</div>')
     
     paragraphs = re.split(r'\n\s*\n', text)
-    html_paragraphs = []
     
     for paragraph in paragraphs:
         paragraph = paragraph.strip()
         if len(paragraph) > 10:
-            # Convert URLs to links
             paragraph = re.sub(
-                r'(https?://[^\s]+)',
-                r'<a href="\1" target="_blank" class="text-link">\1</a>',
+                r'(https?://[^\s]+)', 
+                r'<a href="\1" target="_blank" class="text-blue-400 hover:underline">\1</a>', 
                 paragraph
             )
-            html_paragraphs.append(f'<p>{escapeHtml(paragraph)}</p>')
+            
+            for code in verification_codes:
+                paragraph = paragraph.replace(code, f'<strong class="text-yellow-300">{code}</strong>')
+            
+            html_parts.append(f'<p class="mb-4 leading-relaxed text-gray-200">{paragraph}</p>')
     
-    return '\n'.join(html_paragraphs) if html_paragraphs else '<p class="no-content">No readable content</p>'
-
-def sanitize_html(html):
-    """Make HTML safe to display"""
-    try:
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(html, 'html.parser')
-        
-        # Remove dangerous tags
-        for tag in soup(['script', 'style', 'meta', 'link', 'head', 'form']):
-            tag.decompose()
-        
-        # Keep only safe tags
-        safe_tags = ['div', 'p', 'span', 'br', 'strong', 'em', 'b', 'i', 'u', 'a', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'img']
-        for tag in soup.find_all(True):
-            if tag.name not in safe_tags:
-                tag.unwrap()
-        
-        # Clean attributes
-        for tag in soup.find_all():
-            if tag.name == 'a':
-                tag.attrs = {'href': tag.get('href', '#'), 'class': 'text-link', 'target': '_blank'}
-            elif tag.name == 'img':
-                tag.attrs = {'src': tag.get('src', ''), 'class': 'safe-image'}
-            else:
-                tag.attrs = {}
-        
-        return str(soup)
-    except:
-        return '<p>Could not display HTML content</p>'
-
-def escapeHtml(text):
-    """Basic HTML escaping"""
-    if not text:
-        return ""
-    return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
-
+    if not html_parts:
+        html_parts.append('<p class="text-gray-400">No readable content found in this email.</p>')
+    
+    return '\n'.join(html_parts)
 
 def validate_session(email_address, session_token):
     """Validate if session is valid"""
@@ -768,9 +838,8 @@ def webhook_inbound():
         body = json_data.get('html_body') or json_data.get('plain_body') or 'No content'
         
         # PARSE EMAIL WITH NEW MAIL-PARSER SYSTEM
-                # Parse email beautifully
-        parsed_email = parse_email_beautifully(body)
-        display_content = render_beautiful_email(parsed_email)
+        parsed_email = parse_email_with_mailparser(body)
+        display_content = get_display_body(parsed_email)
         
         # Use parsed subject if available and better
         if parsed_email['subject'] and parsed_email['subject'] != 'No subject':
