@@ -771,7 +771,7 @@ def get_emails(email_address):
         logger.error(f"❌ Error getting emails: {e}")
         return jsonify({'error': str(e)}), 500
     
-    @app.route('/api/debug/test-codes', methods=['POST'])
+@app.route('/api/debug/test-codes', methods=['POST'])
 def debug_test_codes():
     """Test code extraction with sample text"""
     try:
