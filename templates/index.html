@@ -641,6 +641,22 @@ function showModal(title, message, confirmCallback) {
     document.getElementById('modal-cancel').onclick = function() {
         modal.classList.add('hidden');
     };
+}   
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(function() {
+        // Show success notification
+        showNotification('✅ Verification code copied: ' + text, 'success');
+    }).catch(function() {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        showNotification('✅ Verification code copied: ' + text, 'success');
+    });
 }
 
 function showNotification(message, type) {
@@ -1543,16 +1559,19 @@ function updateEmailTimes() {
 }
 
 function viewEmail(email, itemEl) {
-    // Set active state (keep existing code)
-    document.querySelectorAll('.email-list-item').forEach(el => el.classList.remove('active', 'bg-blue-600', 'border-blue-500'));
+    // Set active state on the clicked email item
+    document.querySelectorAll('.email-list-item').forEach(el => {
+        el.classList.remove('active', 'bg-blue-600', 'border-blue-500');
+    });
     itemEl.classList.add('active', 'bg-blue-600', 'border-blue-500');
     
-    // Mobile: Switch to email content view
+    // MOBILE: Switch to email content view
     if (window.innerWidth < 768) {
         showEmailContent();
         displayEmailInIframe(email, 'email');
-    } else {
-        // Desktop: Update desktop panel
+    } 
+    // DESKTOP: Update right panel
+    else {
         document.getElementById('desktop-email-placeholder').style.display = 'none';
         document.getElementById('desktop-email-content-inner').classList.remove('hidden');
         displayEmailInIframe(email, 'desktop-email');
@@ -1571,7 +1590,36 @@ function displayEmailInIframe(email, prefix) {
     // ✅ ALWAYS USE FALLBACK DIV - NEVER USE IFRAME
     iframe.classList.add('hidden');
     fallback.classList.remove('hidden');
-    fallback.innerHTML = email.body || '<p class="text-gray-400">No content available</p>';
+    
+    // Enhanced email content with dark theme
+    let emailContent = email.body || '<p class="text-gray-400 text-center py-8">No content available</p>';
+    
+    // Add dark theme wrapper if needed
+    if (!email.body || !email.body.includes('bg-gray-900')) {
+        emailContent = `<div class="email-content bg-gray-900/60 rounded-lg p-4 border border-gray-700 min-h-full">${emailContent}</div>`;
+    }
+    
+    fallback.innerHTML = emailContent;
+    
+    // Add click handlers for buttons and verification codes
+    setTimeout(() => {
+        // Make verification codes clickable to copy
+        const verificationCodes = fallback.querySelectorAll('.bg-yellow-200');
+        verificationCodes.forEach(codeElement => {
+            codeElement.style.cursor = 'pointer';
+            codeElement.addEventListener('click', function() {
+                const code = this.textContent.trim();
+                copyToClipboard(code);
+            });
+        });
+        
+        // Make all links open in new tab
+        const links = fallback.querySelectorAll('a');
+        links.forEach(link => {
+            link.setAttribute('target', '_blank');
+            link.setAttribute('rel', 'noopener noreferrer');
+        });
+    }, 100);
 }
 
 
