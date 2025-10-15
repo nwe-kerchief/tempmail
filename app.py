@@ -419,6 +419,7 @@ def get_display_body(parsed_email):
         'verification_codes': parsed_email['verification_codes']
     }
 
+
 def format_email_content(text, verification_codes):
     """Format email content for HTML display - preserve original structure"""
     if not text:
@@ -444,34 +445,40 @@ def format_email_content(text, verification_codes):
     # Convert to HTML with minimal changes
     html_content = escapeHtml(text)
     
-    # Highlight verification codes in their original positions
+    # Highlight verification codes in their original positions with centered styling
     for code in verification_codes:
         html_content = html_content.replace(
             code, 
-            f'<span class="bg-yellow-200 text-yellow-900 px-2 py-1 rounded font-mono font-bold border border-yellow-400">{code}</span>'
+            f'<div class="text-center my-6"><span class="bg-yellow-200 text-yellow-900 px-6 py-4 rounded-lg font-mono font-bold border-2 border-yellow-400 text-2xl inline-block cursor-pointer hover:bg-yellow-300 transition-colors" onclick="copyToClipboard(\'{code}\')">{code}</span><p class="text-sm text-gray-400 mt-2">Click to copy verification code</p></div>'
         )
     
-    # Make "Sign in" text into a clickable button
+    # First, make ALL URLs clickable (but not styled as buttons yet)
     html_content = re.sub(
-        r'Sign in\s*\[(https?://[^\]]+)\]',
-        r'<a href="\1" target="_blank" class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-all transform hover:scale-105 shadow-lg mt-2 mb-4">🔐 Sign in to your account</a>',
+        r'(https?://[^\s<]+)', 
+        r'[URL:\1]', 
         html_content
     )
     
-    # Make other URLs clickable (fallback)
+    # Now create buttons for specific patterns
+    # Pattern 1: "Sign in to your account" followed by URL on next line(s)
     html_content = re.sub(
-        r'(https?://[^\s]+)', 
-        r'<a href="\1" target="_blank" class="text-blue-400 hover:underline">\1</a>', 
+        r'Sign in to your account\s*\[URL:(https?://[^\]]+)\]',
+        r'<div class="text-center my-6"><a href="\1" target="_blank" class="inline-block bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold py-4 px-8 rounded-xl transition-all transform hover:scale-105 shadow-lg text-lg"><i class="fas fa-sign-in-alt mr-3"></i>Sign in to your account</a></div>',
+        html_content
+    )
+    
+    # Pattern 2: Standalone verification URLs
+    html_content = re.sub(
+        r'\[URL:(https?://[^\]]+)\]',
+        r'<a href="\1" target="_blank" class="text-blue-400 hover:underline break-all">\1</a>',
         html_content
     )
     
     # Preserve line breaks and whitespace
     html_content = html_content.replace('\n', '<br>')
     
-    # Dark background wrapper
-    return f'<div class="email-content whitespace-pre-wrap text-gray-200 leading-relaxed font-sans bg-gray-900/50 p-4 rounded-lg border border-gray-700">{html_content}</div>'
+    return f'<div class="email-content whitespace-pre-wrap text-gray-200 leading-relaxed font-sans bg-gray-900/50 p-6 rounded-lg border border-gray-700">{html_content}</div>'
 
-# Add this helper function if missing
 def escapeHtml(text):
     if not text:
         return ''
