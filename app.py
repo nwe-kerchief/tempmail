@@ -147,8 +147,8 @@ def is_username_blacklisted(username):
         return username.lower() in INITIAL_BLACKLIST
 
 
+# In your Flask backend, ensure we're capturing ALL HTML content
 def parse_email_with_mailparser(raw_email):
-    """Parse email using mail-parser library - MAIN PARSING FUNCTION"""
     try:
         mail = mailparser.parse_from_string(raw_email)
         
@@ -163,22 +163,25 @@ def parse_email_with_mailparser(raw_email):
             'attachments': len(mail.attachments)
         }
         
-        # Get plain text body
+        # Get BOTH plain text and HTML bodies
         if mail.text_plain:
             parsed_data['body_plain'] = '\n'.join(mail.text_plain)
         elif mail.body:
             parsed_data['body_plain'] = mail.body
         
-        # Get HTML body
+        # Prioritize HTML content for iFrame display
         if mail.text_html:
-            parsed_data['body_html'] = '\n'.join(mail.text_html)
+            # Join all HTML parts
+            html_content = '\n'.join(mail.text_html)
+            parsed_data['body_html'] = html_content
+            # Use HTML as the main body for iFrame
+            parsed_data['body_plain'] = html_content  # This is what frontend receives
         
-        # Extract verification codes
-        parsed_data['verification_codes'] = extract_verification_codes(
-            parsed_data['body_plain'] or parsed_data['body_html'] or ''
-        )
+        # Enhanced verification code extraction
+        all_text = (parsed_data['body_plain'] or '') + ' ' + (parsed_data['body_html'] or '')
+        parsed_data['verification_codes'] = extract_verification_codes(all_text)
         
-        logger.info(f"✅ Email parsed: {parsed_data['from_email']} -> {len(parsed_data['body_plain'])} chars")
+        logger.info(f"✅ Email parsed: {parsed_data['from_email']} -> HTML: {len(parsed_data['body_html'])} chars, Codes: {parsed_data['verification_codes']}")
         return parsed_data
         
     except Exception as e:
@@ -208,72 +211,54 @@ def get_clean_recipient(mail):
     return 'Unknown'
 
 def extract_verification_codes(text):
-    """Extract ONLY real verification codes (not CSS/dimensions)"""
+    """Extract verification codes with more patterns"""
     if not text:
         return []
     
     codes = []
     
-    # Pattern 1: Codes that are clearly labeled as verification codes
-    labeled_patterns = [
+    # Enhanced patterns for common verification code formats
+    patterns = [
+        # ChatGPT specific patterns
+        r'temporary verification code:\s*(\d{6})',
+        r'verification code:\s*(\d{6})',
+        r'enter.*code:\s*(\d{6})',
+        r'code is:\s*(\d{6})',
+        
+        # General patterns
         r'(?:code|verification|verify|confirmation|security|otp|pin)[\s:\-]*[#]?\s*(\d{4,8})\b',
         r'\b(\d{4,8})\s*(?:is your|is the|is my|your|code|verification|OTP|PIN)\b',
         r'\b(?:enter|use|type|input)[\s\w]*[:]?\s*(\d{4,8})\b',
-        r'(?:code|verification)\s*is\s*[#]?\s*(\d{4,8})\b'
     ]
     
-    # Pattern 2: Codes in prominent HTML positions
-    html_patterns = [
-        r'<strong[^>]*>(\d{4,8})</strong>',
-        r'<div[^>]*class=["\'][^"\']*code["\'][^>]*>(\d{4,8})</div>',
-        r'<span[^>]*style=["\'][^"\']*font-size[^"\']*["\'][^>]*>(\d{4,8})</span>',
-        r'verification code:?\s*<[^>]*>(\d{4,8})<[^>]*>'
-    ]
-    
-    # First check for clearly labeled codes
-    for pattern in labeled_patterns:
-        matches = re.finditer(pattern, text, re.IGNORECASE)
+    for pattern in patterns:
+        matches = re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE)
         for match in matches:
             if match.groups():
                 code = match.group(1)
                 if code and code not in codes:
                     codes.append(code)
+                    logger.info(f"🔍 Found verification code: {code} with pattern: {pattern}")
     
-    # If no labeled codes found, check HTML positions
+    # Also look for standalone 6-digit codes near verification keywords
     if not codes:
-        for pattern in html_patterns:
-            matches = re.finditer(pattern, text, re.IGNORECASE)
-            for match in matches:
-                if match.groups():
-                    code = match.group(1)
-                    if code and code not in codes:
-                        codes.append(code)
+        verification_keywords = ['verification', 'verify', 'code', 'confirm', 'security', 'temporary']
+        words = text.split()
+        for i, word in enumerate(words):
+            if any(keyword in word.lower() for keyword in verification_keywords):
+                # Check surrounding words for 6-digit codes
+                for j in range(max(0, i-3), min(len(words), i+4)):
+                    if re.match(r'^\d{6}$', words[j]):
+                        if words[j] not in codes:
+                            codes.append(words[j])
+                            logger.info(f"🔍 Found nearby code: {words[j]}")
     
-    # Final fallback: look for standalone codes in clean text
-    if not codes:
-        # Clean the text first to remove common false positives
-        clean_text = re.sub(r'\b(?:width|height|padding|margin|size)=?["\']?\d+["\']?', '', text, flags=re.IGNORECASE)
-        clean_text = re.sub(r'\b\d{1,3}px\b', '', clean_text)
-        clean_text = re.sub(r'#([a-fA-F0-9]{6})', '', clean_text)
-        
-        # Look for codes that appear in meaningful contexts
-        standalone_matches = re.finditer(r'\b(\d{6})\b', clean_text)
-        for match in standalone_matches:
-            code = match.group(1)
-            # Check if this code appears near verification keywords
-            code_pos = match.start()
-            context_start = max(0, code_pos - 100)
-            context_end = min(len(clean_text), code_pos + 100)
-            context = clean_text[context_start:context_end].lower()
-            
-            verification_words = ['code', 'verification', 'verify', 'confirm', 'security', 'otp']
-            if any(word in context for word in verification_words):
-                if code and code not in codes:
-                    codes.append(code)
-    
-    # Remove duplicates and return
+    # Remove duplicates
     seen = set()
-    return [code for code in codes if not (code in seen or seen.add(code))]
+    unique_codes = [code for code in codes if not (code in seen or seen.add(code))]
+    
+    logger.info(f"✅ Final extracted codes: {unique_codes}")
+    return unique_codes
 
 def clean_sender_address(sender):
     """Clean sender address from common formats"""
@@ -928,6 +913,31 @@ def webhook_inbound():
     except Exception as e:
         logger.error(f"❌ Webhook error: {e}")
         return jsonify({'error': str(e)}), 400
+    
+@app.route('/api/debug/email-content', methods=['POST'])
+def debug_email_content():
+    """Debug endpoint to see raw email content"""
+    try:
+        data = request.get_json() or {}
+        raw_email = data.get('raw_email', '')
+        
+        if not raw_email:
+            return jsonify({'error': 'No email content provided'}), 400
+        
+        # Parse the email
+        parsed = parse_email_with_mailparser(raw_email)
+        
+        return jsonify({
+            'success': True,
+            'parsed_data': parsed,
+            'body_length': len(parsed.get('body_plain', '')),
+            'html_length': len(parsed.get('body_html', '')),
+            'codes_found': parsed.get('verification_codes', [])
+        })
+        
+    except Exception as e:
+        logger.error(f"Debug error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 def cleanup_expired_sessions():
     while True:
