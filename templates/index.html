@@ -1537,12 +1537,23 @@ function displayEmailInIframe(email, prefix) {
     fallback.innerHTML = email.body || '<p class="text-gray-400">No content available</p>';
 }
 
-if (isHtml) {
-    // ✅ JUST RETURN THE RAW HTML DIRECTLY - NO IFRAME WRAPPER
-    return { isHtml: false, content: rawBody };
-} else {
-    const formattedText = formatPlainTextEmail(rawBody);
-    return { isHtml: false, content: formattedText };
+function prepareEmailForIframe(rawBody) {
+    if (!rawBody || rawBody.trim() === '') {
+        return {
+            isHtml: false,
+            content: '<p class="text-gray-400 text-center py-8">No content available</p>'
+        };
+    }
+    
+    const isHtml = /<[a-z][\s\S]*>/i.test(rawBody);
+    
+    if (isHtml) {
+        // ✅ JUST RETURN RAW HTML - NO IFRAME WRAPPER
+        return { isHtml: false, content: rawBody };
+    } else {
+        const formattedText = formatPlainTextEmail(rawBody);
+        return { isHtml: false, content: formattedText };
+    }
 }
 
 function formatPlainTextEmail(text) {
@@ -2318,3 +2329,4 @@ document.getElementById('refresh-btn').addEventListener('click', function() {
 </script>
 </body>
 </html>
+
