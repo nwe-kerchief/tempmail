@@ -775,7 +775,6 @@ function formatPlainTextEmail(text) {
     return `<div class="text-gray-200 leading-relaxed">${formatted}</div>`;
 }
 
-// Fix the email background to be darker
 function prepareEmailForIframe(rawBody) {
     if (!rawBody || rawBody.trim() === '') {
         return {
@@ -784,21 +783,10 @@ function prepareEmailForIframe(rawBody) {
         };
     }
     
-    const isHtml = /<[a-z][\s\S]*>/i.test(rawBody);
-    
-    if (isHtml) {
-        // Wrap in dark background
-        return { 
-            isHtml: false, 
-            content: `<div class="bg-gray-900/80 p-4 rounded-lg min-h-full">${rawBody}</div>`
-        };
-    } else {
-        const formattedText = formatPlainTextEmail(rawBody);
-        return { 
-            isHtml: false, 
-            content: formattedText 
-        };
-    }
+    return { 
+        isHtml: false, 
+        content: `<div class="bg-gray-900/80 p-4 rounded-lg min-h-full">${rawBody}</div>`
+    };
 }
 
 // Show email list
