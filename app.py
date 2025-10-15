@@ -147,7 +147,6 @@ def is_username_blacklisted(username):
         return username.lower() in INITIAL_BLACKLIST
 
 
-# In your Flask backend, ensure we're capturing ALL HTML content
 def parse_email_with_mailparser(raw_email):
     try:
         mail = mailparser.parse_from_string(raw_email)
@@ -163,25 +162,46 @@ def parse_email_with_mailparser(raw_email):
             'attachments': len(mail.attachments)
         }
         
-        # Get BOTH plain text and HTML bodies
+        # Get ALL available text content
+        all_text_parts = []
+        
+        # Add subject to search context
+        if mail.subject:
+            all_text_parts.append(mail.subject)
+        
+        # Add plain text body
         if mail.text_plain:
-            parsed_data['body_plain'] = '\n'.join(mail.text_plain)
+            plain_text = '\n'.join(mail.text_plain)
+            parsed_data['body_plain'] = plain_text
+            all_text_parts.append(plain_text)
         elif mail.body:
             parsed_data['body_plain'] = mail.body
+            all_text_parts.append(mail.body)
         
-        # Prioritize HTML content for iFrame display
+        # Add HTML body (converted to text for code extraction)
         if mail.text_html:
-            # Join all HTML parts
             html_content = '\n'.join(mail.text_html)
             parsed_data['body_html'] = html_content
-            # Use HTML as the main body for iFrame
-            parsed_data['body_plain'] = html_content  # This is what frontend receives
+            
+            # Convert HTML to text for better code extraction
+            try:
+                h = html2text.HTML2Text()
+                h.ignore_links = True
+                h.ignore_images = True
+                h.ignore_tables = True
+                html_as_text = h.handle(html_content)
+                all_text_parts.append(html_as_text)
+            except Exception as e:
+                logger.warning(f"HTML to text conversion failed: {e}")
+                all_text_parts.append(html_content)
         
-        # Enhanced verification code extraction
-        all_text = (parsed_data['body_plain'] or '') + ' ' + (parsed_data['body_html'] or '')
-        parsed_data['verification_codes'] = extract_verification_codes(all_text)
+        # Combine all text for code extraction
+        combined_text = ' '.join(all_text_parts)
         
-        logger.info(f"✅ Email parsed: {parsed_data['from_email']} -> HTML: {len(parsed_data['body_html'])} chars, Codes: {parsed_data['verification_codes']}")
+        # Extract codes from combined text
+        parsed_data['verification_codes'] = extract_verification_codes(combined_text)
+        
+        logger.info(f"✅ Email parsed: {parsed_data['from_email']} -> Subject: '{parsed_data['subject']}', Codes: {parsed_data['verification_codes']}")
         return parsed_data
         
     except Exception as e:
@@ -219,11 +239,13 @@ def extract_verification_codes(text):
     
     # Enhanced patterns for common verification code formats
     patterns = [
-        # ChatGPT specific patterns
+        # ChatGPT specific patterns - FIXED
+        r'Your ChatGPT code is\s*(\d{6})',
         r'temporary verification code:\s*(\d{6})',
         r'verification code:\s*(\d{6})',
         r'enter.*code:\s*(\d{6})',
         r'code is:\s*(\d{6})',
+        r'code:\s*(\d{6})',
         
         # General patterns
         r'(?:code|verification|verify|confirmation|security|otp|pin)[\s:\-]*[#]?\s*(\d{4,8})\b',
@@ -232,26 +254,38 @@ def extract_verification_codes(text):
     ]
     
     for pattern in patterns:
-        matches = re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE)
-        for match in matches:
-            if match.groups():
-                code = match.group(1)
-                if code and code not in codes:
-                    codes.append(code)
-                    logger.info(f"🔍 Found verification code: {code} with pattern: {pattern}")
+        try:
+            matches = re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE)
+            for match in matches:
+                if match.groups():
+                    code = match.group(1)
+                    if code and len(code) >= 4 and code not in codes:
+                        codes.append(code)
+                        logger.info(f"🔍 Found verification code: {code} with pattern: {pattern}")
+        except Exception as e:
+            logger.warning(f"Pattern error {pattern}: {e}")
+            continue
     
-    # Also look for standalone 6-digit codes near verification keywords
+    # Also look for standalone 6-digit codes in context
     if not codes:
-        verification_keywords = ['verification', 'verify', 'code', 'confirm', 'security', 'temporary']
-        words = text.split()
-        for i, word in enumerate(words):
-            if any(keyword in word.lower() for keyword in verification_keywords):
-                # Check surrounding words for 6-digit codes
-                for j in range(max(0, i-3), min(len(words), i+4)):
-                    if re.match(r'^\d{6}$', words[j]):
-                        if words[j] not in codes:
-                            codes.append(words[j])
-                            logger.info(f"🔍 Found nearby code: {words[j]}")
+        # Find all 6-digit numbers
+        six_digit_matches = re.finditer(r'\b(\d{6})\b', text)
+        for match in six_digit_matches:
+            code = match.group(1)
+            # Check if this appears near verification keywords
+            start_pos = max(0, match.start() - 50)
+            end_pos = min(len(text), match.end() + 50)
+            context = text[start_pos:end_pos].lower()
+            
+            verification_keywords = [
+                'verification', 'verify', 'code', 'confirm', 'security', 
+                'temporary', 'chatgpt', 'openai', 'enter', 'use', 'input'
+            ]
+            
+            if any(keyword in context for keyword in verification_keywords):
+                if code not in codes:
+                    codes.append(code)
+                    logger.info(f"🔍 Found contextual code: {code} in context: {context}")
     
     # Remove duplicates
     seen = set()
@@ -735,6 +769,41 @@ def get_emails(email_address):
         
     except Exception as e:
         logger.error(f"❌ Error getting emails: {e}")
+        return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/debug/test-codes', methods=['POST'])
+def debug_test_codes():
+    """Test code extraction with sample text"""
+    try:
+        data = request.get_json() or {}
+        test_text = data.get('text', '')
+        
+        if not test_text:
+            # Use the actual ChatGPT email format
+            test_text = """
+            Your ChatGPT code is 746300
+            https://cdn.openai.com/API/logo-assets/openai-logo-email-header-2.png
+            Enter this temporary verification code to continue:
+            746300
+            Please ignore this email if this wasn't you trying to create a ChatGPT account.
+            """
+        
+        codes = extract_verification_codes(test_text)
+        
+        return jsonify({
+            'success': True,
+            'input_text': test_text,
+            'codes_found': codes,
+            'patterns_tested': [
+                'Your ChatGPT code is\\s*(\\d{6})',
+                'temporary verification code:\\s*(\\d{6})',
+                'verification code:\\s*(\\d{6})',
+                '\\b(\\d{6})\\b'
+            ]
+        })
+        
+    except Exception as e:
+        logger.error(f"Debug test error: {e}")
         return jsonify({'error': str(e)}), 500
     
 @app.route('/api/debug/create-test', methods=['POST'])
