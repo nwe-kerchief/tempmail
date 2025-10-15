@@ -420,16 +420,17 @@ def get_display_body(parsed_email):
     }
 
 def format_email_content(text, verification_codes):
-    """Format email content for HTML display"""
+    """Format email content for HTML display with dark theme"""
     if not text:
-        return '<p class="text-gray-400">No content</p>'
+        return '<p class="text-gray-400">No readable content found</p>'
     
     text = text.strip()
     
+    # Remove technical headers
     header_patterns = [
         'Received:', 'Received-SPF:', 'ARC-Seal:', 'ARC-Message-Signature:',
         'DKIM-Signature:', 'Authentication-Results:', 'Return-Path:',
-        'Delivered-To:', 'Content-Type:', 'MIME-Version:'
+        'Delivered-To:', 'Content-Type:', 'MIME-Version:', 'Message-ID:'
     ]
     
     lines = text.split('\n')
@@ -459,29 +460,39 @@ def format_email_content(text, verification_codes):
     
     html_parts = []
     
-    for code in verification_codes:
-        html_parts.append(f'<div class="verification-code">{code}</div>')
-    
+    # Process the main content with dark theme
     paragraphs = re.split(r'\n\s*\n', text)
     
     for paragraph in paragraphs:
         paragraph = paragraph.strip()
-        if len(paragraph) > 10:
+        if paragraph:
+            # Make URLs clickable with light blue color
             paragraph = re.sub(
                 r'(https?://[^\s]+)', 
-                r'<a href="\1" target="_blank" class="text-blue-400 hover:underline">\1</a>', 
+                r'<a href="\1" target="_blank" class="text-blue-300 hover:text-blue-200 hover:underline">\1</a>', 
                 paragraph
             )
             
+            # Highlight verification codes with darker yellow
             for code in verification_codes:
-                paragraph = paragraph.replace(code, f'<strong class="text-yellow-300">{code}</strong>')
+                paragraph = paragraph.replace(
+                    code, 
+                    f'<span class="bg-yellow-800 text-yellow-200 px-2 py-1 rounded font-mono font-bold border border-yellow-600">{code}</span>'
+                )
             
             html_parts.append(f'<p class="mb-4 leading-relaxed text-gray-200">{paragraph}</p>')
     
     if not html_parts:
-        html_parts.append('<p class="text-gray-400">No readable content found in this email.</p>')
+        html_parts.append('<p class="text-gray-400 text-center py-8">No readable content found in this email.</p>')
     
-    return '\n'.join(html_parts)
+    return f'<div class="email-content bg-gray-900/50 rounded-lg p-4 border border-gray-700">{ "".join(html_parts) }</div>'
+
+# Add this helper function if missing
+def escapeHtml(text):
+    if not text:
+        return ''
+    import html
+    return html.escape(text)
 
 def validate_session(email_address, session_token):
     """Validate if session is valid"""
