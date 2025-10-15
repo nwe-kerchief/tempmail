@@ -1,14 +1,15 @@
-
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TempMail - AMMZ</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp"></script>
+<title>Admin Panel - TempMail</title>
+<!-- Change this: -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Already fixed! No line-clamp plugin -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📧</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
 <style>
 body {
 font-family: 'Inter', sans-serif;
@@ -20,28 +21,13 @@ background: rgba(255, 255, 255, 0.15);
 backdrop-filter: blur(12px);
 border: 1px solid rgba(255, 255, 255, 0.2);
 }
-.email-item {
+.address-item {
 transition: all 0.2s ease;
 cursor: pointer;
 }
-.email-item:hover {
+.address-item:hover {
 background: rgba(255, 255, 255, 0.2);
 transform: translateY(-1px);
-}
-.email-item.active {
-background: rgba(168, 85, 247, 0.3);
-}
-#loader {
-border: 3px solid rgba(255, 255, 255, 0.3);
-border-top: 3px solid #fff;
-border-radius: 50%;
-width: 25px;
-height: 25px;
-animation: spin 1s linear infinite;
-}
-@keyframes spin {
-0% { transform: rotate(0deg); }
-100% { transform: rotate(360deg); }
 }
 .fade-in {
 animation: fadeIn 0.5s ease-in;
@@ -50,7 +36,56 @@ animation: fadeIn 0.5s ease-in;
 from { opacity: 0; transform: translateY(10px); }
 to { opacity: 1; transform: translateY(0); }
 }
-
+#login-screen {
+display: flex;
+justify-content: center;
+align-items: center;
+min-height: 100vh;
+}
+.login-box {
+background: rgba(255, 255, 255, 0.15);
+backdrop-filter: blur(12px);
+border: 1px solid rgba(255, 255, 255, 0.2);
+padding: 40px;
+border-radius: 20px;
+text-align: center;
+max-width: 400px;
+width: 100%;
+}
+.login-box input {
+width: 100%;
+padding: 15px;
+margin-bottom: 20px;
+background: rgba(0, 0, 0, 0.3);
+border: 2px solid rgba(255, 255, 255, 0.2);
+border-radius: 10px;
+color: white;
+font-size: 16px;
+}
+.login-box input::placeholder {
+color: rgba(255, 255, 255, 0.5);
+}
+.login-box button {
+width: 100%;
+padding: 15px;
+background: linear-gradient(135deg, #a855f7, #ec4899);
+border: none;
+border-radius: 10px;
+color: white;
+font-size: 16px;
+font-weight: bold;
+cursor: pointer;
+transition: all 0.3s ease;
+}
+.login-box button:hover {
+transform: translateY(-2px);
+box-shadow: 0 4px 12px rgba(168, 85, 247, 0.4);
+}
+.error {
+color: #fca5a5;
+margin-top: 10px;
+font-size: 14px;
+}
 
 /* Custom Modal */
 .modal-overlay {
@@ -107,30 +142,23 @@ background: rgba(255, 255, 255, 0.2);
 transform: translateY(-2px);
 }
 
-/* Improved inbox list styling */
-#email-list-container {
-height: calc(100% - 60px);
-overflow-y: auto;
+/* Scrollbar styling */
+.custom-scrollbar::-webkit-scrollbar {
+width: 6px;
 }
-.email-list-item {
-padding: 12px;
-border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-transition: all 0.2s ease;
-cursor: pointer;
-}
-.email-list-item:hover {
+.custom-scrollbar::-webkit-scrollbar-track {
 background: rgba(255, 255, 255, 0.1);
+border-radius: 3px;
 }
-.email-list-item.active {
-background: rgba(168, 85, 247, 0.3);
+.custom-scrollbar::-webkit-scrollbar-thumb {
+background: rgba(255, 255, 255, 0.3);
+border-radius: 3px;
 }
-.email-preview {
-display: -webkit-box;
--webkit-line-clamp: 2;
--webkit-box-orient: vertical;
-overflow: hidden;
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+background: rgba(255, 255, 255, 0.5);
 }
 
+/* Responsive Design */
 @media (max-width: 768px) {
 .mobile-stack { flex-direction: column; }
 .mobile-full { width: 100%; }
@@ -138,6 +166,7 @@ overflow: hidden;
 .mobile-inbox-container { flex-direction: column; height: auto; }
 .mobile-inbox-list { height: 300px; max-height: 300px; }
 .mobile-email-content { height: 400px; max-height: 400px; }
+.login-box { padding: 20px; margin: 10px; }
 }
 
 @media (min-width: 768px) {
@@ -150,47 +179,6 @@ height: 350px;
 max-height: 350px;
 }
 }
-/* Mobile single box design */
-@media (max-width: 768px) {
-    #inbox-main-container {
-        height: 500px !important;
-        max-height: 500px !important;
-    }
-    
-    #desktop-email-content {
-        display: none !important;
-    }
-    
-    #back-to-list {
-        display: flex !important;
-        background: rgba(255, 255, 255, 0.1);
-        border: none;
-        border-radius: 8px;
-        width: 36px;
-        height: 36px;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-    }
-}
-
-/* Desktop two-panel design */
-@media (min-width: 768px) {
-    #inbox-main-container {
-        height: 500px !important;
-        width: 40% !important;
-    }
-    
-    #desktop-email-content {
-        display: block !important;
-        height: 500px !important;
-        width: 58% !important;
-    }
-    
-    #back-to-list {
-        display: none !important;
-    }
-}
 
 /* iFrame Email System */
 .email-iframe-wrapper {
@@ -199,88 +187,65 @@ max-height: 350px;
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 12px;
     overflow: hidden;
-    background: white;
+    background: #111827; /* Dark background for wrapper */
 }
 
 .sandboxed-iframe {
     width: 100%;
     height: 100%;
     border: none;
-    background: white;
+    background: #111827; /* Dark iframe background */
 }
 
 .email-fallback {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(0, 0, 0, 0.6); /* Much darker */
     padding: 20px;
     border-radius: 12px;
     color: #e5e7eb;
     line-height: 1.6;
     height: 100%;
     overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+/* Better text contrast */
 .email-fallback p {
     margin-bottom: 1rem;
+    color: #f3f4f6; /* Lighter text for better contrast */
 }
 
 .email-fallback a {
-    color: #60a5fa;
+    color: #93c5fd; /* Lighter blue for better visibility */
     text-decoration: underline;
 }
 
-.email-fallback code {
-    background: rgba(255, 255, 255, 0.1);
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-family: monospace;
+.email-fallback a:hover {
+    color: #bfdbfe;
 }
 
-.email-fallback pre {
-    background: rgba(0, 0, 0, 0.3);
-    padding: 12px;
-    border-radius: 6px;
-    overflow-x: auto;
-    margin: 1rem 0;
-}
 
-/* Smooth transitions */
-#email-list-view, #email-content-view {
-    transition: opacity 0.3s ease;
-}
 
 .border-red-500 {
-    border-color: #ef4444 !important;
+border-color: #ef4444 !important;
 }
-/* Add to your existing CSS */
 .bg-blue-600 {
-    background-color: #2563eb;
+background-color: #2563eb;
 }
 .bg-blue-600:hover {
-    background-color: #1d4ed8;
-}
-.admin-mode {
-    background: linear-gradient(135deg, #1f2937 0%, #374151 100%) !important;
-}
-.admin-header {
-    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
-}
-.admin-text {
-    color: #fbbf24 !important;
-    font-weight: bold;
+background-color: #1d4ed8;
 }
 
-/* Add to your existing CSS */
-.btn-loading {
-    opacity: 0.7;
-    cursor: not-allowed;
+.session-item {
+transition: all 0.2s ease;
+cursor: pointer;
 }
-
-.btn-loading:hover {
-    transform: none !important;
+.session-item:hover {
+background: rgba(255, 255, 255, 0.1);
+transform: translateY(-1px);
 }
 </style>
 </head>
-<body class="text-gray-100 min-h-screen p-2 md:p-4">
+<body class="text-gray-100 min-h-screen p-4">
 
 <!-- Custom Modal Structure -->
 <div id="custom-modal" class="modal-overlay hidden">
@@ -297,287 +262,375 @@ max-height: 350px;
 </div>
 </div>
 
-<div class="h-fit mb-2">
-<div class="bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 text-white py-2 px-4 rounded-lg shadow-lg">
-<marquee class="text-sm md:text-base font-medium">
-✨ This website was created by <b class="text-yellow-300">Aung Myo Myat Zaw </b>✨
-</marquee>
-</div>
-</div>
-
-<div class="w-full max-w-6xl mx-auto">
-<header class="text-center mb-4 md:mb-8 fade-in">
-<div class="flex items-center justify-center mb-2 md:mb-4">
-<i class="fas fa-envelope text-xl md:text-3xl text-white mr-2 md:mr-3"></i>
-<h1 class="text-xl md:text-4xl lg:text-5xl font-bold text-white">Secure Temp Mail By AMMZ</h1>
-</div>
-<p class="text-gray-300 text-sm md:text-lg font-medium">Disposable email addresses</p>
-</header>
-
-<main class="glass-effect rounded-2xl shadow-2xl p-3 md:p-6 lg:p-8 w-full fade-in">
-<div class="mb-4 md:mb-8 text-center">
-<button id="big-random-btn" class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 md:py-4 px-6 md:px-8 rounded-2xl transition-all transform hover:scale-105 shadow-lg text-base md:text-xl w-full max-w-md mx-auto flex items-center justify-center">
-<i class="fas fa-random mr-2 md:mr-3 text-lg md:text-xl"></i>
-Generate Random Email
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+<div class="login-box">
+<i class="fas fa-shield-alt text-5xl text-white mb-4"></i>
+<h1 class="text-3xl font-bold text-white mb-2">Admin Panel</h1>
+<p class="text-gray-300 mb-6">TempMail System Administration</p>
+<input type="password" id="admin-password" placeholder="Enter admin password" />
+<button id="admin-login-btn">
+<i class="fas fa-sign-in-alt mr-2"></i>Login
 </button>
-<p class="text-gray-300 text-xs md:text-sm mt-2 font-medium">One click to create a random email instantly</p>
-</div>
-
-<div class="mb-4 md:mb-8">
-<div class="flex flex-col gap-2 mb-3 md:mb-6">
-<div class="flex flex-col sm:flex-row gap-2 w-full">
-<div class="flex-1">
-<input type="text" id="username-input" placeholder="Enter username"
-class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white rounded-xl px-4 py-3 text-base md:text-lg focus:outline-none focus:border-blue-500 transition-colors">
-</div>
-<div class="w-full sm:w-auto sm:min-w-[200px]">
-<select id="domain-select" class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white rounded-xl px-4 py-3 text-base md:text-lg focus:outline-none focus:border-blue-500 transition-colors">
-<option value="">Select domain</option>
-</select>
+<p id="admin-login-error" class="error" style="display:none;">❌ Invalid password</p>
 </div>
 </div>
 
-<!-- Buttons row -->
-<div class="flex gap-2 w-full">
-<button id="create-btn" class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 text-base">
-<i class="fas fa-plus mr-2"></i>Create
-</button>
-<button id="copy-btn" class="bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-semibold py-3 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 text-base">
-<i class="fas fa-copy mr-2"></i>Copy
-</button>
-<button id="end-session-btn" class="bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white font-semibold py-3 px-6 rounded-xl transition-all transform hover:scale-105 shadow-lg flex-1 text-base hidden">
-    <i class="fas fa-times-circle mr-2"></i>End Session
-</button>
+<!-- ADMIN DASHBOARD (Hidden until logged in) -->
+<div id="admin-dashboard" style="display:none;">
+    <div class="w-full max-w-7xl mx-auto fade-in">
+        <header class="text-center mb-8">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+                <div class="flex items-center mobile-text-center">
+                    <i class="fas fa-shield-alt text-3xl text-white mr-3"></i>
+                    <h1 class="text-2xl md:text-4xl font-bold text-white">Admin Dashboard</h1>
+                </div>
+                <div class="flex gap-2 flex-wrap justify-center">
+                    <a href="/" class="bg-blue-600 hover:bg-blue-700 text-white px-3 md:px-4 py-2 rounded-lg transition-all transform hover:scale-105 text-sm md:text-base">
+                        <i class="fas fa-home mr-2"></i>Main Site
+                    </a>
+                    <button id="logout-btn" class="bg-red-600 hover:bg-red-700 text-white px-3 md:px-4 py-2 rounded-lg transition-all transform hover:scale-105 text-sm md:text-base">
+                        <i class="fas fa-sign-out-alt mr-2"></i>Logout
+                    </button>
+                </div>
+            </div>
+            <p class="text-gray-300 text-sm md:text-base">Monitor and manage all temporary email addresses</p>
+        </header>
 
-</div>
-</div>
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="glass-effect rounded-xl p-4 md:p-6 fade-in">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-300 text-sm">Total Emails</p>
+                        <p id="stat-emails" class="text-2xl md:text-3xl font-bold text-white">0</p>
+                    </div>
+                    <i class="fas fa-envelope text-3xl md:text-4xl text-blue-400"></i>
+                </div>
+            </div>
+            <div class="glass-effect rounded-xl p-4 md:p-6 fade-in">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-300 text-sm">Email Addresses</p>
+                        <p id="stat-addresses" class="text-2xl md:text-3xl font-bold text-white">0</p>
+                    </div>
+                    <i class="fas fa-users text-3xl md:text-4xl text-green-400"></i>
+                </div>
+            </div>
+            <div class="glass-effect rounded-xl p-4 md:p-6 fade-in">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-300 text-sm">Last 24 Hours</p>
+                        <p id="stat-recent" class="text-2xl md:text-3xl font-bold text-white">0</p>
+                    </div>
+                    <i class="fas fa-clock text-3xl md:text-4xl text-purple-400"></i>
+                </div>
+            </div>
+        </div>
 
-<div id="email-display" class="hidden text-center p-2 md:p-4 bg-gray-900 rounded-xl mb-2 md:mb-4 border border-gray-700">
-<div class="flex items-center justify-center">
-<i class="fas fa-envelope text-blue-400 mr-2 text-sm md:text-xl"></i>
-<span id="current-email" class="text-white font-mono text-xs md:text-lg font-semibold break-all"></span>
-</div>
-</div>
-</div>
+        <!-- Main Content -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 mobile-stack">
+            <!-- Email Addresses List -->
+            <div class="glass-effect rounded-xl p-4 md:p-6 fade-in mobile-full">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                    <h2 class="text-lg md:text-xl font-bold text-white">
+                        <i class="fas fa-list mr-2"></i>Email Addresses
+                    </h2>
+                    <button onclick="loadAddresses()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition-all transform hover:scale-105 text-sm">
+                        <i class="fas fa-sync-alt mr-1"></i> Refresh
+                    </button>
+                </div>
+                <div id="address-list" class="space-y-2 max-h-96 overflow-y-auto custom-scrollbar mobile-inbox-list">
+                    <p class="text-gray-400 text-center py-8">Loading addresses...</p>
+                </div>
+            </div>
 
-<div id="notification" class="hidden text-center mb-2 md:mb-4 p-2 md:p-4 rounded-xl text-white font-medium text-sm md:text-base">
-<i class="fas fa-check-circle mr-2"></i>
-<span id="notification-text"></span>
-</div>
+            <!-- Email Details -->
+            <div class="glass-effect rounded-xl p-4 md:p-6 fade-in mobile-full">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                    <h2 class="text-lg md:text-xl font-bold text-white">
+                        <i class="fas fa-envelope-open mr-2"></i>Emails for: 
+                        <span id="selected-address" class="text-blue-400 text-sm md:text-base">None selected</span>
+                    </h2>
+                    <div id="email-count-badge" class="bg-blue-600 text-white px-3 py-1 rounded-full text-xs md:text-sm font-medium hidden">
+                        0 emails
+                    </div>
+                </div>
+                
+                <!-- Single Container for List and Content View -->
+                <div id="admin-inbox-container" class="w-full bg-gray-900 rounded-xl p-3 overflow-y-auto" style="height: 500px;">
+                    
+                    <!-- Email List View -->
+                    <div id="admin-email-list-view" class="h-full">
+                        <div id="email-details" class="space-y-2 h-full overflow-y-auto custom-scrollbar">
+                            <p class="text-gray-400 text-center py-8">Select an address to view emails</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Email Content View (Hidden by default) -->
+                    <div id="admin-email-content-view" class="hidden h-full flex flex-col">
+                        <!-- Back Button -->
+                        <button id="admin-back-btn" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg mb-4 transition-all text-sm flex items-center">
+                            <i class="fas fa-arrow-left mr-2"></i>Back to List
+                        </button>
+                        
+                        <!-- Email Header -->
+                        <div class="border-b border-gray-700 pb-4 mb-4">
+                            <h2 id="admin-email-subject" class="text-lg md:text-xl font-bold text-white mb-2 break-words"></h2>
+                            <div class="flex items-center text-xs md:text-sm text-gray-300 mb-2">
+                                <strong class="mr-2 text-white font-semibold flex items-center">
+                                    <i class="fas fa-user mr-2"></i>From:
+                                </strong>
+                                <span id="admin-email-from" class="font-mono font-medium break-all"></span>
+                            </div>
+                            <span id="admin-email-date" class="text-xs text-gray-400"></span>
+                        </div>
 
-<!-- Improved Inbox Section - Single Box Design -->
-<div class="flex flex-col md:flex-row gap-3 md:gap-6 mobile-inbox-container">
-    <!-- Single Main Container for both list and email view -->
-    <div id="inbox-main-container" class="w-full glass-effect rounded-xl p-2 md:p-4 overflow-y-auto" style="height: 500px;">
-        <!-- Header with back button -->
-        <div id="inbox-header" class="flex justify-between items-center mb-2 md:mb-4">
-            <div class="flex items-center">
-                <!-- Back Button (hidden on desktop and when viewing list) -->
-                <button id="back-to-list" class="hidden md:hidden mr-3 text-white hover:text-gray-300 transition-colors">
-                    <i class="fas fa-arrow-left text-lg"></i>
-                </button>
-                <h2 class="text-base md:text-xl font-semibold text-white">
-                    <i class="fas fa-inbox mr-1 md:mr-2"></i>
-                    <span id="header-title">Inbox</span>
+                        <!-- Email Body - iFrame Version -->
+                        <div class="email-iframe-wrapper flex-1">
+                            <iframe id="admin-email-iframe" class="sandboxed-iframe"
+                                    sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>
+                            <div id="admin-email-fallback" class="email-fallback hidden"></div>
+                        </div>
+                                                
+
+                        <!-- Delete Button -->
+                        <div class="mt-4 pt-4 border-t border-gray-700">
+                            <button id="admin-delete-email-btn" 
+                                    class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all text-sm">
+                                <i class="fas fa-trash mr-2"></i>Delete Email
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active Sessions Section -->
+        <div class="glass-effect rounded-xl p-4 md:p-6 fade-in mb-6">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                <h2 class="text-lg md:text-xl font-bold text-white">
+                    <i class="fas fa-play-circle mr-2"></i>Active Sessions
                 </h2>
+                <div class="flex gap-2">
+                    <button onclick="loadActiveSessions()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg transition-all transform hover:scale-105 text-sm">
+                        <i class="fas fa-sync-alt mr-1"></i> Refresh
+                    </button>
+                </div>
             </div>
-            <div class="flex items-center gap-2">
-                <span id="email-count" class="text-xs text-gray-300 font-medium bg-gray-800 px-2 py-1 rounded">0 emails</span>
-                <button id="refresh-btn" class="p-2 rounded-lg hover:bg-gray-700 transition-colors text-white">
-                    <i class="fas fa-sync-alt text-sm"></i>
-                </button>
+            <div id="active-sessions" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+                <p class="text-gray-400 text-center py-8">Loading active sessions...</p>
             </div>
         </div>
 
-        <!-- Email List View -->
-        <div id="email-list-view" class="h-full overflow-y-auto">
-            <div id="no-emails-default" class="text-center py-6 md:py-10 text-gray-300 flex flex-col items-center justify-center h-full">
-                <i class="fas fa-envelope-open text-2xl md:text-4xl mb-2 opacity-60"></i>
-                <p class="text-sm md:text-lg font-medium">No emails yet</p>
-                <p class="text-xs mt-1 font-medium">Your inbox is ready for messages</p>
+        <!-- Blacklist Management Section -->
+        <div class="glass-effect rounded-xl p-4 md:p-6 fade-in">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                <h2 class="text-lg md:text-xl font-bold text-white">
+                    <i class="fas fa-ban mr-2"></i>Blacklisted Usernames
+                </h2>
+                <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                    <input type="text" id="new-blacklist-username" placeholder="Enter username to blacklist" 
+                           class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none w-full sm:w-48 text-sm">
+                    <button onclick="addToBlacklist()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105 whitespace-nowrap text-sm">
+                        <i class="fas fa-plus mr-1"></i> Add to Blacklist
+                    </button>
+                </div>
             </div>
-            <div id="inbox-loader" style="display:none;" class="flex justify-center items-center py-8 h-full">
-                <div id="loader"></div>
-</div>
-            <div id="email-list" class="space-y-2"></div>
-        </div>
-
-        <!-- Email Content View (hidden by default) -->
-        <div id="email-content-view" class="hidden h-full flex flex-col">
-            <div class="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-6">
-                <h2 id="email-subject" class="text-lg md:text-2xl font-bold text-white mb-1 md:mb-0 break-words"></h2>
-                <span id="email-date" class="text-xs text-gray-300 bg-gray-800 px-3 py-1 rounded-lg font-medium whitespace-nowrap"></span>
-            </div>
-            <div class="flex items-center text-xs md:text-sm text-gray-300 mb-3 md:mb-6 border-b border-gray-700 pb-2 md:pb-4">
-                <strong class="mr-2 text-white font-semibold flex items-center">
-                    <i class="fas fa-user mr-2"></i>From:
-                </strong>
-                <span id="email-from" class="font-mono font-medium break-all"></span>
-            </div>
-            <div class="email-iframe-wrapper flex-1">
-                <iframe id="email-iframe" class="sandboxed-iframe" 
-                        sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>
-                <div id="email-fallback" class="email-fallback hidden"></div>
+            <div id="blacklist-list" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+                <p class="text-gray-400 text-center py-8">Loading blacklist...</p>
             </div>
         </div>
     </div>
-
-    <!-- Desktop Email Content Panel (hidden on mobile) -->
-    <div id="desktop-email-content" class="hidden md:block w-3/5 glass-effect rounded-xl p-3 md:p-6 overflow-y-auto" style="height: 500px;">
-        <div id="desktop-email-placeholder" class="flex flex-col items-center justify-center h-full text-gray-300 py-8">
-            <i class="fas fa-envelope-open text-4xl md:text-5xl mb-4 opacity-60"></i>
-            <p class="text-lg md:text-xl font-medium text-center">Select an email to read</p>
-            <p class="text-sm mt-2 text-gray-400 text-center">Choose a message from your inbox to view its contents</p>
-        </div>
-        <div id="desktop-email-content-inner" class="hidden h-full flex flex-col">
-            <div class="flex flex-col md:flex-row justify-between items-start mb-3 md:mb-6">
-                <h2 id="desktop-email-subject" class="text-lg md:text-2xl font-bold text-white mb-1 md:mb-0 break-words"></h2>
-                <span id="desktop-email-date" class="text-xs text-gray-300 bg-gray-800 px-3 py-1 rounded-lg font-medium whitespace-nowrap"></span>
-            </div>
-            <div class="flex items-center text-xs md:text-sm text-gray-300 mb-3 md:mb-6 border-b border-gray-700 pb-2 md:pb-4">
-                <strong class="mr-2 text-white font-semibold flex items-center">
-                    <i class="fas fa-user mr-2"></i>From:
-                </strong>
-                <span id="desktop-email-from" class="font-mono font-medium break-all"></span>
-            </div>
-            <div class="email-iframe-wrapper flex-1">
-                <iframe id="desktop-email-iframe" class="sandboxed-iframe"
-                        sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>
-                <div id="desktop-email-fallback" class="email-fallback hidden"></div>
-            </div>
-        </div>
-    </div>
-</div>
-</main>
-</div>
-    
-<div class="h-fit mt-2 md:mt-4">
-<div class="bg-gradient-to-r from-green-600 via-teal-600 to-blue-600 text-white py-2 px-4 rounded-lg shadow-lg border border-green-400">
-<marquee class="text-xs md:text-base font-medium">
-    🔒 Secure & Private • All Rights Reserved by 
-    <b class="text-yellow-300 transition-all duration-200" 
-       id="ammz-door" 
-       title="Click to enter Admin Mode">AMMZ</b> 
-    • Built with Advanced AI Technology 🚀
-</marquee>
-</div>
 </div>
 
 <script>
-// Configuration
-const API_URL = window.location.origin;
-const SESSION_TIMEOUT = 60 * 60 * 1000; // 1 hour
-
-// State variables
-let currentEmail = '';
-let sessionToken = ''; 
-let autoRefreshInterval = null;
-let timeUpdateInterval = null;
-let lastEmailCount = 0;
-let sessionId = generateSessionId();
-let emailSecurityKey = generateSecurityKey();
-let sessionStartTime = null;
-let domainsLoaded = false;
-let isAdminMode = false;
+var API_URL = window.location.origin;
+var selectedAddress = null;
+var autoRefreshInterval = null;
+var DOMAIN = 'aungmyomyatzaw.online';
+var currentViewingEmail = null;
 
 // Initialize functions when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
-    initApp();
-    setupEventListeners();
+    // Set up event listeners
+    document.getElementById('admin-login-btn').addEventListener('click', adminLogin);
+    document.getElementById('admin-password').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') adminLogin();
+    });
+    document.getElementById('logout-btn').addEventListener('click', adminLogout);
+    document.getElementById('admin-back-btn').addEventListener('click', showAdminEmailList);
+    document.getElementById('admin-delete-email-btn').addEventListener('click', deleteCurrentEmail);
 });
 
-// Utility Functions
-function generateSessionId() {
-    return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+// Blacklist management functions
+function loadBlacklist() {
+    fetch(`${API_URL}/api/admin/blacklist`, {
+        credentials: 'include'
+    })
+        .then(res => {
+            if (res.status === 401) {
+                location.reload();
+                return;
+            }
+            return res.json();
+        })
+        .then(data => {
+            var blacklistEl = document.getElementById('blacklist-list');
+            
+            if (!data || data.error) {
+                blacklistEl.innerHTML = '<p class="text-red-400 text-center py-8">Error loading blacklist</p>';
+                return;
+            }
+            
+            if (!data.blacklist || data.blacklist.length === 0) {
+                blacklistEl.innerHTML = '<p class="text-gray-400 text-center py-8">No blacklisted usernames</p>';
+                return;
+            }
+            
+            blacklistEl.innerHTML = '';
+            
+            data.blacklist.forEach(item => {
+                let username;
+                if (typeof item === 'string') {
+                    username = item;
+                } else if (typeof item === 'object' && item !== null) {
+                    username = item.username || item.name || item.value || String(item);
+                } else {
+                    username = String(item);
+                }
+                
+                var itemDiv = document.createElement('div');
+                itemDiv.className = 'bg-gray-800 p-3 rounded-lg border border-gray-700 flex justify-between items-center';
+                itemDiv.innerHTML = `
+                    <div>
+                        <span class="text-white font-semibold text-sm">${escapeHtml(username)}</span>
+                        <span class="text-xs text-gray-400 ml-2">@${DOMAIN}</span>
+                    </div>
+                    <button onclick="removeFromBlacklist('${escapeHtml(username)}')" 
+                            class="text-green-400 hover:text-green-300 p-1 rounded transition-colors" 
+                            title="Remove from blacklist">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                blacklistEl.appendChild(itemDiv);
+            });
+        })
+        .catch(err => {
+            console.error('Error loading blacklist:', err);
+            document.getElementById('blacklist-list').innerHTML = 
+                '<p class="text-red-400 text-center py-8">Failed to load blacklist</p>';
+        });
 }
 
-function generateSecurityKey() {
-    return 'key_' + Math.random().toString(36).substr(2, 16);
-}
-
-function validateEmail(email) {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-}
-
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-function improvedCleanEmailBody(rawBody) {
-    // Email is now pre-cleaned by backend with mail-parser
-    // Just return the HTML as-is
-    if (!rawBody || rawBody.trim() === '') {
-        return '<p class="text-gray-400 text-center py-8">No content available</p>';
+function addToBlacklist() {
+    var usernameInput = document.getElementById('new-blacklist-username');
+    var username = usernameInput.value.trim().toLowerCase();
+    
+    if (!username) {
+        showNotification('❌ Please enter a username', 'error');
+        return;
     }
     
-    return rawBody;
-}
-
-function formatTime(timestamp) {
-    try {
-        let date;
-        
-        // Handle different timestamp formats
-        if (typeof timestamp === 'string') {
-            // Remove any timezone info and treat as UTC
-            const cleanTimestamp = timestamp.replace(/[\+\-]\d{2}:?\d{2}$/, '');
-            date = new Date(cleanTimestamp + 'Z');
-            
-            // If still invalid, try direct parsing
-            if (isNaN(date.getTime())) {
-                date = new Date(timestamp);
-            }
-        } else if (typeof timestamp === 'number') {
-            // Assume it's already a Unix timestamp in milliseconds
-            date = new Date(timestamp);
-        } else {
-            return 'recently';
-        }
-        
-        // Final check for valid date
-        if (isNaN(date.getTime())) {
-            return 'recently';
-        }
-        
-        // Convert to Myanmar Time (UTC+6:30)
-        const utcTime = date.getTime();
-        const myanmarOffset = 6.5 * 60 * 60 * 1000; // 6.5 hours in milliseconds
-        const myanmarTime = new Date(utcTime + myanmarOffset);
-        
-        // Get current time in Myanmar timezone
-        const nowUtc = new Date().getTime();
-        const nowMyanmar = new Date(nowUtc + myanmarOffset);
-        
-        const diff = nowMyanmar - myanmarTime;
-        const seconds = Math.floor(diff / 1000);
-        const minutes = Math.floor(seconds / 60);
-        const hours = Math.floor(minutes / 60);
-        const days = Math.floor(hours / 24);
-        
-        // Return relative time
-        if (seconds < 60) return 'just now';
-        if (minutes < 60) return minutes + ' min ago';
-        if (hours < 24) return hours + ' hour' + (hours > 1 ? 's' : '') + ' ago';
-        if (days < 7) return days + ' day' + (days > 1 ? 's' : '') + ' ago';
-        
-        // For dates older than a week, show actual date
-        return myanmarTime.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-        
-    } catch (e) {
-        console.error('Error formatting time:', e);
-        return 'recently';
+    if (!/^[a-zA-Z0-9-_]+$/.test(username)) {
+        showNotification('❌ Username can only contain letters, numbers, hyphens, and underscores', 'error');
+        return;
     }
+    
+    showModal(
+        'Add to Blacklist',
+        `Are you sure you want to blacklist the username "<strong>${escapeHtml(username)}</strong>"?<br><br>This will prevent all users from using this username.`,
+        function() {
+            fetch(API_URL + '/api/admin/blacklist', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                credentials: 'include',
+                body: JSON.stringify({username: username})
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(`✅ ${data.message}`, 'success');
+                    usernameInput.value = '';
+                    loadBlacklist();
+                } else {
+                    showNotification(`❌ ${data.error || 'Failed to add to blacklist'}`, 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error adding to blacklist:', err);
+                showNotification('❌ Error adding to blacklist', 'error');
+            });
+        }
+    );
 }
 
-// UI Functions
+function removeFromBlacklist(username) {
+    showModal(
+        'Remove from Blacklist',
+        `Are you sure you want to remove "<strong>${escapeHtml(username)}</strong>" from the blacklist?<br><br>Users will be able to use this username again.`,
+        function() {
+            fetch(API_URL + '/api/admin/blacklist/' + encodeURIComponent(username), {
+                method: 'DELETE',
+                credentials: 'include'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(`✅ ${data.message}`, 'success');
+                    loadBlacklist();
+                } else {
+                    showNotification(`❌ ${data.error || 'Failed to remove from blacklist'}`, 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error removing from blacklist:', err);
+                showNotification('❌ Error removing from blacklist', 'error');
+            });
+        }
+    );
+}
+
+// End user session from admin
+function endUserSession(sessionToken, email) {
+    showModal(
+        'End User Session',
+        `Are you sure you want to end the session for <strong>${escapeHtml(email)}</strong>?<br><br>The user will be logged out and lose access to their emails.`,
+        function() {
+            fetch(API_URL + '/api/admin/session/' + sessionToken + '/end', {
+                method: 'POST',
+                credentials: 'include'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(`✅ Session ended for ${email}`, 'success');
+                    loadActiveSessions();
+                } else {
+                    showNotification(`❌ ${data.error || 'Failed to end session'}`, 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error ending session:', err);
+                showNotification('❌ Error ending session', 'error');
+            });
+        }
+    );
+}
+
+// Update the startAutoRefresh to include blacklist
+function startAutoRefresh() {
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    autoRefreshInterval = setInterval(() => {
+        loadStats();
+        loadAddresses();
+        loadActiveSessions();
+        loadBlacklist();
+        if (selectedAddress) viewEmails(selectedAddress);
+    }, 10000);
+}
+
+// Custom Modal Functions
 function showModal(title, message, confirmCallback) {
     const modal = document.getElementById('custom-modal');
     const modalTitle = document.getElementById('modal-title');
@@ -586,7 +639,7 @@ function showModal(title, message, confirmCallback) {
     const modalCancel = document.getElementById('modal-cancel');
     
     modalTitle.textContent = title;
-    modalMessage.textContent = message;
+    modalMessage.innerHTML = message;
     modal.classList.remove('hidden');
     
     // Remove previous event listeners
@@ -606,937 +659,122 @@ function showModal(title, message, confirmCallback) {
     };
 }
 
-function showNotification(message, type) {
-    const notif = document.getElementById('notification');
-    const text = document.getElementById('notification-text');
-    text.textContent = message;
+// Login handler
+function adminLogin() {
+    var password = document.getElementById('admin-password').value;
+    var errorEl = document.getElementById('admin-login-error');
+    var btn = document.getElementById('admin-login-btn');
     
-    let bgColor = 'bg-blue-600';
-    if (type === 'success') {
-        bgColor = 'bg-green-600';
-    } else if (type === 'error') {
-        bgColor = 'bg-red-600';
-    } else if (type === 'info') {
-        bgColor = 'bg-blue-600';
-    }
-    
-    notif.className = `text-center mb-2 md:mb-4 p-2 md:p-4 rounded-xl text-white font-medium text-sm md:text-base ${bgColor}`;
-    notif.classList.remove('hidden');
-    setTimeout(() => notif.classList.add('hidden'), 3000);
-}
-
-function handleApiError(error, defaultMessage = "An error occurred") {
-    console.error("API Error:", error);
-    
-    if (error.message && error.message.includes("Failed to fetch")) {
-        showNotification("Network error - check your connection", "error");
-    } else if (error.message && (error.message.includes("403") || error.message.includes("Session expired"))) {
-        showNotification("Session expired - creating new session", "error");
-        clearSession();
-    } else if (error.message && (error.message.includes("401") || error.message.includes("Session expired") || error.message.includes("Session has been ended"))) {
-        showNotification("Session ended - creating new session", "error");
-        clearSession();
-    } else if (error.message && error.message.includes("409")) {
-        showNotification("This email is already in use by another session", "error");
-    } else if (error.message && error.message.includes("404")) {
-        // This is normal for new emails
-        return;
-    } else {
-        showNotification(error.message || defaultMessage, "error");
-    }
-}
-
-function clearSession() {
-    console.log('🔄 Clearing session...');
-    
-    // Clear frontend state
-    currentEmail = '';
-    sessionToken = '';
-    sessionStartTime = null;
-
-    // Stop all intervals
-    if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-        autoRefreshInterval = null;
-        console.log('✅ Auto-refresh stopped');
-    }
-    if (timeUpdateInterval) {
-        clearInterval(timeUpdateInterval);
-        timeUpdateInterval = null;
-        console.log('✅ Time updates stopped');
-    }
-    
-    // Clear any session expiration timeout
-    if (window.sessionExpirationTimeout) {
-        clearTimeout(window.sessionExpirationTimeout);
-        window.sessionExpirationTimeout = null;
-    }
-    
-    // Clear any pending email fetch requests
-    if (window.emailFetchController) {
-        window.emailFetchController.abort();
-        window.emailFetchController = null;
-    }
-
-    // Reset UI
-    document.getElementById('username-input').value = '';
-    document.getElementById('domain-select').selectedIndex = 0;
-    document.getElementById('email-display').classList.add('hidden');
-    document.getElementById('end-session-btn').classList.add('hidden');
-    document.getElementById('email-count').textContent = '0 emails';
-    document.getElementById('email-list').innerHTML = '';
-    document.getElementById('no-emails-default').style.display = 'flex';
-    
-    // Reset email view
-    document.getElementById('desktop-email-placeholder').style.display = 'flex';
-    document.getElementById('desktop-email-content-inner').classList.add('hidden');
-    
-    // Reset title
-    document.title = 'TempMail - AMMZ';
-    
-    console.log('✅ Session cleared completely');
-}
-
-function loadSession() {
-    const savedSession = localStorage.getItem('tempMailSession');
-    if (savedSession) {
-        try {
-            const session = JSON.parse(savedSession);
-            const now = Date.now();
-            const sessionAge = now - session.createdAt;
-            
-            // Session expires after 1 hour
-            const sessionValid = sessionAge < SESSION_TIMEOUT;
-            
-            if (sessionValid && session.email && session.sessionToken) {
-                // ✅ FIXED: Check if this is an admin username and clear session if so
-                const username = session.email.split('@')[0].toLowerCase();
-                const adminUsernames = ['ammz', 'admin', 'owner', 'root', 'system', 'az', 'c'];
-                
-                if (adminUsernames.includes(username)) {
-                    console.log('🔄 Clearing admin session');
-                    localStorage.removeItem('tempMailSession');
-                    return false;
-                }
-                
-                // ✅ RESTORE ALL SESSION DATA
-                currentEmail = session.email;
-                sessionToken = session.sessionToken;
-                sessionStartTime = session.createdAt;
-                
-                console.log('🔄 Session restored from localStorage:', currentEmail);
-                
-                // Wait for domains to load before restoring UI
-                if (domainsLoaded) {
-                    restoreSessionUI();
-                } else {
-                    // If domains aren't loaded yet, wait for them
-                    const checkDomains = setInterval(() => {
-                        if (domainsLoaded) {
-                            clearInterval(checkDomains);
-                            restoreSessionUI();
-                        }
-                    }, 100);
-                }
-                return true;
-            } else {
-                // Session expired
-                console.log('🕒 Session expired, clearing localStorage');
-                localStorage.removeItem('tempMailSession');
-                showNotification('🕒 Session expired', 'error');
-            }
-        } catch (e) {
-            console.error('❌ Error parsing saved session:', e);
-            localStorage.removeItem('tempMailSession');
-        }
-    } else {
-        console.log('ℹ️ No saved session found in localStorage');
-    }
-    return false;
-}
-function restoreSessionUI() {
-    if (!currentEmail || !sessionToken) {
-        console.error('❌ Cannot restore UI: missing email or token');
+    if (!password) {
+        errorEl.textContent = '❌ Please enter password';
+        errorEl.style.display = 'block';
         return;
     }
     
-    console.log('🔄 Restoring UI for:', currentEmail);
-    
-    const parts = currentEmail.split('@');
-    document.getElementById('username-input').value = parts[0];
-    
-    // ✅ Wait for domain select to be populated
-    const domainSelect = document.getElementById('domain-select');
-    const domain = parts[1];
-    
-    const setDomain = () => {
-        if (domainSelect.querySelector(`option[value="${domain}"]`)) {
-            domainSelect.value = domain;
-            
-            // ✅ Validate session with backend before completing restoration
-            validateSessionWithBackend();
-        } else {
-            // Domain not available yet, try again
-            setTimeout(setDomain, 100);
-        }
-    };
-    
-    setDomain();
-}
-
-function validateSessionWithBackend() {
-    console.log('🔐 Validating session with backend...');
-    
-    fetch(`${API_URL}/api/emails/${encodeURIComponent(currentEmail)}`, {
-        headers: {
-            'X-Session-Token': sessionToken,
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(res => {
-        if (res.ok) {
-            console.log('✅ Backend session validation successful');
-            completeUIRestoration();
-        } else if (res.status === 403) {
-            console.log('❌ Backend session validation failed - session expired');
-            showNotification('Session expired. Creating new session...', 'error');
-            // Clear the invalid session and create a new one
-            localStorage.removeItem('tempMailSession');
-            clearSession();
-        } else {
-            console.log('⚠️ Backend validation issue, proceeding anyway');
-            completeUIRestoration();
-        }
-    })
-    .catch(err => {
-        console.log('⚠️ Network error during validation, proceeding:', err);
-        completeUIRestoration();
-    });
-}
-
-function completeUIRestoration() {
-    // Show the email display
-    document.getElementById('current-email').textContent = currentEmail;
-    document.getElementById('email-display').classList.remove('hidden');
-    document.getElementById('end-session-btn').classList.remove('hidden');
-    
-    showNotification('✅ Session restored', 'success');
-    
-    // Load emails immediately
-    loadEmails();
-    startAutoRefresh();
-    startTimeUpdate();
-    setupSessionExpiration();
-    
-    console.log('✅ UI restoration complete');
-}
-
-function saveSession() {
-    if (!currentEmail || !sessionToken) {
-        console.error('❌ Cannot save session: missing email or token');
-        return;
-    }
-    
-    const session = {
-        email: currentEmail,
-        sessionToken: sessionToken,
-        createdAt: sessionStartTime || Date.now(),
-        lastEmailTime: Date.now()
-    };
-    
-    localStorage.setItem('tempMailSession', JSON.stringify(session));
-    console.log('💾 Session saved:', currentEmail);
-}
-
-// Add this function - it was missing!
-function endSessionBackend() {
-    return new Promise((resolve) => {
-        if (!currentEmail || !sessionToken) {
-            console.log('No session to end');
-            resolve();
-            return;
-        }
-        
-        console.log('Ending backend session for:', currentEmail);
-        
-        fetch(API_URL + '/api/session/end', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                session_token: sessionToken,
-                email_address: currentEmail
-            })
-        })
-        .then(res => {
-            if (!res.ok) {
-                console.log('Backend session end failed, but continuing');
-            }
-            return res.json();
-        })
-        .then(data => {
-            console.log('✅ Backend session ended successfully');
-            resolve();
-        })
-        .catch(err => {
-            console.log('❌ Backend session end error (ignoring):', err);
-            resolve();
-        });
-    });
-}
-
-function setupSessionExpiration() {
-    // Clear any existing timeout
-    if (window.sessionExpirationTimeout) {
-        clearTimeout(window.sessionExpirationTimeout);
-    }
-    
-    // Set new timeout
-    window.sessionExpirationTimeout = setTimeout(function() {
-        showNotification('🕒 Session expired. Please create a new email address.', 'error');
-        clearSession();
-    }, SESSION_TIMEOUT);
-}
-
-function loadEmails() {
-    if (!currentEmail || !sessionToken) {
-        console.log("❌ No current email or session token to load");
-        return;
-    }
-    
-    console.log("📧 Loading emails for:", currentEmail);
-    
-    const loader = document.getElementById('inbox-loader');
-    const list = document.getElementById('email-list');
-    const defaultMsg = document.getElementById('no-emails-default');
-    
-    loader.style.display = 'flex';
-    defaultMsg.style.display = 'none';
-    list.innerHTML = '';
-    
-    // Use AbortController to prevent multiple simultaneous requests
-    if (window.emailFetchController) {
-        window.emailFetchController.abort();
-    }
-    window.emailFetchController = new AbortController();
-    
-    fetch(`${API_URL}/api/emails/${encodeURIComponent(currentEmail)}`, {
-        headers: {
-            'X-Session-Token': sessionToken,
-            'Content-Type': 'application/json'
-        },
-        signal: window.emailFetchController.signal
-    })
-    .then(res => {
-        if (!res.ok) {
-            if (res.status === 404) {
-                return { emails: [] };
-            }
-            if (res.status === 403) {
-                throw new Error("SESSION_EXPIRED");
-            }
-            throw new Error(`Failed to fetch emails: ${res.status}`);
-        }
-        return res.json();
-    })
-    .then(data => {
-        console.log("✅ Emails loaded:", data.emails?.length || 0);
-        
-        const newCount = data.emails ? data.emails.length : 0;
-        document.getElementById('email-count').textContent = `${newCount} email${newCount !== 1 ? 's' : ''}`;
-        document.title = newCount > 0 ? `(${newCount}) TempMail - AMMZ` : 'TempMail - AMMZ';
-        
-        // Show new email notification
-        if (newCount > lastEmailCount && lastEmailCount > 0) {
-            showNotification(`${newCount - lastEmailCount} new email(s) received!`, 'success');
-        }
-        lastEmailCount = newCount;
-        
-        list.innerHTML = '';
-        
-        if (newCount === 0) {
-            list.innerHTML = `<div class="text-center py-8 text-gray-300 h-full flex flex-col justify-center"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>`;
-        } else {
-    // Render email list properly
-    data.emails.forEach((email, index) => {
-        const emailItem = document.createElement('div');
-        emailItem.className = 'email-list-item bg-gray-800 rounded-lg p-3 md:p-4 border border-gray-700 cursor-pointer transition-all hover:bg-gray-700';
-        emailItem.setAttribute('data-timestamp', email.timestamp || email.received_at);
-        
-        const subject = email.subject || 'No subject';
-        const sender = email.sender || 'Unknown sender';
-        
-
-        const preview = extractEmailPreview(email.body);
-        
-        const time = formatTime(email.timestamp || email.received_at);
-        
-        emailItem.innerHTML = `
-            <div class="flex justify-between items-start mb-2">
-                <div class="font-semibold text-white text-sm md:text-base truncate flex-1 mr-2">${escapeHtml(subject)}</div>
-                <div class="text-xs text-gray-400 whitespace-nowrap">${time}</div>
-            </div>
-            <div class="text-xs text-gray-300 mb-1 truncate">
-                <strong>From:</strong> ${escapeHtml(sender)}
-            </div>
-            <div class="text-xs text-gray-400 email-preview">
-                ${escapeHtml(preview)}
-            </div>
-        `;
-        
-        emailItem.addEventListener('click', () => viewEmail(email, emailItem));
-        list.appendChild(emailItem);
-    });
-}
-    })
-    .catch(err => {
-        if (err.name === 'AbortError') {
-            console.log("Email fetch aborted");
-            return;
-        }
-        
-        console.error("❌ Error loading emails:", err);
-        
-        if (err.message === "SESSION_EXPIRED") {
-            console.log("🔄 Session expired, clearing frontend state");
-            showNotification("Session expired", "error");
-            clearSession(); // This will stop auto-refresh and clear UI
-        } else {
-            handleApiError(err, "Failed to load emails");
-        }
-        
-        list.innerHTML = `<div class="text-center py-8 text-gray-300"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>`;
-    })
-    .finally(function() {
-        loader.style.display = 'none';
-        window.emailFetchController = null;
-    });
-}
-
-function extractEmailPreview(body) {
-    if (!body) return 'No content';
-    
-    let text = body;
-    
-    // Remove HTML tags
-    text = text.replace(/<[^>]*>/g, '');
-    
-    // Decode common HTML entities and email encoding
-    text = text
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/&#8217;/g, "'")
-        .replace(/=3D/g, '=')
-        .replace(/=20/g, ' ')
-        .replace(/=2E/g, '.')
-        .replace(/=\r?\n/g, '');
-    
-    // Remove email headers and technical content
-    const unwantedPatterns = [
-        /@font-face.*/gi,
-        /font-family:.*/gi,
-        /Content-Type:.*/gi,
-        /charset=.*/gi,
-        /MIME-Version:.*/gi,
-        /Content-Transfer-Encoding:.*/gi,
-        /boundary=.*/gi,
-        /Received:.*/gi,
-        /Return-Path:.*/gi,
-        /Message-ID:.*/gi
-    ];
-    
-    unwantedPatterns.forEach(pattern => {
-        text = text.replace(pattern, '');
-    });
-    
-    // Clean up whitespace
-    text = text.replace(/\s+/g, ' ').trim();
-    
-    // Find the first meaningful sentence
-    const sentences = text.split(/[.!?]/).filter(sentence => {
-        const cleanSentence = sentence.trim();
-        return cleanSentence.length > 10 && 
-               !cleanSentence.includes('charset') &&
-               !cleanSentence.includes('utf-8') &&
-               !cleanSentence.includes('Content-Type');
-    });
-    
-    if (sentences.length > 0) {
-        text = sentences[0].trim();
-    }
-    
-    // Limit length
-    if (text.length > 100) {
-        text = text.substring(0, 100) + '...';
-    }
-    
-    return text || 'No readable content';
-}
-
-function loadDomains() {
-    return fetch(API_URL + '/api/domains')
-    .then(res => {
-        if (!res.ok) {
-            throw new Error('Failed to load domains');
-        }
-        return res.json();
-    })
-    .then(data => {
-        const select = document.getElementById('domain-select');
-        select.innerHTML = '<option value="">Select domain</option>';
-        if (data.domains && data.domains.length > 0) {
-            data.domains.forEach(function(d) {
-                select.innerHTML += '<option value="' + d + '">' + d + '</option>';
-            });
-        } else {
-            // Fallback domain
-            select.innerHTML += '<option value="aungmyomyatzaw.online">aungmyomyatzaw.online</option>';
-        }
-        domainsLoaded = true;
-    })
-    .catch(err => {
-        console.error('Error loading domains:', err);
-        // Set default domain if API fails
-        const select = document.getElementById('domain-select');
-        select.innerHTML = '<option value="">Select domain</option>';
-        select.innerHTML += '<option value="aungmyomyatzaw.online">aungmyomyatzaw.online</option>';
-        domainsLoaded = true;
-    });
-}
-
-function createEmail(customName) {
-    const btn = document.getElementById('create-btn');
-    const originalText = btn.innerHTML;
+    // Show loading state
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Logging in...';
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
-    btn.classList.add('opacity-50');
     
-    // Clear any previous error states
-    document.getElementById('username-input').classList.remove('border-red-500');
-    
-    // If customName is provided (from random button), use it
-    // Otherwise, get username from input field
-    let username = customName;
-    if (!username) {
-        username = document.getElementById('username-input').value.trim();
-    }
-    
-    // If no username provided, show error
-    if (!username) {
-        showNotification('❌ Please enter a username', 'error');
-        document.getElementById('username-input').focus();
-        
-        // Reset button state
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create Mail';
-        btn.classList.remove('opacity-50');
-        return;
-    }
-    
-    // Validate username format
-    if (!/^[a-zA-Z0-9-_]+$/.test(username)) {
-        showNotification('❌ Username can only contain letters, numbers, hyphens, and underscores', 'error');
-        document.getElementById('username-input').classList.add('border-red-500');
-        document.getElementById('username-input').focus();
-        
-        // Reset button state
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create Mail';
-        btn.classList.remove('opacity-50');
-        return;
-    }
-    
-    // Get domain - if not selected, use the first available domain
-    let domain = document.getElementById('domain-select').value;
-    if (!domain) {
-        const domainSelect = document.getElementById('domain-select');
-        const availableDomains = Array.from(domainSelect.options)
-            .filter(option => option.value && option.value !== '')
-            .map(option => option.value);
-        
-        if (availableDomains.length > 0) {
-            domain = availableDomains[0]; // Use first available domain
-            // Update the select to show the chosen domain
-            domainSelect.value = domain;
-        } else {
-            domain = 'aungmyomyatzaw.online'; // fallback
-        }
-    }
-    
-    // Include current session token if available (for recreation)
-    const requestData = {
-        name: username,
-        sessionId: sessionId,
-        admin_mode: isAdminMode
-    };
-    
-    if (sessionToken) {
-        requestData.current_session_token = sessionToken;
-    }
-    
-    // Security: Include session ID and security key in request
-    fetch(API_URL + '/api/create', {
+    fetch(API_URL + '/api/admin/login', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Session-ID': sessionId,
-            'X-Security-Key': emailSecurityKey
-        },
-        body: JSON.stringify(requestData)
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'include',
+        body: JSON.stringify({password: password})
     })
-    .then(async (res) => {
-        const contentType = res.headers.get('content-type');
-        
+    .then(res => {
         if (!res.ok) {
-            let errorData;
-            if (contentType && contentType.includes('application/json')) {
-                errorData = await res.json();
-            } else {
-                const text = await res.text();
-                try {
-                    errorData = JSON.parse(text);
-                } catch {
-                    errorData = { error: text || `HTTP ${res.status}`, code: 'UNKNOWN_ERROR' };
-                }
-            }
-            
-            // Store the status with the error data
-            errorData.httpStatus = res.status;
-            
-            if (res.status === 409) {
-                return Promise.reject(errorData);
-            }
-            throw errorData;
+            throw new Error('Login failed');
         }
-        
-        // Success case - parse JSON response
-        if (contentType && contentType.includes('application/json')) {
-            return res.json();
-        } else {
-            const text = await res.text();
-            throw new Error('Server returned non-JSON response');
-        }
+        return res.json();
     })
     .then(data => {
-        // SUCCESS: Email created successfully or existing session reused
-        if (!data.email) {
-            throw new Error('No email returned from server');
-        }
-        
-        currentEmail = data.email;
-        sessionToken = data.session_token;
-        sessionStartTime = Date.now();
-        
-        const parts = currentEmail.split('@');
-        
-        document.getElementById('username-input').value = parts[0];
-        document.getElementById('domain-select').value = parts[1];
-        document.getElementById('current-email').textContent = data.email;
-        document.getElementById('email-display').classList.remove('hidden');
-        document.getElementById('end-session-btn').classList.remove('hidden');
-
-        // Reset email view to placeholder
-        document.getElementById('desktop-email-placeholder').style.display = 'flex';
-        document.getElementById('desktop-email-content-inner').classList.add('hidden');
-        
-        if (data.existing_session) {
-            showNotification('✅ Session restored: ' + data.email, 'success');
-            console.log('🔄 Existing session reused for:', data.email);
+        if (data.success) {
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('admin-dashboard').style.display = 'block';
+            loadStats();
+            loadAddresses();
+            loadActiveSessions();
+            loadBlacklist();
+            startAutoRefresh();
+            showNotification('✅ Successfully logged in', 'success');
         } else {
-            showNotification('✅ Email created: ' + data.email, 'success');
-            console.log('🆕 New session created for:', data.email);
+            throw new Error('Invalid password');
         }
-        
-        // Save session and start timers
-        saveSession();
-        
-        // Wait a moment for the server to register the email, then load emails
-        setTimeout(() => {
-            loadEmails();
-        }, 1000);
-        
-        startAutoRefresh();
-        startTimeUpdate();
-        setupSessionExpiration();
     })
     .catch(err => {
-        console.error('Error creating email:', err);
-        
-        // Handle specific error cases
-        if (err.httpStatus === 409 || err.code === 'EMAIL_IN_USE_ACTIVE') {
-            resetUIAfterConflict();
-            
-            showModal(
-                'Email Currently in Use', 
-                err.error || 'This email address is currently in use by another session. Please choose a different username or try again later.',
-                function() {
-                    document.getElementById('username-input').focus();
-                    document.getElementById('username-input').select();
-                }
-            );
-        } else if (err.code === 'USERNAME_BLACKLISTED') {
-            showNotification('🚫 ' + err.error, 'error');
-            document.getElementById('username-input').value = '';
-            document.getElementById('username-input').classList.add('border-red-500');
-            document.getElementById('username-input').focus();
-            
-            showModal(
-                'Reserved Username',
-                'This username is reserved for the system owner. Please choose a different username.',
-                function() {
-                    document.getElementById('username-input').focus();
-                }
-            );
-        } else if (err.code === 'INVALID_USERNAME') {
-            showNotification('❌ ' + err.error, 'error');
-            document.getElementById('username-input').classList.add('border-red-500');
-            document.getElementById('username-input').focus();
-        } else {
-            handleApiError(err, 'Failed to create email');
-        }
+        errorEl.textContent = '❌ ' + (err.message || 'Login failed');
+        errorEl.style.display = 'block';
+        setTimeout(() => errorEl.style.display = 'none', 3000);
     })
-    .finally(function() {
-    // Reset button state PROPERLY for both buttons
-    const createBtn = document.getElementById('create-btn');
-    const randomBtn = document.getElementById('big-random-btn');
-    
-    createBtn.disabled = false;
-    createBtn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create Mail';
-    createBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-    
-    randomBtn.disabled = false;
-    randomBtn.innerHTML = '<i class="fas fa-random mr-2 md:mr-3 text-lg md:text-xl"></i>Generate Random Email';
-    randomBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'btn-loading');
-});
-}
-
-// 🆕 NEW FUNCTION: Reset UI when session creation fails
-function resetUIAfterConflict() {
-    console.log('🔄 Resetting UI after conflict error');
-    
-    // Clear session state
-    currentEmail = '';
-    sessionToken = '';
-    sessionStartTime = null;
-    
-    // Clear localStorage session
-    localStorage.removeItem('tempMailSession');
-    
-    // Clear UI elements that show session state
-    document.getElementById('email-display').classList.add('hidden');
-    document.getElementById('end-session-btn').classList.add('hidden');
-    document.getElementById('email-count').textContent = '0 emails';
-    document.getElementById('current-email').textContent = '';
-    
-    // Clear any existing emails from display
-    document.getElementById('email-list').innerHTML = '';
-    document.getElementById('no-emails-default').style.display = 'flex';
-    
-    // Reset email content views
-    document.getElementById('desktop-email-placeholder').style.display = 'flex';
-    document.getElementById('desktop-email-content-inner').classList.add('hidden');
-    
-    // Show email list view (in case we were in email view)
-    document.getElementById('email-list-view').classList.remove('hidden');
-    document.getElementById('email-content-view').classList.add('hidden');
-    document.getElementById('header-title').textContent = 'Inbox';
-    document.getElementById('back-to-list').classList.add('hidden');
-    
-    // Stop any auto-refresh that might have been started
-    if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-        autoRefreshInterval = null;
-        console.log('✅ Auto-refresh stopped after conflict');
-    }
-    if (timeUpdateInterval) {
-        clearInterval(timeUpdateInterval);
-        timeUpdateInterval = null;
-        console.log('✅ Time updates stopped after conflict');
-    }
-    
-    // Clear session expiration timeout
-    if (window.sessionExpirationTimeout) {
-        clearTimeout(window.sessionExpirationTimeout);
-        window.sessionExpirationTimeout = null;
-        console.log('✅ Session expiration timer stopped after conflict');
-    }
-    
-    // Reset page title
-    document.title = 'TempMail - AMMZ';
-    
-    console.log('✅ UI reset complete after conflict');
-}
-
-// Fallback function to create email locally if API fails
-function createEmailLocally(customName) {
-    const domain = document.getElementById('domain-select').value || 'aungmyomyatzaw.online';
-    const username = customName || generateRandomUsername();
-    currentEmail = username + '@' + domain;
-    sessionStartTime = Date.now();
-    
-    document.getElementById('username-input').value = username;
-    document.getElementById('domain-select').value = domain;
-    document.getElementById('current-email').textContent = currentEmail;
-    document.getElementById('email-display').classList.remove('hidden');
-    document.getElementById('end-session-btn').classList.remove('hidden');
-    
-    showNotification('✅ Email created locally: ' + currentEmail, 'success');
-    
-    // Save session and start timers
-    saveSession();
-    
-    // Try to load emails anyway (might work if email exists on server)
-    loadEmails();
-    startAutoRefresh();
-    startTimeUpdate();
-    setupSessionExpiration();
-}
-
-function generateRandomUsername() {
-    const firstNames = [
-        'james', 'john', 'robert', 'michael', 'william', 'david', 'richard', 'joseph', 'thomas', 'charles',
-        'christopher', 'daniel', 'matthew', 'anthony', 'mark', 'donald', 'steven', 'paul', 'andrew', 'joshua',
-        'kenneth', 'kevin', 'brian', 'george', 'timothy', 'ronald', 'edward', 'jason', 'jeffrey', 'ryan',
-        'jacob', 'gary', 'nicholas', 'eric', 'jonathan', 'stephen', 'larry', 'justin', 'scott', 'brandon',
-        'benjamin', 'samuel', 'gregory', 'alexander', 'frank', 'patrick', 'raymond', 'jack', 'dennis', 'jerry',
-        'liam', 'noah', 'oliver', 'elijah', 'logan', 'mason', 'lucas', 'ethan', 'levi', 'sebastian',
-        'mary', 'patricia', 'jennifer', 'linda', 'elizabeth', 'barbara', 'susan', 'jessica', 'sarah', 'karen',
-        'nancy', 'lisa', 'margaret', 'betty', 'sandra', 'ashley', 'dorothy', 'kimberly', 'emily', 'donna',
-        'michelle', 'carol', 'amanda', 'melissa', 'deborah', 'stephanie', 'rebecca', 'laura', 'sharon', 'cynthia',
-        'kathleen', 'amy', 'angela', 'shirley', 'anna', 'brenda', 'pamela', 'emma', 'nicole', 'helen',
-        'samantha', 'katherine', 'christine', 'debra', 'rachel', 'carolyn', 'janet', 'ruth', 'maria', 'heather',
-        'olivia', 'ava', 'isabella', 'sophia', 'charlotte', 'mia', 'amelia', 'harper', 'evelyn', 'abigail'
-    ];
-    
-    const lastNames = [
-        'smith', 'johnson', 'williams', 'brown', 'jones', 'garcia', 'miller', 'davis', 'rodriguez', 'martinez',
-        'hernandez', 'lopez', 'gonzalez', 'wilson', 'anderson', 'thomas', 'taylor', 'moore', 'jackson', 'martin',
-        'lee', 'perez', 'thompson', 'white', 'harris', 'sanchez', 'clark', 'ramirez', 'lewis', 'robinson',
-        'walker', 'young', 'allen', 'king', 'wright', 'scott', 'torres', 'nguyen', 'hill', 'flores',
-        'green', 'adams', 'nelson', 'baker', 'hall', 'rivera', 'campbell', 'mitchell', 'carter', 'roberts'
-    ];
-    
-    const patterns = [
-        // Pattern 1: FirstName + LastName + Digits (1-3)
-        () => {
-            const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
-            const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
-            const digitLength = Math.floor(Math.random() * 3) + 1;
-            let digits = '';
-            
-            if (digitLength === 1) digits = Math.floor(Math.random() * 10);
-            else if (digitLength === 2) digits = Math.floor(10 + Math.random() * 90);
-            else digits = Math.floor(100 + Math.random() * 900);
-            
-            return `${firstName}${lastName}${digits}`;
-        },
-        
-        // Pattern 2: FirstName + Random word + Digits
-        () => {
-            const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
-            const randomWords = ['star', 'moon', 'sun', 'sky', 'tech', 'web', 'net', 'cloud', 'data', 'code'];
-            const randomWord = randomWords[Math.floor(Math.random() * randomWords.length)];
-            const digits = Math.floor(Math.random() * 1000);
-            return `${firstName}${randomWord}${digits}`;
-        },
-        
-        // Pattern 3: Two first names combined
-        () => {
-            const name1 = firstNames[Math.floor(Math.random() * firstNames.length)];
-            const name2 = firstNames[Math.floor(Math.random() * firstNames.length)];
-            const digits = Math.floor(Math.random() * 100);
-            return `${name1}${name2}${digits}`;
-        },
-        
-        // Pattern 4: Simple first name + 3-4 digits
-        () => {
-            const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
-            const digits = Math.floor(100 + Math.random() * 9000); // 100-9999
-            return `${firstName}${digits}`;
-        }
-    ];
-    
-    // Randomly select a pattern
-    const pattern = patterns[Math.floor(Math.random() * patterns.length)];
-    return pattern();
-}
-
-// Handle window resize
-window.addEventListener('resize', function() {
-    if (window.innerWidth >= 768) {
-        // On desktop, ensure list view is visible
-        document.getElementById('email-list-view').classList.remove('hidden');
-    }
-});
-
-function updateLastEmailTime() {
-    const savedSession = localStorage.getItem('tempMailSession');
-    if (savedSession && currentEmail) {
-        try {
-            const session = JSON.parse(savedSession);
-            session.lastEmailTime = Date.now();
-            localStorage.setItem('tempMailSession', JSON.stringify(session));
-        } catch (e) {
-            console.error('Error updating last email time:', e);
-        }
-    }
-}
-
-// Update email times automatically
-function updateEmailTimes() {
-    const emailItems = document.querySelectorAll('.email-list-item');
-    emailItems.forEach(item => {
-        const timestamp = item.getAttribute('data-timestamp');
-        const timeElement = item.querySelector('.email-time');
-        if (timeElement && timestamp) {
-            timeElement.textContent = formatTime(timestamp);
-        }
+    .finally(() => {
+        // Reset button state
+        btn.innerHTML = '<i class="fas fa-sign-in-alt mr-2"></i>Login';
+        btn.disabled = false;
     });
-    
-    // Also update the time in email content if an email is open
-    const emailDateElement = document.getElementById('email-date');
-    if (emailDateElement && emailDateElement.getAttribute('data-timestamp')) {
-        emailDateElement.textContent = formatTime(emailDateElement.getAttribute('data-timestamp'));
-    }
 }
 
-function viewEmail(email, itemEl) {
-    // Set active state (keep existing code)
-    document.querySelectorAll('.email-list-item').forEach(el => el.classList.remove('active', 'bg-blue-600', 'border-blue-500'));
-    itemEl.classList.add('active', 'bg-blue-600', 'border-blue-500');
-    
-    // Mobile: Switch to email content view
-    if (window.innerWidth < 768) {
-        showEmailContent();
-        displayEmailInIframe(email, 'email');
-    } else {
-        // Desktop: Update desktop panel
-        document.getElementById('desktop-email-placeholder').style.display = 'none';
-        document.getElementById('desktop-email-content-inner').classList.remove('hidden');
-        displayEmailInIframe(email, 'desktop-email');
-    }
+// Logout handler
+function adminLogout() {
+    showModal(
+        'Confirm Logout',
+        'Are you sure you want to logout from the admin panel?',
+        function() {
+            fetch(API_URL + '/api/admin/logout', {
+                method: 'POST',
+                credentials: 'include'
+            })
+            .then(() => {
+                location.reload();
+            })
+            .catch(() => {
+                location.reload();
+            });
+        }
+    );
 }
 
-function displayEmailInIframe(email, prefix) {
-    const iframe = document.getElementById(`${prefix}-iframe`);
-    const fallback = document.getElementById(`${prefix}-fallback`);
+// UPDATE this function in admin JavaScript:
+function viewFullAdminEmail(email) {
+    currentViewingEmail = email;
     
-    // Set email metadata
-    document.getElementById(`${prefix}-subject`).textContent = email.subject || 'No subject';
-    document.getElementById(`${prefix}-from`).textContent = email.sender || 'Unknown';
-    document.getElementById(`${prefix}-date`).textContent = formatTime(email.timestamp);
+    // Hide list, show content
+    document.getElementById('admin-email-list-view').classList.add('hidden');
+    document.getElementById('admin-email-content-view').classList.remove('hidden');
     
-    // ✅ ALWAYS USE FALLBACK DIV - NEVER USE IFRAME
+    // Populate email details
+    document.getElementById('admin-email-subject').textContent = email.subject || 'No subject';
+    document.getElementById('admin-email-from').textContent = email.sender || 'Unknown';
+    document.getElementById('admin-email-date').textContent = formatTime(email.timestamp);
+    
+    const iframe = document.getElementById('admin-email-iframe');
+    const fallback = document.getElementById('admin-email-fallback');
+    
+    const emailContent = prepareEmailForIframe(email.body || 'No content');
+    
+    // ✅ ALWAYS USE FALLBACK - NEVER USE IFRAME
     iframe.classList.add('hidden');
     fallback.classList.remove('hidden');
-    fallback.innerHTML = email.body || '<p class="text-gray-400">No content available</p>';
+    
+    // Ensure dark background
+    let content = emailContent.content;
+    if (!content.includes('bg-gray-900') && !content.includes('bg-gray-800')) {
+        content = `<div class="bg-gray-900/80 p-4 rounded-lg border border-gray-700 min-h-full">${content}</div>`;
+    }
+    
+    fallback.innerHTML = content;
 }
 
+function formatPlainTextEmail(text) {
+    if (!text) return '<p class="text-gray-400">No content</p>';
+    
+    let formatted = escapeHtml(text)
+        .replace(/\n/g, '<br>')
+        .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="text-blue-400 hover:underline">$1</a>');
+    
+    return `<div class="text-gray-200 leading-relaxed">${formatted}</div>`;
+}
+
+// Fix the email background to be darker
 function prepareEmailForIframe(rawBody) {
     if (!rawBody || rawBody.trim() === '') {
         return {
@@ -1548,785 +786,359 @@ function prepareEmailForIframe(rawBody) {
     const isHtml = /<[a-z][\s\S]*>/i.test(rawBody);
     
     if (isHtml) {
-        // ✅ JUST RETURN RAW HTML - NO IFRAME WRAPPER
-        return { isHtml: false, content: rawBody };
+        // Wrap in dark background
+        return { 
+            isHtml: false, 
+            content: `<div class="bg-gray-900/80 p-4 rounded-lg min-h-full">${rawBody}</div>`
+        };
     } else {
         const formattedText = formatPlainTextEmail(rawBody);
-        return { isHtml: false, content: formattedText };
+        return { 
+            isHtml: false, 
+            content: formattedText 
+        };
     }
 }
 
-function formatPlainTextEmail(text) {
-    if (!text) return '<p class="text-gray-400">No content</p>';
-    
-    let formatted = escapeHtml(text)
-        .replace(/\n/g, '<br>')
-        .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank">$1</a>');
-    
-    return `<div>${formatted}</div>`;
+// Show email list
+function showAdminEmailList() {
+    document.getElementById('admin-email-list-view').classList.remove('hidden');
+    document.getElementById('admin-email-content-view').classList.add('hidden');
+    currentViewingEmail = null;
 }
 
-function showEmailContent() {
-    document.getElementById('email-list-view').classList.add('hidden');
-    document.getElementById('email-content-view').classList.remove('hidden');
-    document.getElementById('header-title').textContent = 'Email';
-    document.getElementById('back-to-list').classList.remove('hidden');
+// Delete current email
+function deleteCurrentEmail() {
+    if (!currentViewingEmail) return;
+    deleteEmail(currentViewingEmail.id);
 }
 
-function showEmailList() {
-    document.getElementById('email-list-view').classList.remove('hidden');
-    document.getElementById('email-content-view').classList.add('hidden');
-    document.getElementById('header-title').textContent = 'Inbox';
-    document.getElementById('back-to-list').classList.add('hidden');
-}
-
-function startAutoRefresh() {
-    if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-        autoRefreshInterval = null;
-    }
-    
-    autoRefreshInterval = setInterval(() => {
-        // Double-check we still have a valid session before refreshing
-        if (currentEmail && sessionToken) {
-            loadEmails();
-        } else {
-            // Session ended, stop refreshing
-            console.log('🛑 Auto-refresh stopped: no active session');
-            clearInterval(autoRefreshInterval);
-            autoRefreshInterval = null;
-        }
-    }, 5000);
-}
-
-function startTimeUpdate() {
-    if (timeUpdateInterval) {
-        clearInterval(timeUpdateInterval);
-        timeUpdateInterval = null;
-    }
-    
-    timeUpdateInterval = setInterval(() => {
-        // Double-check we still have a valid session
-        if (currentEmail && sessionToken) {
-            updateEmailTimes();
-        } else {
-            // Session ended, stop time updates
-            console.log('🛑 Time updates stopped: no active session');
-            clearInterval(timeUpdateInterval);
-            timeUpdateInterval = null;
-        }
-    }, 1000);
-}
-
-function startTimeUpdate() {
-    if (timeUpdateInterval) clearInterval(timeUpdateInterval);
-    timeUpdateInterval = setInterval(() => {
-        // ✅ Only update times if we have an active session
-        if (currentEmail && sessionToken) {
-            updateEmailTimes();
-        } else {
-            // ✅ Stop time updates if no session
-            clearInterval(timeUpdateInterval);
-            timeUpdateInterval = null;
-        }
-    }, 1000); // Update times every second
-}
-
-
-function setupAMMZDoor() {
-    const ammzElements = document.querySelectorAll('.text-yellow-300');
-    
-    ammzElements.forEach((el) => {
-        if (el.textContent === 'AMMZ' && el.closest('marquee')) {
-            console.log('✅ Setting up AMMZ door');
-            el.title = 'Click to enter Admin Mode';
-            el.classList.add('hover:underline', 'transition-all', 'duration-200');
-            
-            // Add click event
-            el.addEventListener('click', function(e) {
-                console.log('🎯 AMMZ door clicked!');
-                e.preventDefault();
-                e.stopPropagation();
-                toggleAdminMode();
-            });
-        }
-    });
-}
-
-
-
-function endSession() {
-    console.log('🛑 Ending session...');
-    
-    // Save current session data for backend call BEFORE clearing
-    const endEmail = currentEmail;
-    const endToken = sessionToken;
-
-    // Clear frontend state immediately
-    currentEmail = '';
-    sessionToken = '';
-    sessionStartTime = null;
-    
-    // Clear localStorage
-    localStorage.removeItem('tempMailSession');
-    
-    // Stop all refresh intervals
-    if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-        autoRefreshInterval = null;
-        console.log('✅ Auto-refresh stopped');
-    }
-    if (timeUpdateInterval) {
-        clearInterval(timeUpdateInterval);
-        timeUpdateInterval = null;
-        console.log('✅ Time update stopped');
-    }
-    
-    // Clear any session expiration timeout
-    if (window.sessionExpirationTimeout) {
-        clearTimeout(window.sessionExpirationTimeout);
-        window.sessionExpirationTimeout = null;
-        console.log('✅ Session expiration timer stopped');
-    }
-    
-    // Clear any pending email fetch requests
-    if (window.emailFetchController) {
-        window.emailFetchController.abort();
-        window.emailFetchController = null;
-        console.log('✅ Pending requests cancelled');
-    }
-    
-    // Reset UI immediately
-    document.getElementById('username-input').value = '';
-    document.getElementById('domain-select').selectedIndex = 0;
-    document.getElementById('email-display').classList.add('hidden');
-    document.getElementById('end-session-btn').classList.add('hidden');
-    document.getElementById('email-count').textContent = '0 emails';
-    document.getElementById('email-list').innerHTML = '';
-    document.getElementById('no-emails-default').style.display = 'flex';
-    
-    // Reset email view
-    document.getElementById('desktop-email-placeholder').style.display = 'flex';
-    document.getElementById('desktop-email-content-inner').classList.add('hidden');
-    
-    // Reset title
-    document.title = 'TempMail - AMMZ';
-    
-    console.log('✅ Frontend session cleared');
-
-    // Notify backend to end session (fire and forget - don't wait for response)
-    if (endEmail && endToken) {
-        console.log('📡 Notifying backend to end session...');
-        fetch(API_URL + '/api/session/end', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                session_token: endToken,
-                email_address: endEmail
-            })
-        })
-        .then(res => {
-            if (!res.ok) {
-                console.log('⚠️ Backend session end failed, but continuing');
-            } else {
-                console.log('✅ Backend session ended');
-            }
-            return res.json();
-        })
-        .then(data => {
-            console.log('✅ Backend confirmed session end');
-        })
-        .catch(err => {
-            console.log('❌ Backend session end error (ignoring):', err);
-        })
-        .finally(() => {
-            // Show success notification WITHOUT reloading the page
-            showNotification('✅ Session ended successfully', 'success');
-            console.log('🎯 Session end process complete - NO PAGE RELOAD');
-        });
-    } else {
-        // No session data, just show success
-        showNotification('✅ Session cleared', 'success');
-        console.log('🎯 Session cleared - NO PAGE RELOAD');
-    }
-}
-
-function toggleAdminMode() {
-    console.log('Toggle admin mode, current:', isAdminMode);
-    
-    if (!isAdminMode) {
-        // Simple approach for now - just show password modal
-        showPasswordModal();
-    } else {
-        // Leaving admin mode
-        fetch('/api/admin/logout', {
-            method: 'POST',
-            credentials: 'include'
-        }).then(() => {
-            deactivateAdminMode();
-        }).catch(() => {
-            deactivateAdminMode();
-        });
-    }
-}
-
-// Add this function
-function clearAdminSessions() {
-    fetch('/api/admin/clear-sessions', {
-        method: 'POST',
+// Load addresses
+function loadAddresses() {
+    fetch(API_URL + '/api/admin/addresses', {
         credentials: 'include'
-    }).catch(err => console.log('Admin sessions cleared'));
-}
-
-function activateAdminMode() {
-    isAdminMode = true;
-    
-    // Clear frontend session
-    clearSession();
-    
-    // Change UI colors
-    document.body.classList.add('admin-mode');
-    document.querySelector('header').classList.add('admin-header');
-    
-    // Update header
-    const header = document.querySelector('h1');
-    header.innerHTML = '<i class="fas fa-shield-alt text-xl md:text-3xl mr-2 md:mr-3"></i><span class="text-xl md:text-4xl lg:text-5xl font-bold">ADMIN MODE - TempMail</span>';
-    header.classList.add('admin-text');
-    
-    // Update subtitle
-    const subtitle = document.querySelector('header p');
-    if (subtitle) {
-        subtitle.innerHTML = '<span class="admin-text">Admin Mode Active - Blacklist Bypass Enabled</span>';
-    }
-    
-    showNotification('🔓 Admin Mode Activated', 'success');
-}
-
-function showPasswordModal() {
-    const modal = document.createElement('div');
-    modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-    modal.innerHTML = `
-        <div class="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 glass-effect">
-            <div class="text-center mb-6">
-                <i class="fas fa-shield-alt text-3xl text-yellow-400 mb-3"></i>
-                <h3 class="text-xl font-bold text-white mb-2">Admin Access</h3>
-                <p class="text-gray-300">Enter admin password to continue</p>
-            </div>
-            <input type="password" id="admin-password-input" 
-                   class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white mb-4 focus:outline-none focus:border-yellow-400" 
-                   placeholder="Enter password">
-            <div class="flex gap-3">
-                <button onclick="closePasswordModal()" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-3 rounded-lg transition-colors">
-                    Cancel
-                </button>
-                <button onclick="verifyAdminPassword()" class="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white py-3 rounded-lg transition-colors font-semibold">
-                    Verify
-                </button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-    
-    // Focus input and handle Enter key
-    const input = document.getElementById('admin-password-input');
-    input.focus();
-    input.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') verifyAdminPassword();
-    });
-}
-
-function closePasswordModal() {
-    const modal = document.querySelector('.fixed.inset-0');
-    if (modal) modal.remove();
-}
-
-async function verifyAdminPassword() {
-    const password = document.getElementById('admin-password-input').value;
-    if (!password) {
-        alert('❌ Please enter a password');
-        return;
-    }
-    
-    try {
-        const response = await fetch('/api/verify-admin', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            credentials: 'include',
-            body: JSON.stringify({password: password})
-        });
-        
-        if (response.ok) {
-            const result = await response.json();
-            if (result.success) {
-                closePasswordModal();
-                activateAdminMode();
-            } else {
-                alert('❌ Invalid password');
-            }
-        } else {
-            const error = await response.json();
-            alert('❌ ' + (error.error || 'Verification failed'));
+    })
+    .then(res => {
+        if (res.status === 401) {
+            location.reload();
+            return;
         }
-    } catch (error) {
-        console.error('Admin login error:', error);
-        alert('❌ Connection error');
-    }
-}
-
-function activateAdminMode() {
-    isAdminMode = true;
-    
-    // Clear any existing session when entering admin mode
-    clearSession();
-    
-    // Change UI colors
-    document.body.classList.add('admin-mode');
-    document.querySelector('header').classList.add('admin-header');
-    
-    // Fix icon size and text alignment
-    const header = document.querySelector('h1');
-    header.innerHTML = '<i class="fas fa-shield-alt text-xl md:text-3xl mr-2 md:mr-3"></i><span class="text-xl md:text-4xl lg:text-5xl font-bold">ADMIN MODE - TempMail</span>';
-    header.classList.add('admin-text');
-    
-    // Update the subtitle
-    const subtitle = document.querySelector('header p');
-    if (subtitle) {
-        subtitle.innerHTML = '<span class="admin-text">Admin Mode Active - Blacklist Bypass Enabled</span>';
-    }
-    
-    showNotification('🔓 Admin Mode Activated - Session cleared', 'success');
-}
-
-function deactivateAdminMode() {
-    isAdminMode = false;
-    
-    // ✅ Use clearSession instead of custom logic to ensure intervals are cleared
-    clearSession();
-    
-    // Force logout from admin backend
-    fetch('/api/admin/logout', {
-        method: 'POST',
-        credentials: 'include'
-    }).catch(err => console.log('Admin logout completed'));
-    
-    // Restore normal UI
-    document.body.classList.remove('admin-mode');
-    const header = document.querySelector('header');
-    if (header) header.classList.remove('admin-header');
-    
-    // Restore original header
-    const h1 = document.querySelector('h1');
-    if (h1) {
-        h1.innerHTML = '<i class="fas fa-envelope text-xl md:text-3xl mr-2 md:mr-3"></i><span class="text-xl md:text-4xl lg:text-5xl font-bold">Secure TempMail By AMMZ</span>';
-        h1.classList.remove('admin-text');
-    }
-    
-    // Restore original subtitle
-    const subtitle = document.querySelector('header p');
-    if (subtitle) {
-        subtitle.textContent = 'Disposable email addresses';
-        subtitle.classList.remove('admin-text');
-    }
-    
-    showNotification('🔓 Admin Mode Deactivated', 'success');
-    
-    // Force page reload after a short delay to ensure clean state
-    setTimeout(() => {
-        window.location.reload();
-    }, 1000);
-}
-
-function validateCurrentSession() {
-    if (!currentEmail || !sessionToken) return false;
-    
-    // Check if session is expired
-    if (sessionStartTime) {
-        const sessionAge = Date.now() - sessionStartTime;
-        if (sessionAge > SESSION_TIMEOUT) {
-            console.log('Session expired, clearing...');
-            clearSession();
-            return false;
-        }
-    }
-    
-    return true;
-}
-
-function initApp() {
-    console.log('🚀 Initializing app...');
-    console.log('💾 Checking localStorage for session...');
-    
-    // Check what's actually in localStorage
-    const savedSession = localStorage.getItem('tempMailSession');
-    if (savedSession) {
-        console.log('📦 Found saved session in localStorage');
-        try {
-            const session = JSON.parse(savedSession);
-            console.log('🔍 Session data:', {
-                email: session.email,
-                hasToken: !!session.sessionToken,
-                createdAt: new Date(session.createdAt).toISOString(),
-                age: Date.now() - session.createdAt
-            });
-        } catch (e) {
-            console.error('❌ Invalid session data in localStorage:', e);
-        }
-    } else {
-        console.log('📭 No session found in localStorage');
-    }
-    
-    // Initialize app
-    loadDomains().then(() => {
-        console.log('✅ Domains loaded');
-        // Try to restore session after domains are loaded
-        if (!loadSession()) {
-            // No valid session, clear any leftover state
-            console.log('ℹ️ No valid session found or restored');
-            clearSession();
-        }
-    }).catch(err => {
-        console.error('❌ Error loading domains:', err);
-        // Still try to load session even if domains fail
-        if (!loadSession()) {
-            clearSession();
-        }
-    });
-    
-    // Set up periodic session validation
-    setInterval(validateCurrentSession, 30000); // Check every 30 seconds
-}
-
-function setupEventListeners() {
-// Create button
-// Create button
-document.getElementById('create-btn').addEventListener('click', function() {
-    const btn = this;
-    const username = document.getElementById('username-input').value.trim();
-    
-    // If no username provided, show error
-    if (!username) {
-        showNotification('❌ Please enter a username', 'error');
-        document.getElementById('username-input').focus();
-        return;
-    }
-    
-    // Validate username format
-    if (!/^[a-zA-Z0-9-_]+$/.test(username)) {
-        showNotification('❌ Username can only contain letters, numbers, hyphens, and underscores', 'error');
-        document.getElementById('username-input').classList.add('border-red-500');
-        document.getElementById('username-input').focus();
-        return;
-    }
-    
-    // 🚨 IMMEDIATELY show loading state
-    const originalText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
-    btn.classList.add('opacity-50', 'cursor-not-allowed');
-    
-    // Use setTimeout to ensure UI updates before API call
-    setTimeout(() => {
-        createEmail(username);
-    }, 10);
-});
-
-// Enter key in username field - works exactly like Create button
-document.getElementById('username-input').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-        e.preventDefault(); // Prevent form submission
-        const username = document.getElementById('username-input').value.trim();
-        
-        // If no username provided, show error
-        if (!username) {
-            showNotification('❌ Please enter a username', 'error');
-            document.getElementById('username-input').focus();
+        return res.json();
+    })
+    .then(data => {
+        if (!data || data.error) {
+            document.getElementById('address-list').innerHTML = '<p class="text-red-400 text-center py-8">Error loading addresses</p>';
             return;
         }
         
-        // Validate username format
-        if (!/^[a-zA-Z0-9-_]+$/.test(username)) {
-            showNotification('❌ Username can only contain letters, numbers, hyphens, and underscores', 'error');
-            document.getElementById('username-input').classList.add('border-red-500');
-            document.getElementById('username-input').focus();
+        var list = document.getElementById('address-list');
+        list.innerHTML = '';
+        
+        if (!data.addresses || data.addresses.length === 0) {
+            list.innerHTML = '<p class="text-gray-400 text-center py-8">No email addresses yet</p>';
             return;
         }
         
-        createEmail(username); // Same function as Create button
-    }
-});
-    
-// Random email button - FIXED loading state
-document.getElementById('big-random-btn').addEventListener('click', function() {
-    const btn = this;
-    console.log('🎲 Random button clicked - checking current session...');
-    
-    // 🚨 IMMEDIATELY show loading state
-    const originalText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
-    btn.classList.add('opacity-50', 'cursor-not-allowed');
-    
-    // If there's an active session, end it first
-    if (currentEmail && sessionToken) {
-        console.log('🔄 Ending current session before creating new one...');
-        
-        // End current session first
-        endSessionForNewEmail().then(() => {
-            console.log('✅ Current session ended, now creating new email...');
-            
-            // Generate random username and set it in the input
-            const randomUsername = generateRandomUsername();
-            document.getElementById('username-input').value = randomUsername;
-            
-            // Wait a moment for cleanup to complete, then create new random email
-            setTimeout(() => {
-                createEmail(randomUsername);
-            }, 500);
-            
-        }).catch(err => {
-            console.error('❌ Error ending session:', err);
-            
-            // Still try to create new email even if ending fails
-            const randomUsername = generateRandomUsername();
-            document.getElementById('username-input').value = randomUsername;
-            
-            setTimeout(() => {
-                createEmail(randomUsername);
-            }, 500);
+        data.addresses.forEach(addr => {
+            var item = document.createElement('div');
+            item.className = 'address-item bg-gray-800 p-3 md:p-4 rounded-lg border border-gray-700 hover:border-gray-600';
+            item.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <div class="flex-1">
+                        <p class="text-white font-semibold truncate text-xs md:text-sm">${escapeHtml(addr.address)}</p>
+                        <p class="text-xs text-gray-400 mt-1">
+                            ${addr.count || 0} email${(addr.count || 0) !== 1 ? 's' : ''} • 
+                            ${formatTime(addr.last_email)}
+                        </p>
+                    </div>
+                    <div class="flex gap-1">
+                        <button onclick="viewEmails('${escapeHtml(addr.address)}')" class="text-blue-400 hover:text-blue-300 p-1 md:p-2 rounded transition-colors" title="View emails">
+                            <i class="fas fa-eye text-xs md:text-sm"></i>
+                        </button>
+                        <button onclick="deleteAddress('${escapeHtml(addr.address)}')" class="text-red-400 hover:text-red-300 p-1 md:p-2 rounded transition-colors" title="Delete all emails">
+                            <i class="fas fa-trash text-xs md:text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+            list.appendChild(item);
         });
-        
-    } else {
-        // No active session, generate random username and create
-        console.log('📭 No active session, creating new email directly...');
-        
-        // Generate random username and set it in the input
-        const randomUsername = generateRandomUsername();
-        document.getElementById('username-input').value = randomUsername;
-        
-        // Small delay to ensure UI updates
-        setTimeout(() => {
-            createEmail(randomUsername);
-        }, 10);
-    }
-});
+    })
+    .catch(err => {
+        console.error('Error loading addresses:', err);
+        document.getElementById('address-list').innerHTML = '<p class="text-red-400 text-center py-8">Failed to load addresses</p>';
+    });
+}
 
-function endSessionForNewEmail() {
-    return new Promise((resolve, reject) => {
-        console.log('🔄 Ending session for new email creation...');
+// View emails for address
+function viewEmails(address) {
+    selectedAddress = address;
+    document.getElementById('selected-address').textContent = address;
+    
+    fetch(API_URL + '/api/admin/emails/' + encodeURIComponent(address), {
+        credentials: 'include'
+    })
+    .then(res => res.json())
+    .then(data => {
+        var details = document.getElementById('email-details');
+        var badge = document.getElementById('email-count-badge');
         
-        // Save current session data for backend call
-        const endEmail = currentEmail;
-        const endToken = sessionToken;
+        if (!data || data.error) {
+            details.innerHTML = '<p class="text-red-400 text-center py-8">Error loading emails</p>';
+            badge.classList.add('hidden');
+            return;
+        }
+        
+        if (!data.emails || data.emails.length === 0) {
+            details.innerHTML = '<p class="text-gray-400 text-center py-8">No emails for this address</p>';
+            badge.textContent = '0 emails';
+            badge.classList.remove('hidden');
+            return;
+        }
+        
+        // Update badge
+        badge.textContent = data.emails.length + ' email' + (data.emails.length !== 1 ? 's' : '');
+        badge.classList.remove('hidden');
+        
+        details.innerHTML = '';
+        
+        data.emails.forEach(email => {
+            var item = document.createElement('div');
+            item.className = 'bg-gray-800 p-3 md:p-4 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors cursor-pointer';
+            
+            // Make entire card clickable
+            item.onclick = function() {
+                viewFullAdminEmail(email);
+            };
+            
+            // Clean and truncate body for preview
+            var cleanBody = email.body ? email.body.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() : 'No content';
+            var previewBody = cleanBody.length > 100 ? cleanBody.substring(0, 100) + '...' : cleanBody;
+            
+            item.innerHTML = `
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex-1">
+                        <p class="text-white font-semibold text-xs md:text-sm truncate">${escapeHtml(email.sender || 'Unknown')}</p>
+                        <p class="text-gray-300 text-xs md:text-sm font-medium mt-1">${escapeHtml(email.subject || 'No subject')}</p>
+                        <p class="text-xs text-gray-400 mt-1">${formatTime(email.timestamp)}</p>
+                    </div>
+                    <button onclick="event.stopPropagation(); deleteEmail(${email.id})" 
+                            class="text-red-400 hover:text-red-300 p-1 md:p-2 rounded transition-colors ml-2" 
+                            title="Delete email">
+                        <i class="fas fa-trash text-xs md:text-sm"></i>
+                    </button>
+                </div>
+                <p class="text-xs text-gray-400 mt-2">${escapeHtml(previewBody)}</p>
+                <div class="mt-2 text-xs text-blue-400 hover:text-blue-300">
+                    <i class="fas fa-eye mr-1"></i>Click to view full email
+                </div>
+            `;
+            
+            details.appendChild(item);
+        });
+    })
+    .catch(err => {
+        console.error('Error loading emails:', err);
+        document.getElementById('email-details').innerHTML = '<p class="text-red-400 text-center py-8">Failed to load emails</p>';
+    });
+}
 
-        // Clear frontend state immediately
-        currentEmail = '';
-        sessionToken = '';
-        sessionStartTime = null;
-        
-        // Clear localStorage
-        localStorage.removeItem('tempMailSession');
-        
-        // Stop all refresh intervals
-        if (autoRefreshInterval) {
-            clearInterval(autoRefreshInterval);
-            autoRefreshInterval = null;
-        }
-        if (timeUpdateInterval) {
-            clearInterval(timeUpdateInterval);
-            timeUpdateInterval = null;
-        }
-        
-        // Clear any session expiration timeout
-        if (window.sessionExpirationTimeout) {
-            clearTimeout(window.sessionExpirationTimeout);
-            window.sessionExpirationTimeout = null;
-        }
-        
-        // Clear any pending email fetch requests
-        if (window.emailFetchController) {
-            window.emailFetchController.abort();
-            window.emailFetchController = null;
-        }
-        
-        // Reset UI immediately
-        document.getElementById('username-input').value = '';
-        document.getElementById('domain-select').selectedIndex = 0;
-        document.getElementById('email-display').classList.add('hidden');
-        document.getElementById('end-session-btn').classList.add('hidden');
-        document.getElementById('email-count').textContent = '0 emails';
-        document.getElementById('email-list').innerHTML = '';
-        document.getElementById('no-emails-default').style.display = 'flex';
-        
-        // Reset email view
-        document.getElementById('desktop-email-placeholder').style.display = 'flex';
-        document.getElementById('desktop-email-content-inner').classList.add('hidden');
-        
-        // Reset title
-        document.title = 'TempMail - AMMZ';
-        
-        console.log('✅ Frontend session cleared for new email');
-
-        // Notify backend to end session
-        if (endEmail && endToken) {
-            console.log('📡 Notifying backend to end previous session...');
-            fetch(API_URL + '/api/session/end', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    session_token: endToken,
-                    email_address: endEmail
-                })
+// Delete single email
+function deleteEmail(emailId) {
+    showModal(
+        'Delete Email',
+        'Are you sure you want to delete this email? This action cannot be undone.',
+        function() {
+            fetch(API_URL + '/api/admin/delete/' + emailId, {
+                method: 'DELETE',
+                credentials: 'include'
             })
-            .then(res => {
-                if (!res.ok) {
-                    console.log('⚠️ Backend session end failed, but continuing');
-                } else {
-                    console.log('✅ Backend session ended');
-                }
-                return res.json();
-            })
+            .then(res => res.json())
             .then(data => {
-                console.log('✅ Backend confirmed session end');
-                resolve(); // Resolve the promise to continue
+                if (data.success) {
+                    if (selectedAddress) viewEmails(selectedAddress);
+                    loadStats();
+                    showNotification('✅ Email deleted successfully', 'success');
+                } else {
+                    showNotification('❌ Failed to delete email', 'error');
+                }
             })
             .catch(err => {
-                console.log('❌ Backend session end error (ignoring):', err);
-                resolve(); // Still resolve to continue creation
+                console.error('Error deleting email:', err);
+                showNotification('❌ Error deleting email', 'error');
             });
-        } else {
-            // No session to end, just resolve
-            console.log('📭 No backend session to end');
-            resolve();
-        }
-    });
-}
-
-// Add this function to properly end session in backend
-function endSessionBackend() {
-    return new Promise((resolve) => {
-        if (!currentEmail || !sessionToken) {
-            resolve();
-            return;
-        }
-        
-        fetch(API_URL + '/api/session/end', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                session_token: sessionToken,
-                email_address: currentEmail
-            })
-        })
-        .then(res => {
-            if (!res.ok) {
-                console.log('Backend session end failed, but continuing');
-            }
-            return res.json();
-        })
-        .then(data => {
-            console.log('✅ Backend session ended');
-            resolve();
-        })
-        .catch(err => {
-            console.log('❌ Backend session end error (ignoring):', err);
-            resolve();
-        });
-    });
-}
-    
-    // Copy button
-    document.getElementById('copy-btn').addEventListener('click', function() {
-        if (!currentEmail) {
-            showNotification('❌ No email to copy', 'error');
-            return;
-        }
-        
-        navigator.clipboard.writeText(currentEmail).then(function() {
-            showNotification('✅ Email copied to clipboard', 'success');
-        }).catch(function() {
-            // Fallback for older browsers
-            const textArea = document.createElement('textarea');
-            textArea.value = currentEmail;
-            document.body.appendChild(textArea);
-            textArea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textArea);
-            showNotification('✅ Email copied to clipboard', 'success');
-        });
-    });
-    
-// End session button
-document.getElementById('end-session-btn').addEventListener('click', function() {
-    showModal(
-        'End Session',
-        'Are you sure you want to end this session? All emails will be cleared.',
-        function() {
-            console.log('🎯 User confirmed session end');
-            endSession(); // This will now work without page reload
         }
     );
-});
+}
 
-    document.addEventListener('click', function(e) {
-        // Check if clicked element is the AMMZ text in the marquee
-        if (e.target.classList.contains('text-yellow-300') && 
-            e.target.textContent === 'AMMZ' &&
-            e.target.closest('marquee')) {
-            e.preventDefault();
-            toggleAdminMode();
+// Delete all emails for address
+function deleteAddress(address) {
+    showModal(
+        'Delete All Emails',
+        `Are you sure you want to delete ALL emails for <strong>${escapeHtml(address)}</strong>?<br><br>This action cannot be undone and will permanently remove all emails for this address.`,
+        function() {
+            fetch(API_URL + '/api/admin/delete-address/' + encodeURIComponent(address), {
+                method: 'DELETE',
+                credentials: 'include'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    loadAddresses();
+                    loadStats();
+                    document.getElementById('email-details').innerHTML = '<p class="text-gray-400 text-center py-8">Select an email address to view emails</p>';
+                    document.getElementById('selected-address').textContent = 'None selected';
+                    document.getElementById('email-count-badge').classList.add('hidden');
+                    showNotification('✅ All emails deleted for ' + address, 'success');
+                } else {
+                    showNotification('❌ Failed to delete emails', 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error deleting address:', err);
+                showNotification('❌ Error deleting emails', 'error');
+            });
         }
+    );
+}
+
+// Load stats
+function loadStats() {
+    fetch(API_URL + '/api/admin/stats', {
+        credentials: 'include'
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data && !data.error) {
+            document.getElementById('stat-emails').textContent = data.total_emails || 0;
+            document.getElementById('stat-addresses').textContent = data.total_addresses || 0;
+            document.getElementById('stat-recent').textContent = data.recent_emails || 0;
+        }
+    })
+    .catch(err => {
+        console.error('Error loading stats:', err);
     });
+}
+
+// Load active sessions with end session functionality
+function loadActiveSessions() {
+    fetch(API_URL + '/api/admin/sessions', {
+        credentials: 'include'
+    })
+    .then(res => {
+        if (res.status === 401) {
+            location.reload();
+            return;
+        }
+        return res.json();
+    })
+    .then(data => {
+        var sessionsEl = document.getElementById('active-sessions');
+        
+        if (!data || data.error) {
+            sessionsEl.innerHTML = '<p class="text-red-400 text-center py-8">Error loading sessions</p>';
+            return;
+        }
+        
+        if (!data.sessions || data.sessions.length === 0) {
+            sessionsEl.innerHTML = '<p class="text-gray-400 text-center py-8">No active sessions</p>';
+            return;
+        }
+        
+        sessionsEl.innerHTML = '';
+        
+        data.sessions.forEach(session => {
+            var item = document.createElement('div');
+            item.className = 'session-item bg-gray-800 p-3 md:p-4 rounded-lg border border-gray-700 hover:border-gray-600';
+            item.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <p class="text-white font-semibold text-xs md:text-sm truncate">${escapeHtml(session.email)}</p>
+                        <div class="grid grid-cols-2 gap-2 mt-2 text-xs text-gray-400">
+                            <div>
+                                <i class="fas fa-play-circle mr-1"></i>
+                                ${session.session_age_minutes} min ago
+                            </div>
+                            <div>
+                                <i class="fas fa-clock mr-1"></i>
+                                ${session.time_remaining_minutes} min left
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">
+                            Last active: ${formatTime(session.last_activity)}
+                        </p>
+                    </div>
+                    <button onclick="endUserSession('${session.session_token}', '${escapeHtml(session.email)}')" class="text-red-400 hover:text-red-300 p-1 md:p-2 rounded transition-colors ml-2" title="End Session">
+                        <i class="fas fa-times-circle text-xs md:text-sm"></i>
+                    </button>
+                </div>
+            `;
+            sessionsEl.appendChild(item);
+        });
+    })
+    .catch(err => {
+        console.error('Error loading sessions:', err);
+        document.getElementById('active-sessions').innerHTML = '<p class="text-red-400 text-center py-8">Failed to load sessions</p>';
+    });
+}
+
+// Utility functions
+function escapeHtml(text) {
+    if (!text) return '';
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatTime(timestamp) {
+    if (!timestamp) return 'never';
     
-// Refresh button
-document.getElementById('refresh-btn').addEventListener('click', function() {
-    if (currentEmail && sessionToken) {
-        loadEmails();
-        showNotification('🔄 Refreshing inbox...', 'info');
-    } else {
-        showNotification('❌ No active session', 'error');
+    try {
+        var date;
+        if (typeof timestamp === 'string') {
+            date = new Date(timestamp);
+        } else if (timestamp instanceof Date) {
+            date = timestamp;
+        } else {
+            date = new Date(timestamp);
+        }
+        
+        var now = new Date();
+        var diff = now - date;
+        var seconds = Math.floor(diff / 1000);
+        var minutes = Math.floor(seconds / 60);
+        var hours = Math.floor(minutes / 60);
+        var days = Math.floor(hours / 24);
+        
+        if (seconds < 10) return 'just now';
+        if (seconds < 60) return seconds + ' sec ago';
+        if (minutes < 60) return minutes + ' min ago';
+        if (hours < 24) return hours + ' hour ago';
+        if (days < 7) return days + ' day ago';
+        
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    } catch (e) {
+        return 'unknown';
     }
-});
+}
+
+function showNotification(message, type) {
+    var bgColor = type === 'success' ? 'bg-green-600' : 'bg-red-600';
+    var icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
     
-    // Back to list button (mobile)
-    document.getElementById('back-to-list').addEventListener('click', function() {
-        showEmailList();
-    });
+    var notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 ${bgColor} text-white px-4 md:px-6 py-2 md:py-3 rounded-lg shadow-lg z-50 fade-in flex items-center text-sm md:text-base`;
+    notification.innerHTML = `<i class="fas ${icon} mr-2"></i>${message}`;
+    document.body.appendChild(notification);
     
-    // Enter key in username field
-    document.getElementById('username-input').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            document.getElementById('create-btn').click();
-        }
-    });
-    
-    // Clear username error when typing
-    document.getElementById('username-input').addEventListener('input', function() {
-        this.classList.remove('border-red-500');
-    });
-    
-    // Admin mode keyboard shortcut (Ctrl+Alt+A)
-    document.addEventListener('keydown', function(e) {
-        if (e.ctrlKey && e.altKey && e.key === 'a') {
-            e.preventDefault();
-            toggleAdminMode();
-        }
-    });
-    
-    // Handle page visibility changes
-    document.addEventListener('visibilitychange', function() {
-        if (!document.hidden && currentEmail) {
-            // Page became visible, refresh emails
-            loadEmails();
-        }
-    });
+    setTimeout(() => {
+        notification.classList.add('opacity-0');
+        notification.classList.add('transition-opacity');
+        setTimeout(() => {
+            notification.remove();
+        }, 300);
+    }, 3000);
 }
 </script>
 </body>
 </html>
-
