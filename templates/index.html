@@ -1531,145 +1531,18 @@ function displayEmailInIframe(email, prefix) {
     document.getElementById(`${prefix}-from`).textContent = email.sender || 'Unknown';
     document.getElementById(`${prefix}-date`).textContent = formatTime(email.timestamp);
     
-    const emailContent = prepareEmailForIframe(email.body);
-    
-    if (emailContent.isHtml) {
-        // Use iFrame for HTML content
-        fallback.classList.add('hidden');
-        iframe.classList.remove('hidden');
-        
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-        iframeDoc.open();
-        iframeDoc.write(emailContent.content);
-        iframeDoc.close();
-    } else {
-        // Use fallback for plain text
-        iframe.classList.add('hidden');
-        fallback.classList.remove('hidden');
-        fallback.innerHTML = emailContent.content;
-    }
+    // ✅ ALWAYS USE FALLBACK DIV - NEVER USE IFRAME
+    iframe.classList.add('hidden');
+    fallback.classList.remove('hidden');
+    fallback.innerHTML = email.body || '<p class="text-gray-400">No content available</p>';
 }
 
-function prepareEmailForIframe(rawBody) {
-    if (!rawBody || rawBody.trim() === '') {
-        return {
-            isHtml: false,
-            content: '<p class="text-gray-400 text-center py-8">No content available</p>'
-        };
-    }
-    
-    const isHtml = /<[a-z][\s\S]*>/i.test(rawBody);
-    
-    if (isHtml) {
-        // Enhanced safe HTML document for iFrame with better CSS handling
-        const safeHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        /* Reset and base styles */
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            padding: 20px;
-            margin: 0;
-            background: white;
-            max-width: 100%;
-            overflow-wrap: break-word;
-        }
-        /* Force visibility of all elements */
-        * {
-            visibility: visible !important;
-            opacity: 1 !important;
-            display: block !important;
-        }
-        /* Hide tracking pixels and invisible elements */
-        img[width="1"], img[height="1"] { display: none !important; }
-        
-        /* Ensure text is readable */
-        div, p, span, td {
-            color: #333 !important;
-            font-size: 14px !important;
-            line-height: 1.5 !important;
-        }
-        
-        /* Make verification codes stand out */
-        div:contains("verification code"), 
-        div:contains("temporary code"),
-        div:has(> strong),
-        strong, b {
-            background: #10b981 !important;
-            color: white !important;
-            padding: 15px !important;
-            border-radius: 8px !important;
-            font-size: 24px !important;
-            font-weight: bold !important;
-            text-align: center !important;
-            margin: 20px 0 !important;
-            display: block !important;
-        }
-        
-        img { max-width: 100%; height: auto; }
-        a { color: #0066cc; text-decoration: underline; }
-        table { max-width: 100%; border-collapse: collapse; }
-    </style>
-    <base target="_blank">
-</head>
-<body>
-    <div style="max-width: 100%;">${rawBody}</div>
-    
-    <script>
-        // Enhanced script to highlight verification codes
-        document.addEventListener('DOMContentLoaded', function() {
-            // Look for verification codes in the text
-            const text = document.body.textContent || document.body.innerText;
-            const codePatterns = [
-                /\\b(\\d{6})\\b/g,
-                /verification code:\\s*(\\d+)/gi,
-                /temporary code:\\s*(\\d+)/gi,
-                /enter.*code:\\s*(\\d+)/gi
-            ];
-            
-            codePatterns.forEach(pattern => {
-                const matches = text.match(pattern);
-                if (matches) {
-                    matches.forEach(match => {
-                        const code = match.replace(/[^\\d]/g, '');
-                        if (code.length >= 4) {
-                            // Create a highlighted version
-                            const highlight = document.createElement('div');
-                            highlight.style.cssText = 'background: #10b981 !important; color: white !important; padding: 20px !important; border-radius: 10px !important; font-size: 28px !important; font-weight: bold !important; text-align: center !important; margin: 25px 0 !important; letter-spacing: 3px !important;';
-                            highlight.textContent = 'Verification Code: ' + code;
-                            document.body.prepend(highlight);
-                        }
-                    });
-                }
-            });
-            
-            // Make all links open in new tabs safely
-            document.addEventListener('click', function(e) {
-                if (e.target.tagName === 'A') {
-                    e.preventDefault();
-                    window.top.postMessage({
-                        type: 'EMAIL_LINK_CLICK',
-                        href: e.target.href
-                    }, '*');
-                }
-            });
-        });
-    <\/script>
-</body>
-</html>`;
-        
-        return { isHtml: true, content: safeHtml };
-    } else {
-        const formattedText = formatPlainTextEmail(rawBody);
-        return { isHtml: false, content: formattedText };
-    }
+if (isHtml) {
+    // ✅ JUST RETURN THE RAW HTML DIRECTLY - NO IFRAME WRAPPER
+    return { isHtml: false, content: rawBody };
+} else {
+    const formattedText = formatPlainTextEmail(rawBody);
+    return { isHtml: false, content: formattedText };
 }
 
 function formatPlainTextEmail(text) {
