@@ -420,13 +420,11 @@ def get_display_body(parsed_email):
     }
 
 def format_email_content(text, verification_codes):
-    """Format email content for HTML display with dark theme"""
+    """Format email content for HTML display - preserve original structure"""
     if not text:
-        return '<p class="text-gray-400">No readable content found</p>'
+        return '<p class="text-gray-400">No content</p>'
     
-    text = text.strip()
-    
-    # Remove technical headers
+    # Remove only technical headers, keep everything else as-is
     header_patterns = [
         'Received:', 'Received-SPF:', 'ARC-Seal:', 'ARC-Message-Signature:',
         'DKIM-Signature:', 'Authentication-Results:', 'Return-Path:',
@@ -435,57 +433,43 @@ def format_email_content(text, verification_codes):
     
     lines = text.split('\n')
     clean_lines = []
-    skip_mode = False
     
     for line in lines:
-        line = line.rstrip()
-        if not line:
-            if clean_lines:
-                clean_lines.append('')
-            continue
-            
-        is_header = any(line.startswith(pattern) for pattern in header_patterns)
-        
-        if is_header:
-            skip_mode = True
-            continue
-            
-        if skip_mode and line and not line.startswith(' ') and not line.startswith('\t'):
-            skip_mode = False
-            
-        if not skip_mode:
-            clean_lines.append(line)
+        # Skip only technical headers
+        if not any(line.startswith(pattern) for pattern in header_patterns):
+            clean_lines.append(line.rstrip())
     
     text = '\n'.join(clean_lines)
     
-    html_parts = []
+    # Convert to HTML with minimal changes
+    html_content = escapeHtml(text)
     
-    # Process the main content with dark theme
-    paragraphs = re.split(r'\n\s*\n', text)
+    # Highlight verification codes in their original positions
+    for code in verification_codes:
+        html_content = html_content.replace(
+            code, 
+            f'<span class="bg-yellow-200 text-yellow-900 px-2 py-1 rounded font-mono font-bold border border-yellow-400">{code}</span>'
+        )
     
-    for paragraph in paragraphs:
-        paragraph = paragraph.strip()
-        if paragraph:
-            # Make URLs clickable with light blue color
-            paragraph = re.sub(
-                r'(https?://[^\s]+)', 
-                r'<a href="\1" target="_blank" class="text-blue-300 hover:text-blue-200 hover:underline">\1</a>', 
-                paragraph
-            )
-            
-            # Highlight verification codes with darker yellow
-            for code in verification_codes:
-                paragraph = paragraph.replace(
-                    code, 
-                    f'<span class="bg-yellow-800 text-yellow-200 px-2 py-1 rounded font-mono font-bold border border-yellow-600">{code}</span>'
-                )
-            
-            html_parts.append(f'<p class="mb-4 leading-relaxed text-gray-200">{paragraph}</p>')
+    # Make "Sign in" text into a clickable button
+    html_content = re.sub(
+        r'Sign in\s*\[(https?://[^\]]+)\]',
+        r'<a href="\1" target="_blank" class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-all transform hover:scale-105 shadow-lg mt-2 mb-4">🔐 Sign in to your account</a>',
+        html_content
+    )
     
-    if not html_parts:
-        html_parts.append('<p class="text-gray-400 text-center py-8">No readable content found in this email.</p>')
+    # Make other URLs clickable (fallback)
+    html_content = re.sub(
+        r'(https?://[^\s]+)', 
+        r'<a href="\1" target="_blank" class="text-blue-400 hover:underline">\1</a>', 
+        html_content
+    )
     
-    return f'<div class="email-content bg-gray-900/50 rounded-lg p-4 border border-gray-700">{ "".join(html_parts) }</div>'
+    # Preserve line breaks and whitespace
+    html_content = html_content.replace('\n', '<br>')
+    
+    # Dark background wrapper
+    return f'<div class="email-content whitespace-pre-wrap text-gray-200 leading-relaxed font-sans bg-gray-900/50 p-4 rounded-lg border border-gray-700">{html_content}</div>'
 
 # Add this helper function if missing
 def escapeHtml(text):
