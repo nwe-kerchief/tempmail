@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin Panel - TempMail</title>
+<!-- Change this: -->
 <script src="https://cdn.tailwindcss.com"></script>
+<!-- Already fixed! No line-clamp plugin -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
@@ -185,39 +187,42 @@ max-height: 350px;
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 12px;
     overflow: hidden;
-    background: white;
+    background: #111827; /* Dark background for wrapper */
 }
 
 .sandboxed-iframe {
     width: 100%;
     height: 100%;
     border: none;
-    background: white;
+    background: #111827; /* Dark iframe background */
 }
 
 .email-fallback {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(0, 0, 0, 0.6); /* Much darker */
     padding: 20px;
     border-radius: 12px;
     color: #e5e7eb;
     line-height: 1.6;
     height: 100%;
     overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+/* Better text contrast */
 .email-fallback p {
     margin-bottom: 1rem;
+    color: #f3f4f6; /* Lighter text for better contrast */
 }
 
 .email-fallback a {
-    color: #60a5fa;
+    color: #93c5fd; /* Lighter blue for better visibility */
     text-decoration: underline;
 }
 
-
-#admin-inbox-container {
-background: rgba(0, 0, 0, 0.3);
+.email-fallback a:hover {
+    color: #bfdbfe;
 }
+
 
 
 .border-red-500 {
@@ -728,7 +733,7 @@ function adminLogout() {
     );
 }
 
-// REPLACE this function:
+// UPDATE this function in admin JavaScript:
 function viewFullAdminEmail(email) {
     currentViewingEmail = email;
     
@@ -741,7 +746,6 @@ function viewFullAdminEmail(email) {
     document.getElementById('admin-email-from').textContent = email.sender || 'Unknown';
     document.getElementById('admin-email-date').textContent = formatTime(email.timestamp);
     
-    // ✅ REPLACED: Use iFrame for email content
     const iframe = document.getElementById('admin-email-iframe');
     const fallback = document.getElementById('admin-email-fallback');
     
@@ -750,11 +754,28 @@ function viewFullAdminEmail(email) {
     // ✅ ALWAYS USE FALLBACK - NEVER USE IFRAME
     iframe.classList.add('hidden');
     fallback.classList.remove('hidden');
-    fallback.innerHTML = emailContent.content;
+    
+    // Ensure dark background
+    let content = emailContent.content;
+    if (!content.includes('bg-gray-900') && !content.includes('bg-gray-800')) {
+        content = `<div class="bg-gray-900/80 p-4 rounded-lg border border-gray-700 min-h-full">${content}</div>`;
+    }
+    
+    fallback.innerHTML = content;
 }
 
-// ADD THESE FUNCTIONS - They are referenced but not defined
 
+function formatPlainTextEmail(text) {
+    if (!text) return '<p class="text-gray-400">No content</p>';
+    
+    let formatted = escapeHtml(text)
+        .replace(/\n/g, '<br>')
+        .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="text-blue-400 hover:underline">$1</a>');
+    
+    return `<div class="text-gray-200 leading-relaxed">${formatted}</div>`;
+}
+
+// Fix the email background to be darker
 function prepareEmailForIframe(rawBody) {
     if (!rawBody || rawBody.trim() === '') {
         return {
@@ -766,11 +787,17 @@ function prepareEmailForIframe(rawBody) {
     const isHtml = /<[a-z][\s\S]*>/i.test(rawBody);
     
     if (isHtml) {
-        // ✅ JUST RETURN RAW HTML - NO IFRAME WRAPPER
-        return { isHtml: false, content: rawBody };
+        // Wrap in dark background
+        return { 
+            isHtml: false, 
+            content: `<div class="bg-gray-900/80 p-4 rounded-lg min-h-full">${rawBody}</div>`
+        };
     } else {
         const formattedText = formatPlainTextEmail(rawBody);
-        return { isHtml: false, content: formattedText };
+        return { 
+            isHtml: false, 
+            content: formattedText 
+        };
     }
 }
 
@@ -1056,7 +1083,6 @@ function loadActiveSessions() {
     });
 }
 
-// Utility functions
 function escapeHtml(text) {
     if (!text) return '';
     var div = document.createElement('div');
