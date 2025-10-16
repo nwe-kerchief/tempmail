@@ -1036,62 +1036,114 @@ function clearSession() {
 
 function loadSession() {
     const savedSession = localStorage.getItem('tempMailSession');
+    const savedAccessCodes = getAccessCodesFromLocalStorage();
+    const currentDeviceId = generateDeviceId();
+    const now = new Date();
+    
+    // First, check for active access code sessions
+    for (const accessCode of savedAccessCodes) {
+        if (accessCode.device_id === currentDeviceId && new Date(accessCode.expires_at) > now) {
+            console.log('🔐 Found active access code session:', accessCode.email);
+            
+            // Verify the session is still valid with backend
+            fetch(`${API_URL}/api/emails/${encodeURIComponent(accessCode.email)}`, {
+                headers: {
+                    'X-Session-Token': accessCode.session_token,
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(res => {
+                if (res.ok) {
+                    // Session is still valid, restore it
+                    restoreAccessCodeSession(accessCode);
+                    return true;
+                } else {
+                    // Session expired or invalid, remove from localStorage
+                    removeAccessCodeFromLocalStorage(accessCode.email);
+                    return false;
+                }
+            })
+            .catch(() => {
+                removeAccessCodeFromLocalStorage(accessCode.email);
+                return false;
+            });
+            
+            return; // Stop checking other sessions
+        }
+    }
+    
+    // If no access code session, check normal session
     if (savedSession) {
         try {
             const session = JSON.parse(savedSession);
-            const now = Date.now();
-            const sessionAge = now - session.createdAt;
-            
-            // Session expires after the specified time (not just 1 hour)
-            const sessionValid = sessionAge < (session.durationMinutes * 60 * 1000) || sessionAge < SESSION_TIMEOUT;
+            const sessionAge = Date.now() - session.createdAt;
+            const sessionValid = sessionAge < SESSION_TIMEOUT;
             
             if (sessionValid && session.email && session.sessionToken) {
-                // Check if this is an admin username and clear session if so
+                // Check if this is an admin username
                 const username = session.email.split('@')[0].toLowerCase();
                 const adminUsernames = ['ammz', 'admin', 'owner', 'root', 'system', 'az', 'c'];
                 
                 if (adminUsernames.includes(username)) {
-                    console.log('🔄 Clearing admin session');
                     localStorage.removeItem('tempMailSession');
                     return false;
                 }
                 
-                // Restore session data
+                // Restore normal session
                 currentEmail = session.email;
                 sessionToken = session.sessionToken;
                 sessionStartTime = session.createdAt;
-                isAccessMode = session.isAccessMode || false;
-                accessStartTime = session.accessStartTime ? new Date(session.accessStartTime) : null;
                 
-                console.log('🔄 Session restored from localStorage:', currentEmail, 'Access Mode:', isAccessMode);
+                console.log('🔄 Normal session restored from localStorage:', currentEmail);
                 
-                // Wait for domains to load before restoring UI
                 if (domainsLoaded) {
                     restoreSessionUI();
-                } else {
-                    // If domains aren't loaded yet, wait for them
-                    const checkDomains = setInterval(() => {
-                        if (domainsLoaded) {
-                            clearInterval(checkDomains);
-                            restoreSessionUI();
-                        }
-                    }, 100);
                 }
                 return true;
             } else {
-                // Session expired
-                console.log('🕒 Session expired, clearing localStorage');
                 localStorage.removeItem('tempMailSession');
-                showNotification('🕒 Session expired', 'error');
             }
         } catch (e) {
-            console.error('❌ Error parsing saved session:', e);
             localStorage.removeItem('tempMailSession');
         }
-    } else {
-        console.log('ℹ️ No saved session found in localStorage');
     }
+    
+    console.log('📭 No valid session found in localStorage');
     return false;
+}
+
+function restoreAccessCodeSession(accessCode) {
+    isAccessMode = true;
+    accessStartTime = new Date(accessCode.access_start_time);
+    currentEmail = accessCode.email;
+    sessionToken = accessCode.session_token;
+    sessionStartTime = Date.now();
+    
+    console.log('🔐 Access code session restored:', currentEmail);
+    
+    // Update UI for access mode
+    document.getElementById('access-mode-display').classList.remove('hidden');
+    document.getElementById('mail-creation-section').classList.add('hidden');
+    document.getElementById('mail-controls-section').classList.add('hidden');
+    
+    document.getElementById('access-email-display').textContent = currentEmail;
+    document.getElementById('current-email').innerHTML = `
+        ${currentEmail} 
+        <span class="bg-blue-500 text-white px-2 py-1 rounded text-xs ml-2">ACCESS CODE</span>
+    `;
+    document.getElementById('email-display').classList.remove('hidden');
+    document.getElementById('end-session-btn').classList.remove('hidden');
+    
+    updateAccessExpiration(accessCode.expires_at);
+    loadEmails();
+    startAutoRefresh();
+    startTimeUpdate();
+    setupSessionExpiration();
+    
+    // Show description if available
+    if (accessCode.description) {
+        showNotification(`🔐 ${accessCode.description}`, 'info');
+    }
 }
 
 function restoreSessionUI() {
@@ -1953,6 +2005,77 @@ function updateEmailTimes() {
     }
 }
 
+// Local Storage Management for Access Codes
+const ACCESS_CODES_STORAGE_KEY = 'tempMailAccessCodes';
+
+function saveAccessCodeToLocalStorage(codeData) {
+    try {
+        const storedCodes = getAccessCodesFromLocalStorage();
+        
+        // Remove any existing code for the same email to prevent duplicates
+        const filteredCodes = storedCodes.filter(c => c.email !== codeData.email);
+        
+        // Add new code
+        filteredCodes.push({
+            code: codeData.code,
+            email: codeData.email,
+            session_token: codeData.session_token,
+            access_start_time: codeData.access_start_time,
+            expires_at: codeData.expires_at,
+            description: codeData.description || '',
+            device_id: generateDeviceId(),
+            created_at: new Date().toISOString()
+        });
+        
+        localStorage.setItem(ACCESS_CODES_STORAGE_KEY, JSON.stringify(filteredCodes));
+        console.log('💾 Access code saved to localStorage:', codeData.email);
+    } catch (e) {
+        console.error('Error saving access code to localStorage:', e);
+    }
+}
+
+function getAccessCodesFromLocalStorage() {
+    try {
+        const stored = localStorage.getItem(ACCESS_CODES_STORAGE_KEY);
+        return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+        console.error('Error reading access codes from localStorage:', e);
+        return [];
+    }
+}
+
+function getActiveAccessCodeForEmail(email) {
+    const storedCodes = getAccessCodesFromLocalStorage();
+    const currentDeviceId = generateDeviceId();
+    const now = new Date();
+    
+    return storedCodes.find(code => {
+        return code.email === email && 
+               code.device_id === currentDeviceId &&
+               new Date(code.expires_at) > now;
+    });
+}
+
+function removeAccessCodeFromLocalStorage(email) {
+    try {
+        const storedCodes = getAccessCodesFromLocalStorage();
+        const filteredCodes = storedCodes.filter(c => c.email !== email);
+        localStorage.setItem(ACCESS_CODES_STORAGE_KEY, JSON.stringify(filteredCodes));
+        console.log('🗑️ Access code removed from localStorage:', email);
+    } catch (e) {
+        console.error('Error removing access code from localStorage:', e);
+    }
+}
+
+function generateDeviceId() {
+    let deviceId = localStorage.getItem('tempMailDeviceId');
+    if (!deviceId) {
+        deviceId = 'device_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+        localStorage.setItem('tempMailDeviceId', deviceId);
+    }
+    return deviceId;
+}
+
 function leaveAccessMode() {
     console.log('🚪 Leaving access mode UI...');
     
@@ -2193,13 +2316,15 @@ function redeemAccessCodeFromModal() {
     confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Checking...';
     confirmBtn.disabled = true;
     
-    // Online mode
     fetch(API_URL + '/api/access-code/redeem', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ code: code })
+        body: JSON.stringify({ 
+            code: code,
+            device_id: generateDeviceId()
+        })
     })
     .then(res => {
         if (!res.ok) {
@@ -2211,6 +2336,9 @@ function redeemAccessCodeFromModal() {
     })
     .then(data => {
         if (data.success) {
+            // ✅ Save to localStorage for automatic future access
+            saveAccessCodeToLocalStorage(data);
+            
             showAccessModalResult(`✅ Success! Access granted to: ${data.email}`, 'success');
             activateAccessMode(data);
             
