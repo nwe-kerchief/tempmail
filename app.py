@@ -15,9 +15,12 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import logging
 import re
-import mailparser
+import mailparser 
 import html2text
 from bs4 import BeautifulSoup
+import time as time_module
+from psycopg2 import OperationalError
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -42,13 +45,23 @@ APP_PASSWORD = os.getenv('APP_PASSWORD', 'admin123')
 DOMAIN = os.getenv('DOMAIN', 'aungmyomyatzaw.online')
 DATABASE_URL = os.getenv('DATABASE_URL')
 
-# Database connection helper
+# Enhanced database connection with retry logic
 def get_db():
-    try:
-        return psycopg2.connect(DATABASE_URL, sslmode='require')
-    except Exception as e:
-        logger.error(f"Database connection error: {e}")
-        raise
+    max_retries = 3
+    retry_delay = 1
+    
+    for attempt in range(max_retries):
+        try:
+            conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+            return conn
+        except OperationalError as e:
+            logger.warning(f"Database connection attempt {attempt + 1} failed: {e}")
+            if attempt < max_retries - 1:
+                time_module.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                logger.error("All database connection attempts failed")
+                raise
 
 def init_db():
     try:
@@ -64,9 +77,11 @@ def init_db():
                 created_at TIMESTAMP NOT NULL,
                 expires_at TIMESTAMP NOT NULL,
                 last_activity TIMESTAMP NOT NULL,
-                is_active BOOLEAN DEFAULT TRUE
+                is_active BOOLEAN DEFAULT TRUE,
+                is_access_code BOOLEAN DEFAULT FALSE
             )
         ''')
+
 
         c.execute("""
             CREATE TABLE IF NOT EXISTS emails (
@@ -88,6 +103,20 @@ def init_db():
                 username TEXT UNIQUE NOT NULL,
                 added_at TIMESTAMP NOT NULL,
                 added_by TEXT DEFAULT 'system'
+            )
+        ''')
+
+                # Access codes table
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS access_codes (
+                id SERIAL PRIMARY KEY,
+                code TEXT UNIQUE NOT NULL,
+                email_address TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                is_active BOOLEAN DEFAULT TRUE,
+                used_count INTEGER DEFAULT 0,
+                max_uses INTEGER DEFAULT 1
             )
         ''')
         
@@ -134,6 +163,21 @@ def admin_required(f):
 
 init_db()
 
+# Migration: Add is_access_code column to sessions table if it doesn't exist
+try:
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""
+        ALTER TABLE sessions 
+        ADD COLUMN IF NOT EXISTS is_access_code BOOLEAN DEFAULT FALSE
+    """)
+    conn.commit()
+    conn.close()
+    logger.info("✅ Migration: is_access_code column ensured")
+except Exception as e:
+    logger.warning(f"Migration note: {e}")
+
+
 def is_username_blacklisted(username):
     """Check if username is blacklisted in database"""
     try:
@@ -147,10 +191,15 @@ def is_username_blacklisted(username):
         logger.error(f"Error checking blacklist: {e}")
         return username.lower() in INITIAL_BLACKLIST
 
-
+# Enhanced email parsing with better error handling
 def parse_email_with_mailparser(raw_email):
     try:
         mail = mailparser.parse_from_string(raw_email)
+        
+        # Basic validation
+        if not hasattr(mail, 'from_') or not mail.from_:
+            logger.warning("Email has no sender information")
+            return parse_email_fallback(raw_email)
         
         parsed_data = {
             'subject': mail.subject or 'No subject',
@@ -160,7 +209,7 @@ def parse_email_with_mailparser(raw_email):
             'body_plain': '',
             'body_html': '',
             'verification_codes': [],
-            'attachments': len(mail.attachments)
+            'attachments': len(mail.attachments) if hasattr(mail, 'attachments') else 0
         }
         
         # Get ALL available text content
@@ -171,17 +220,17 @@ def parse_email_with_mailparser(raw_email):
             all_text_parts.append(mail.subject)
         
         # Add plain text body
-        if mail.text_plain:
-            plain_text = '\n'.join(mail.text_plain)
+        if hasattr(mail, 'text_plain') and mail.text_plain:
+            plain_text = '\n'.join(mail.text_plain) if isinstance(mail.text_plain, list) else str(mail.text_plain)
             parsed_data['body_plain'] = plain_text
             all_text_parts.append(plain_text)
-        elif mail.body:
+        elif hasattr(mail, 'body') and mail.body:
             parsed_data['body_plain'] = mail.body
             all_text_parts.append(mail.body)
         
         # Add HTML body (converted to text for code extraction)
-        if mail.text_html:
-            html_content = '\n'.join(mail.text_html)
+        if hasattr(mail, 'text_html') and mail.text_html:
+            html_content = '\n'.join(mail.text_html) if isinstance(mail.text_html, list) else str(mail.text_html)
             parsed_data['body_html'] = html_content
             
             # Convert HTML to text for better code extraction
@@ -396,28 +445,29 @@ def clean_sender_address(sender):
     return sender.strip()
 
 def get_display_body(parsed_email):
-    """Convert parsed email to display-ready format"""
-    raw_content = parsed_email['body_plain']
-    
-    if not raw_content and parsed_email['body_html']:
-        h = html2text.HTML2Text()
-        h.ignore_links = False
-        h.ignore_images = True
-        h.body_width = 0
-        raw_content = h.handle(parsed_email['body_html'])
+    """Return the original email content without modifications"""
+    # Use the raw HTML body if available, otherwise use plain text
+    raw_content = parsed_email['body_html'] or parsed_email['body_plain']
     
     if not raw_content:
         return {
             'content': '<p class="text-gray-400">No readable content found</p>',
-            'verification_codes': []
+            'verification_codes': parsed_email['verification_codes']
         }
     
-    clean_content = format_email_content(raw_content, parsed_email['verification_codes'])
-    
-    return {
-        'content': clean_content,
-        'verification_codes': parsed_email['verification_codes']
-    }
+    # If it's HTML, return it as-is with minimal wrapper
+    if parsed_email['body_html']:
+        return {
+            'content': f'<div class="email-original">{raw_content}</div>',
+            'verification_codes': parsed_email['verification_codes']
+        }
+    else:
+        # For plain text, just preserve line breaks
+        formatted_text = escapeHtml(raw_content).replace('\n', '<br>')
+        return {
+            'content': f'<div class="email-original whitespace-pre-wrap font-sans">{formatted_text}</div>',
+            'verification_codes': parsed_email['verification_codes']
+        }
 
 
 def format_email_content(text, verification_codes):
@@ -491,35 +541,18 @@ def escapeHtml(text):
     return html.escape(text)
 
 def validate_session(email_address, session_token):
-    """Validate if session is valid"""
+    """Validate if session is valid with better error handling"""
     try:
         conn = get_db()
         c = conn.cursor()
         
         # Check if session exists and is active
-        try:
-            c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
-            has_is_active = c.fetchone() is not None
-            
-            if has_is_active:
-                c.execute('''
-                    SELECT session_token FROM sessions 
-                    WHERE email_address = %s AND session_token = %s 
-                    AND expires_at > NOW() AND is_active = TRUE
-                ''', (email_address, session_token))
-            else:
-                c.execute('''
-                    SELECT session_token FROM sessions 
-                    WHERE email_address = %s AND session_token = %s 
-                    AND expires_at > NOW()
-                ''', (email_address, session_token))
-        except Exception as e:
-            logger.warning(f"Error checking session: {e}")
-            c.execute('''
-                SELECT session_token FROM sessions 
-                WHERE email_address = %s AND session_token = %s 
-                AND expires_at > NOW()
-            ''', (email_address, session_token))
+        c.execute('''
+            SELECT session_token, expires_at 
+            FROM sessions 
+            WHERE email_address = %s AND session_token = %s 
+            AND expires_at > NOW() AND is_active = TRUE
+        ''', (email_address, session_token))
         
         session_data = c.fetchone()
         conn.close()
@@ -527,6 +560,20 @@ def validate_session(email_address, session_token):
         if not session_data:
             logger.warning(f"❌ Session validation failed for {email_address}")
             return False, "Invalid or expired session"
+        
+        # Update last activity
+        try:
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('''
+                UPDATE sessions 
+                SET last_activity = %s 
+                WHERE session_token = %s
+            ''', (datetime.now(), session_token))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.warning(f"Could not update session activity: {e}")
         
         logger.info(f"✅ Session validated for {email_address}")
         return True, "Valid session"
@@ -544,6 +591,7 @@ def index():
 def get_domains():
     return jsonify({'domains': [DOMAIN]})
 
+# Enhanced email creation with better conflict handling
 @app.route('/api/create', methods=['POST'])
 def create_email():
     try:
@@ -567,12 +615,29 @@ def create_email():
             if not username:
                 return jsonify({'error': 'Invalid username', 'code': 'INVALID_USERNAME'}), 400
             
-            # Skip blacklist check if admin mode is enabled
-            if not admin_mode and is_username_blacklisted(username):
+            # Check if this is an access code session
+            is_access_code_session = False
+
+            if current_session_token:
+                try:
+                    conn = get_db()
+                    c = conn.cursor()
+                    c.execute('SELECT is_access_code FROM sessions WHERE session_token = %s', (current_session_token,))
+                    session_data = c.fetchone()
+                    conn.close()
+                    if session_data and session_data[0]:
+                        is_access_code_session = True
+                        logger.info(f"⚠️ Access code session detected - bypassing blacklist for: {username}")
+                except Exception as e:
+                    logger.warning(f"Error checking session type: {e}")
+
+            # Skip blacklist check if admin mode OR access code session
+            if not admin_mode and not is_access_code_session and is_username_blacklisted(username):
                 return jsonify({
                     'error': 'This username is reserved for the system owner. Please choose a different username.',
                     'code': 'USERNAME_BLACKLISTED'
                 }), 403
+
         else:
             # Generate random name
             male_name = random.choice(MALE_NAMES)
@@ -585,7 +650,7 @@ def create_email():
         conn = get_db()
         c = conn.cursor()
         
-        # 🚨 CRITICAL FIX: Check if email is currently in use by an ACTIVE session
+        # Check if email is currently in use by an ACTIVE session
         c.execute('''
             SELECT session_token, created_at 
             FROM sessions 
@@ -599,9 +664,8 @@ def create_email():
         if active_session:
             active_session_token = active_session[0]
             
-            # 🆕 CHECK: If this is the SAME USER trying to recreate their own email
+            # If this is the SAME USER trying to recreate their own email
             if current_session_token and current_session_token == active_session_token:
-                # Same user recreating their own email - allow it and return existing session
                 logger.info(f"✅ User recreating their own email: {email_address}")
                 
                 # Update session expiration
@@ -635,19 +699,12 @@ def create_email():
         expires_at = created_at + timedelta(hours=1)
         
         # Insert new session
-        try:
-            c.execute('''
-                INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity, is_active)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            ''', (session_token, email_address, created_at, expires_at, created_at, True))
-        except Exception as e:
-            logger.warning(f"Error with is_active column, falling back: {e}")
-            c.execute('''
-                INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity)
-                VALUES (%s, %s, %s, %s, %s)
-            ''', (session_token, email_address, created_at, expires_at, created_at))
+        c.execute('''
+            INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity, is_active)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        ''', (session_token, email_address, created_at, expires_at, created_at, True))
         
-        # NEW FEATURE: If admin mode is enabled, automatically add to blacklist
+        # If admin mode is enabled, automatically add to blacklist
         if admin_mode and custom_name:
             try:
                 c.execute('''
@@ -674,7 +731,7 @@ def create_email():
     except Exception as e:
         logger.error(f"❌ Error creating email: {e}")
         return jsonify({'error': 'Failed to create session', 'code': 'SERVER_ERROR'}), 500
-    
+
 @app.route('/api/session/end', methods=['POST'])
 def end_session():
     try:
@@ -1199,7 +1256,185 @@ def admin_delete_email(email_id):
     except Exception as e:
         logger.error(f"âŒ Admin delete email error: {e}")
         return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/admin/access-codes/generate', methods=['POST'])
+@admin_required
+def generate_access_code():
+    try:
+        data = request.get_json() or {}
+        email_address = data.get('email_address', '').strip()
+        duration_hours = data.get('duration_hours', 24)  # Default 24 hours
+        max_uses = data.get('max_uses', 1)  # Default 1 use
+        
+        if not email_address:
+            return jsonify({'error': 'Email address is required'}), 400
+        
+        # Generate a random 8-character code
+        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+        
+        conn = get_db()
+        c = conn.cursor()
+        
+        created_at = datetime.now()
+        expires_at = created_at + timedelta(hours=duration_hours)
+        
+        c.execute('''
+            INSERT INTO access_codes (code, email_address, created_at, expires_at, max_uses)
+            VALUES (%s, %s, %s, %s, %s)
+        ''', (code, email_address, created_at, expires_at, max_uses))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"✅ Access code generated: {code} for {email_address}")
+        
+        return jsonify({
+            'success': True,
+            'code': code,
+            'email_address': email_address,
+            'expires_at': expires_at.isoformat(),
+            'max_uses': max_uses
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ Error generating access code: {e}")
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/access-code/redeem', methods=['POST'])
+def redeem_access_code():
+    """Redeem an access code to get temporary access to specific email"""
+    try:
+        data = request.get_json() or {}
+        code = data.get('code', '').strip().upper()
+        
+        if not code:
+            return jsonify({'error': 'Access code is required'}), 400
+        
+        conn = get_db()
+        c = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Check if code exists and is valid
+        c.execute('''
+            SELECT code, email_address, created_at, expires_at, is_active, used_count, max_uses
+            FROM access_codes
+            WHERE code = %s
+        ''', (code,))
+        
+        access_code = c.fetchone()
+        
+        if not access_code:
+            conn.close()
+            return jsonify({'error': 'Invalid access code'}), 404
+        
+        # Validate code
+        if not access_code['is_active']:
+            conn.close()
+            return jsonify({'error': 'Access code has been revoked'}), 403
+        
+        if datetime.now() > access_code['expires_at']:
+            conn.close()
+            return jsonify({'error': 'Access code has expired'}), 403
+        
+        if access_code['used_count'] >= access_code['max_uses']:
+            conn.close()
+            return jsonify({'error': 'Access code usage limit reached'}), 403
+        
+        # ✅ CREATE SESSION - Mark it as access_code session to bypass blacklist
+        email_address = access_code['email_address']
+        session_token = secrets.token_urlsafe(32)
+        expires_at = access_code['expires_at']
+        
+        # Insert session with special flag
+        c.execute('''
+            INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity, is_active, is_access_code)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ''', (session_token, email_address, datetime.now(), expires_at, datetime.now(), True, True))
+        
+        # Update access code usage count
+        c.execute('''
+            UPDATE access_codes
+            SET used_count = used_count + 1
+            WHERE code = %s
+        ''', (code,))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"✅ Access code redeemed: {code} for {email_address}")
+        
+        return jsonify({
+            'success': True,
+            'email': email_address,
+            'session_token': session_token,
+            'access_start_time': datetime.now().isoformat(),
+            'expires_at': expires_at.isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ Error redeeming access code: {e}")
+        return jsonify({'error': str(e)}), 500
 
+
+@app.route('/api/admin/access-codes', methods=['GET'])
+@admin_required
+def get_access_codes():
+    try:
+        conn = get_db()
+        c = conn.cursor(cursor_factory=RealDictCursor)
+        
+        c.execute('''
+            SELECT code, email_address, created_at, expires_at, used_count, max_uses, is_active
+            FROM access_codes
+            ORDER BY created_at DESC
+        ''')
+        
+        codes = []
+        for row in c.fetchall():
+            codes.append({
+                'code': row['code'],
+                'email_address': row['email_address'],
+                'created_at': row['created_at'].isoformat(),
+                'expires_at': row['expires_at'].isoformat(),
+                'used_count': row['used_count'],
+                'max_uses': row['max_uses'],
+                'is_active': row['is_active'],
+                'is_expired': row['expires_at'] < datetime.now(),
+                'remaining_uses': row['max_uses'] - row['used_count']
+            })
+        
+        conn.close()
+        return jsonify({'access_codes': codes})
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting access codes: {e}")
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/admin/access-codes/<code>/revoke', methods=['POST'])
+@admin_required
+def revoke_access_code(code):
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        
+        c.execute('''
+            UPDATE access_codes 
+            SET is_active = FALSE 
+            WHERE code = %s
+        ''', (code,))
+        
+        if c.rowcount == 0:
+            conn.close()
+            return jsonify({'error': 'Access code not found'}), 404
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"✅ Access code revoked: {code}")
+        return jsonify({'success': True, 'message': f'Access code {code} revoked'})
+        
+    except Exception as e:
+        logger.error(f"❌ Error revoking access code: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/delete-address/<email_address>', methods=['DELETE'])
 @admin_required
