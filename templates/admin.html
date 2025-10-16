@@ -540,9 +540,9 @@ button:hover {
                     class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm">
                 
                 <select id="generate-code-domain" class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm">
-                    <option value="aungmyomyatzaw.online">@aungmyomyatzaw.online</option>
+                    <option value="">Select domain</option>
                 </select>
-                
+
                 <input type="text" id="generate-code-custom" placeholder="Custom code (optional)" 
                     class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm uppercase font-mono"
                     maxlength="12">
@@ -964,14 +964,20 @@ function loadAccessCodes() {
 
 function generateAccessCode() {
     const username = document.getElementById('generate-code-email').value.trim();
-    const domain = document.getElementById('generate-code-domain').value;
+    const domainSelect = document.getElementById('generate-code-domain');
+    const domain = domainSelect.value;
     const customCode = document.getElementById('generate-code-custom').value.trim();
+    const description = document.getElementById('generate-code-description').value.trim();
     const durationSelect = document.getElementById('generate-code-duration');
-    const customMinutes = document.getElementById('generate-code-custom-minutes').value;
     const maxUses = parseInt(document.getElementById('generate-code-uses').value) || 1;
     
     if (!username) {
         showNotification('❌ Please enter a username', 'error');
+        return;
+    }
+    
+    if (!domain) {
+        showNotification('❌ Please select a domain', 'error');
         return;
     }
     
@@ -983,6 +989,7 @@ function generateAccessCode() {
     
     const email = `${username}@${domain}`;
     
+    // Rest of your existing generateAccessCode function remains the same...
     let durationMinutes;
     if (durationSelect.value === 'custom') {
         durationMinutes = parseInt(customMinutes);
@@ -1004,6 +1011,11 @@ function generateAccessCode() {
         requestData.custom_code = customCode;
     }
     
+    if (description) {
+        requestData.description = description;
+    }
+    
+    // Rest of your existing fetch code...
     fetch(`${API_URL}/api/admin/access-codes/generate`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -1017,9 +1029,9 @@ function generateAccessCode() {
             // Clear form
             document.getElementById('generate-code-email').value = '';
             document.getElementById('generate-code-custom').value = '';
+            document.getElementById('generate-code-description').value = '';
             document.getElementById('generate-code-uses').value = '1';
             durationSelect.value = '1440';
-            document.getElementById('generate-code-custom-minutes').classList.add('hidden');
             // Reload list
             loadAccessCodes();
         } else {
@@ -1143,6 +1155,7 @@ function startAutoRefresh() {
         loadActiveSessions();
         loadBlacklist();
         loadAccessCodes();
+        loadDomainsForAdmin();
         if (selectedAddress) viewEmails(selectedAddress);
     }, 15000); // Increased to 15 seconds to reduce server load
 }
@@ -1334,6 +1347,40 @@ function clearSearch() {
     currentSearchTerm = '';
     document.getElementById('clear-search-btn').classList.add('hidden');
     searchEmails();
+}
+
+function loadDomainsForAdmin() {
+    fetch(`${API_URL}/api/domains`)
+    .then(res => res.json())
+    .then(data => {
+        const domainSelect = document.getElementById('generate-code-domain');
+        if (domainSelect && data.domains && data.domains.length > 0) {
+            domainSelect.innerHTML = '<option value="">Select domain</option>';
+            data.domains.forEach(domain => {
+                const option = document.createElement('option');
+                option.value = domain;
+                option.textContent = `@${domain}`;
+                domainSelect.appendChild(option);
+            });
+            
+            // Auto-select the first domain if only one exists
+            if (data.domains.length === 1) {
+                domainSelect.value = data.domains[0];
+            }
+        }
+    })
+    .catch(err => {
+        console.error('Error loading domains for admin:', err);
+        // Fallback to default domain
+        const domainSelect = document.getElementById('generate-code-domain');
+        if (domainSelect) {
+            domainSelect.innerHTML = '<option value="">Select domain</option>';
+            const option = document.createElement('option');
+            option.value = 'aungmyomyatzaw.online';
+            option.textContent = '@aungmyomyatzaw.online';
+            domainSelect.appendChild(option);
+        }
+    });
 }
 
 // Enhanced address list rendering
