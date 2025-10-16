@@ -898,7 +898,7 @@ function loadAccessCodes() {
                               isUsedUp ? 'border-yellow-500 bg-yellow-900/20' : 
                               'border-green-500 bg-green-900/20';
             
-            const timeRemaining = getTimeRemaining(code.expires_at);
+            const timeRemaining = formatTime(code.expires_at);
             
             const item = document.createElement('div');
             item.className = `p-4 rounded-lg border ${statusClass} transition-all hover:scale-[1.02]`;
@@ -919,7 +919,7 @@ function loadAccessCodes() {
                         <div class="grid grid-cols-2 gap-4 text-sm text-gray-300">
                             <div>
                                 <i class="fas fa-clock mr-1"></i>
-                                ${isExpired ? 'Expired' : `Expires in: ${timeRemaining}`}
+                                ${isExpired ? 'Expired' : `Expires: ${formatTime(code.expires_at)}`}
                             </div>
                             <div>
                                 <i class="fas fa-chart-bar mr-1"></i>
