@@ -596,18 +596,18 @@ def validate_session(email_address, session_token):
         
         session_token, expires_at, is_access_code = session_data
         
-        # ✅ ADDED: For access code sessions, check if the access code is still active
+        # Once an access code is redeemed on a device, it should work until expiration
         if is_access_code:
             c.execute('''
-                SELECT ac.is_active 
+                SELECT ac.expires_at 
                 FROM access_codes ac
                 JOIN sessions s ON ac.email_address = s.email_address 
-                WHERE s.session_token = %s AND ac.is_active = TRUE
+                WHERE s.session_token = %s
             ''', (session_token,))
             
-            access_code_active = c.fetchone()
-            if not access_code_active:
-                logger.info(f"🔐 Access code revoked for session: {email_address}")
+            access_code_data = c.fetchone()
+            if access_code_data and access_code_data[0] < datetime.now():
+                logger.info(f"🔐 Access code expired for session: {email_address}")
                 # Mark session as inactive
                 c.execute('''
                     UPDATE sessions 
@@ -616,7 +616,7 @@ def validate_session(email_address, session_token):
                 ''', (session_token,))
                 conn.commit()
                 conn.close()
-                return False, "Access code has been revoked"
+                return False, "Access code has expired"
         
         # Update last activity for regular sessions only
         if not is_access_code:
