@@ -1378,6 +1378,7 @@ def generate_access_code():
         custom_code = data.get('custom_code', '').strip().upper()
         duration_minutes = data.get('duration_minutes', 1440)
         max_uses = data.get('max_uses', 1)
+        description = data.get('description', '').strip()
         
         if not email_address:
             return jsonify({'error': 'Email address is required'}), 400
@@ -1388,12 +1389,10 @@ def generate_access_code():
         
         # Validate custom code or generate random
         if custom_code:
-            # Validate custom code format
             if not re.match(r'^[A-Z0-9]{4,12}$', custom_code):
                 return jsonify({'error': 'Custom code must be 4-12 uppercase letters and numbers only'}), 400
             code = custom_code
         else:
-            # Generate a random 8-character code
             code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
         
         conn = get_db()
@@ -1408,20 +1407,22 @@ def generate_access_code():
         created_at = datetime.now()
         expires_at = created_at + timedelta(minutes=duration_minutes)
         
+        # ✅ Store description in database
         c.execute('''
-            INSERT INTO access_codes (code, email_address, created_at, expires_at, max_uses)
-            VALUES (%s, %s, %s, %s, %s)
-        ''', (code, email_address, created_at, expires_at, max_uses))
+            INSERT INTO access_codes (code, email_address, description, created_at, expires_at, max_uses)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        ''', (code, email_address, description, created_at, expires_at, max_uses))
         
         conn.commit()
         conn.close()
         
-        logger.info(f"✅ Access code generated: {code} for {email_address}")
+        logger.info(f"✅ Access code generated: {code} for {email_address} - {description}")
         
         return jsonify({
             'success': True,
             'code': code,
             'email_address': email_address,
+            'description': description,
             'expires_at': expires_at.isoformat(),
             'max_uses': max_uses,
             'duration_minutes': duration_minutes
@@ -1437,6 +1438,7 @@ def redeem_access_code():
     try:
         data = request.get_json() or {}
         code = data.get('code', '').strip().upper()
+        device_id = data.get('device_id', '')
         
         if not code:
             return jsonify({'error': 'Access code is required'}), 400
@@ -1446,7 +1448,7 @@ def redeem_access_code():
         
         # Check if code exists and is valid
         c.execute('''
-            SELECT code, email_address, created_at, expires_at, is_active, used_count, max_uses
+            SELECT code, email_address, description, created_at, expires_at, is_active, used_count, max_uses
             FROM access_codes
             WHERE code = %s
         ''', (code,))
@@ -1457,19 +1459,31 @@ def redeem_access_code():
             conn.close()
             return jsonify({'error': 'Invalid access code'}), 404
         
-        # Validate code (existing checks...)
+        # Validate code
+        if not access_code['is_active']:
+            conn.close()
+            return jsonify({'error': 'This access code has been revoked'}), 403
         
-        # ✅ CREATE SESSION with access code flag and current time
+        # Check expiration
+        current_time = datetime.now()
+        if current_time > access_code['expires_at']:
+            conn.close()
+            return jsonify({'error': 'This access code has expired'}), 403
+        
+        if access_code['used_count'] >= access_code['max_uses']:
+            conn.close()
+            return jsonify({'error': 'This access code has reached its usage limit'}), 403
+        
+        # Create session
         email_address = access_code['email_address']
         session_token = secrets.token_urlsafe(32)
-        session_start_time = datetime.now()  # This is the access period start
         expires_at = access_code['expires_at']
         
         # Insert session with access code flag
         c.execute('''
             INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity, is_active, is_access_code)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
-        ''', (session_token, email_address, session_start_time, expires_at, session_start_time, True, True))
+        ''', (session_token, email_address, current_time, expires_at, current_time, True, True))
         
         # Update access code usage count
         c.execute('''
@@ -1481,19 +1495,21 @@ def redeem_access_code():
         conn.commit()
         conn.close()
         
-        logger.info(f"✅ Access code redeemed: {code} for {email_address} (showing emails after {session_start_time})")
+        logger.info(f"✅ Access code redeemed: {code} for {email_address} by device {device_id}")
         
         return jsonify({
             'success': True,
             'email': email_address,
             'session_token': session_token,
-            'access_start_time': session_start_time.isoformat(),
-            'expires_at': expires_at.isoformat()
+            'access_start_time': current_time.isoformat(),
+            'expires_at': expires_at.isoformat(),
+            'description': access_code['description'],
+            'code': code
         })
         
     except Exception as e:
         logger.error(f"❌ Error redeeming access code: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Server error while processing access code'}), 500
 
 @app.route('/api/admin/access-codes', methods=['GET'])
 @admin_required
