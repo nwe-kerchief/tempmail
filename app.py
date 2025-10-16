@@ -106,12 +106,13 @@ def init_db():
             )
         ''')
 
-                # Access codes table
+        # Access codes table
         c.execute('''
             CREATE TABLE IF NOT EXISTS access_codes (
                 id SERIAL PRIMARY KEY,
                 code TEXT UNIQUE NOT NULL,
                 email_address TEXT NOT NULL,
+                description TEXT DEFAULT '',
                 created_at TIMESTAMP NOT NULL,
                 expires_at TIMESTAMP NOT NULL,
                 is_active BOOLEAN DEFAULT TRUE,
@@ -119,7 +120,7 @@ def init_db():
                 max_uses INTEGER DEFAULT 1
             )
         ''')
-        
+
         # Insert initial blacklist
         for username in INITIAL_BLACKLIST:
             try:
@@ -163,20 +164,19 @@ def admin_required(f):
 
 init_db()
 
-# Migration: Add is_access_code column to sessions table if it doesn't exist
+# Migration: Add description column to access_codes table if it doesn't exist
 try:
     conn = get_db()
     c = conn.cursor()
     c.execute("""
-        ALTER TABLE sessions 
-        ADD COLUMN IF NOT EXISTS is_access_code BOOLEAN DEFAULT FALSE
+        ALTER TABLE access_codes 
+        ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''
     """)
     conn.commit()
     conn.close()
-    logger.info("✅ Migration: is_access_code column ensured")
+    logger.info("✅ Migration: description column added to access_codes")
 except Exception as e:
     logger.warning(f"Migration note: {e}")
-
 
 def is_username_blacklisted(username):
     """Check if username is blacklisted in database"""
@@ -1519,11 +1519,11 @@ def get_access_codes():
         c = conn.cursor(cursor_factory=RealDictCursor)
         
         c.execute('''
-            SELECT code, email_address, created_at, expires_at, used_count, max_uses, is_active
+            SELECT code, email_address, description, created_at, expires_at, used_count, max_uses, is_active
             FROM access_codes
             ORDER BY created_at DESC
         ''')
-        
+                
         codes = []
         for row in c.fetchall():
             codes.append({
