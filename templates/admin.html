@@ -893,10 +893,16 @@ function loadAccessCodes() {
             const isUsedUp = code.remaining_uses <= 0;
             const isRevoked = !code.is_active;
             
-            const statusClass = isRevoked ? 'border-red-500 bg-red-900/20' : 
-                              isExpired ? 'border-orange-500 bg-orange-900/20' :
-                              isUsedUp ? 'border-yellow-500 bg-yellow-900/20' : 
-                              'border-green-500 bg-green-900/20';
+            // Change from showing "Expired" to showing they can be reused
+        const statusClass = isRevoked ? 'border-red-500 bg-red-900/20' : 
+                        isExpired ? 'border-orange-500 bg-orange-900/20' :
+                        isUsedUp ? 'border-yellow-500 bg-yellow-900/20' : 
+                        'border-green-500 bg-green-900/20';
+
+        const statusText = isRevoked ? 'Revoked' : 
+                        isExpired ? 'Expired (Reusable)' : 
+                        isUsedUp ? 'Used Up' : 
+                        'Active';
             
             const timeRemaining = formatTime(code.expires_at);
             
