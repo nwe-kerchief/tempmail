@@ -575,7 +575,7 @@ def escapeHtml(text):
     return html.escape(text)
 
 def validate_session(email_address, session_token):
-    """Validate if session is valid - FIXED for access code sessions"""
+    """Validate if session is valid - checks access code status"""
     try:
         conn = get_db()
         c = conn.cursor()
@@ -589,30 +589,48 @@ def validate_session(email_address, session_token):
         ''', (email_address, session_token))
         
         session_data = c.fetchone()
-        conn.close()
         
         if not session_data:
             logger.warning(f"❌ Session validation failed for {email_address}")
             return False, "Invalid or expired session"
         
-        # ✅ FIX: Special handling for access code sessions
         session_token, expires_at, is_access_code = session_data
         
-        # Update last activity for regular sessions only (not access code sessions)
+        # ✅ ADDED: For access code sessions, check if the access code is still active
+        if is_access_code:
+            c.execute('''
+                SELECT ac.is_active 
+                FROM access_codes ac
+                JOIN sessions s ON ac.email_address = s.email_address 
+                WHERE s.session_token = %s AND ac.is_active = TRUE
+            ''', (session_token,))
+            
+            access_code_active = c.fetchone()
+            if not access_code_active:
+                logger.info(f"🔐 Access code revoked for session: {email_address}")
+                # Mark session as inactive
+                c.execute('''
+                    UPDATE sessions 
+                    SET is_active = FALSE 
+                    WHERE session_token = %s
+                ''', (session_token,))
+                conn.commit()
+                conn.close()
+                return False, "Access code has been revoked"
+        
+        # Update last activity for regular sessions only
         if not is_access_code:
             try:
-                conn = get_db()
-                c = conn.cursor()
                 c.execute('''
                     UPDATE sessions 
                     SET last_activity = %s 
                     WHERE session_token = %s
                 ''', (datetime.now(), session_token))
                 conn.commit()
-                conn.close()
             except Exception as e:
                 logger.warning(f"Could not update session activity: {e}")
         
+        conn.close()
         logger.info(f"✅ Session validated for {email_address} (access_code: {is_access_code})")
         return True, "Valid session"
         
@@ -936,6 +954,31 @@ def debug_test_codes():
         logger.error(f"Debug test error: {e}")
         return jsonify({'error': str(e)}), 500
     
+@app.route('/api/admin/end-sessions/<email_address>', methods=['POST'])
+@admin_required
+def admin_end_sessions(email_address):
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        
+        # End all active sessions for this email address
+        c.execute('''
+            UPDATE sessions 
+            SET is_active = FALSE 
+            WHERE email_address = %s AND is_active = TRUE
+        ''', (email_address,))
+        
+        sessions_ended = c.rowcount
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"✅ Admin ended {sessions_ended} sessions for {email_address}")
+        return jsonify({'success': True, 'sessions_ended': sessions_ended})
+        
+    except Exception as e:
+        logger.error(f"❌ Error ending sessions: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/debug/create-test', methods=['POST'])
 def debug_create_test():
     """Test the create function step by step"""
@@ -1494,10 +1537,14 @@ def revoke_access_code(code):
         c = conn.cursor()
         
         # Check if code exists
-        c.execute('SELECT code FROM access_codes WHERE code = %s', (code,))
-        if not c.fetchone():
+        c.execute('SELECT code, email_address FROM access_codes WHERE code = %s', (code,))
+        code_data = c.fetchone()
+        
+        if not code_data:
             conn.close()
             return jsonify({'error': 'Access code not found'}), 404
+        
+        email_address = code_data[1]
         
         # Revoke the code
         c.execute('''
@@ -1506,11 +1553,18 @@ def revoke_access_code(code):
             WHERE code = %s
         ''', (code,))
         
+        # ✅ ALSO END ALL ACTIVE SESSIONS USING THIS ACCESS CODE
+        c.execute('''
+            UPDATE sessions 
+            SET is_active = FALSE 
+            WHERE email_address = %s AND is_access_code = TRUE AND is_active = TRUE
+        ''', (email_address,))
+        
         conn.commit()
         conn.close()
         
-        logger.info(f"✅ Access code revoked: {code}")
-        return jsonify({'success': True, 'message': f'Access code {code} revoked successfully'})
+        logger.info(f"✅ Access code revoked: {code} and sessions ended for {email_address}")
+        return jsonify({'success': True, 'message': f'Access code {code} revoked and sessions ended'})
         
     except Exception as e:
         logger.error(f"❌ Error revoking access code: {e}")
