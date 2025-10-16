@@ -1227,6 +1227,7 @@ function setupSessionExpiration() {
     }, SESSION_TIMEOUT);
 }
 
+// Enhanced email loading with better session handling
 function loadEmails() {
     if (!currentEmail || !sessionToken) {
         console.log("❌ No current email or session token to load");
@@ -1330,7 +1331,18 @@ function loadEmails() {
         if (err.message === "SESSION_EXPIRED") {
             console.log("🔄 Session expired, clearing frontend state");
             showNotification("Session expired", "error");
-            clearSession();
+            
+            // Special handling for access mode sessions
+            if (isAccessMode) {
+                console.log("🔄 Access mode session expired, keeping UI but stopping refresh");
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+                showNotification("Access session expired - emails won't refresh", "error");
+            } else {
+                clearSession();
+            }
         } else {
             handleApiError(err, "Failed to load emails");
         }
@@ -1343,11 +1355,6 @@ function loadEmails() {
     });
 }
 
-const TEST_ACCESS_CODES = {
-    'TEST1234': { email: 'test@aungmyomyatzaw.online', duration_hours: 24 },
-    'DEMO5678': { email: 'demo@aungmyomyatzaw.online', duration_hours: 12 },
-    'ACCESS99': { email: 'access@aungmyomyatzaw.online', duration_hours: 6 }
-};
 
 function extractEmailPreview(body) {
     if (!body) return 'No content';
@@ -2548,6 +2555,7 @@ function deactivateAdminMode() {
     }, 1000);
 }
 
+// Enhanced session validation
 function validateCurrentSession() {
     if (!currentEmail || !sessionToken) return false;
     
@@ -2563,6 +2571,7 @@ function validateCurrentSession() {
     
     return true;
 }
+
 
 function initApp() {
     console.log('🚀 Initializing app...');
