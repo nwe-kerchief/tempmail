@@ -770,7 +770,12 @@ function loadAccessCodes() {
     fetch(`${API_URL}/api/admin/access-codes`, {
         credentials: 'include'
     })
-    .then(res => res.json())
+    .then(res => {
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+        }
+        return res.json();
+    })
     .then(data => {
         const list = document.getElementById('access-codes-list');
         
@@ -796,6 +801,8 @@ function loadAccessCodes() {
                               isUsedUp ? 'border-yellow-500 bg-yellow-900/20' : 
                               'border-green-500 bg-green-900/20';
             
+            const timeRemaining = getTimeRemaining(code.expires_at);
+            
             const item = document.createElement('div');
             item.className = `p-4 rounded-lg border ${statusClass} transition-all hover:scale-[1.02]`;
             
@@ -813,7 +820,7 @@ function loadAccessCodes() {
                         <div class="grid grid-cols-2 gap-4 text-sm text-gray-300">
                             <div>
                                 <i class="fas fa-clock mr-1"></i>
-                                Expires: ${formatTime(code.expires_at)}
+                                ${isExpired ? 'Expired' : `Expires in: ${timeRemaining}`}
                             </div>
                             <div>
                                 <i class="fas fa-chart-bar mr-1"></i>
@@ -829,7 +836,7 @@ function loadAccessCodes() {
                             </div>
                         </div>
                     </div>
-                    <div class="flex gap-2 ml-4">
+                    <div class="flex flex-col gap-2 ml-4">
                         ${!isRevoked && !isExpired ? `
                             <button onclick="revokeAccessCode('${code.code}')" 
                                     class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm transition-colors flex items-center"
@@ -897,26 +904,38 @@ function generateAccessCode() {
 }
 
 function revokeAccessCode(code) {
+    if (!code) {
+        showNotification('❌ No access code provided', 'error');
+        return;
+    }
+    
     showModal(
         'Revoke Access Code',
-        `Are you sure you want to revoke access code <strong>${code}</strong>?<br><br>This will prevent anyone from using this code.`,
+        `Are you sure you want to revoke access code <strong>${code}</strong>?<br><br>This will prevent anyone from using this code to access the email.`,
         function() {
             fetch(`${API_URL}/api/admin/access-codes/${code}/revoke`, {
                 method: 'POST',
                 credentials: 'include'
             })
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) {
+                    return res.json().then(errorData => {
+                        throw new Error(errorData.error || `HTTP ${res.status}`);
+                    });
+                }
+                return res.json();
+            })
             .then(data => {
                 if (data.success) {
                     showNotification(`✅ Access code ${code} revoked`, 'success');
-                    loadAccessCodes();
+                    loadAccessCodes(); // Reload the list
                 } else {
                     showNotification(`❌ ${data.error}`, 'error');
                 }
             })
             .catch(err => {
                 console.error('Error revoking access code:', err);
-                showNotification('❌ Error revoking access code', 'error');
+                showNotification(`❌ ${err.message || 'Error revoking access code'}`, 'error');
             });
         }
     );
@@ -1346,6 +1365,23 @@ function blacklistFromAddress(username) {
             });
         }
     );
+}
+
+// Add this function to your admin panel JavaScript
+function getTimeRemaining(expiresAt) {
+    const now = new Date();
+    const expires = new Date(expiresAt);
+    const diff = expires - now;
+    
+    if (diff <= 0) return 'Expired';
+    
+    const minutes = Math.floor(diff / (1000 * 60));
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) return `${days}d ${hours % 24}h`;
+    if (hours > 0) return `${hours}h ${minutes % 60}m`;
+    return `${minutes}m`;
 }
 
 // Update the existing loadAddresses function
