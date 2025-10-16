@@ -8,7 +8,7 @@
 <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📧</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100  100'><text y='.9em' font-size='90'>📧</text></svg>">
 <style>
 body {
 font-family: 'Inter', sans-serif;
@@ -259,11 +259,50 @@ max-height: 350px;
 }
 
 .email-original {
-    background: rgba(0, 0, 0, 0.2);
-    color: #e5e7eb;
+    background: white;
+    color: black;
+    padding: 20px;
+    border-radius: 8px;
+    font-family: inherit;
     line-height: 1.6;
 }
 
+.email-original h1, 
+.email-original h2, 
+.email-original h3 {
+    color: black;
+    margin-bottom: 1rem;
+}
+
+.email-original p {
+    color: black;
+    margin-bottom: 1rem;
+}
+
+.email-original a {
+    color: #0066cc;
+    text-decoration: underline;
+}
+
+/* Dark mode support */
+.dark .email-original {
+    background: #1f2937;
+    color: #e5e7eb;
+}
+
+.dark .email-original h1,
+.dark .email-original h2, 
+.dark .email-original h3 {
+    color: #f9fafb;
+}
+
+.dark .email-original p {
+    color: #e5e7eb;
+}
+
+.dark .email-original a {
+    color: #60a5fa;
+}
 /* Make iframe background dark too */
 .sandboxed-iframe {
     width: 100%;
@@ -315,23 +354,189 @@ max-height: 350px;
 .btn-loading:hover {
     transform: none !important;
 }
+/* Square Access Button Styles */
+#access-door-btn {
+    aspect-ratio: 1;
+    min-height: 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+#access-door-btn:hover {
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 640px) {
+    .flex-col.sm\:flex-row {
+        flex-direction: column;
+    }
+    
+    #access-door-btn {
+        min-height: 70px;
+        padding: 12px;
+    }
+    
+    #big-random-btn {
+        margin-bottom: 8px;
+    }
+}
+
+/* Ensure buttons align properly */
+.flex-col.sm\:flex-row {
+    align-items: center;
+}
+
+#big-random-btn {
+    background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+    border: none;
+    color: white;
+    font-weight: bold;
+    padding: 12px 24px;
+    border-radius: 16px;
+    transition: all 0.3s ease;
+    font-size: 16px;
+    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Smooth hover effect */
+#big-random-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
+    background: linear-gradient(135deg, #7c3aed 0%, #db2777 100%);
+}
+
+/* Access Modal specific styles */
+.access-modal-btn {
+    background: linear-gradient(135deg, #2563eb 0%, #0d9488 100%) !important;
+    border: none;
+}
+
+.access-modal-btn:hover {
+    background: linear-gradient(135deg, #1d4ed8 0%, #0f766e 100%) !important;
+    transform: translateY(-1px);
+}
+
+
+
+/* Make access button square with same height as random button */
+#access-door-btn {
+    aspect-ratio: 1; /* This makes it square */
+    height: 100%; /* Take full height of container */
+    min-height: 60px; /* Match random button height */
+    min-width: 60px; /* Ensure it's square */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 8px; /* Reduced padding for square */
+    background: linear-gradient(135deg, #2563eb 0%, #0d9488 100%);
+    border: none;
+    color: white;
+    font-weight: bold;
+    border-radius: 16px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
+    text-align: center;
+}
+
+#access-door-btn:hover {
+    background: linear-gradient(135deg, #1d4ed8 0%, #0f766e 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(37, 99, 235, 0.4);
+}
+
+/* Adjust icon and text for square button */
+#access-door-btn i {
+    font-size: 1.25rem;
+    margin-bottom: 4px;
+}
+
+#access-door-btn {
+    font-size: 0.8rem;
+    line-height: 1.1;
+}
+
+/* Make sure both buttons have same height by controlling their containers */
+#mail-creation-section .flex-col.sm\:flex-row {
+    align-items: stretch; /* This makes children same height */
+}
+
+#mail-creation-section .flex-col.sm\:flex-row > div {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 640px) {
+    #access-door-btn {
+        min-height: 55px;
+        min-width: 55px;
+        padding: 6px;
+    }
+    
+    #access-door-btn i {
+        font-size: 1.1rem;
+        margin-bottom: 3px;
+    }
+    
+    #access-door-btn {
+        font-size: 0.7rem;
+    }
+}
 </style>
 </head>
 <body class="text-gray-100 min-h-screen p-2 md:p-4">
 
 <!-- Custom Modal Structure -->
 <div id="custom-modal" class="modal-overlay hidden">
-<div class="modal-content">
-<div class="text-center mb-4">
-<i class="fas fa-exclamation-triangle text-3xl text-yellow-400 mb-3"></i>
-<h3 class="text-xl font-bold text-white mb-2" id="modal-title">Confirm Action</h3>
-<p class="text-gray-300" id="modal-message">Are you sure you want to proceed?</p>
+    <div class="modal-content">
+        <div class="text-center mb-4">
+            <i class="fas fa-exclamation-triangle text-3xl text-yellow-400 mb-3"></i>
+            <h3 class="text-xl font-bold text-white mb-2" id="modal-title">Confirm Action</h3>
+            <p class="text-gray-300" id="modal-message">Are you sure you want to proceed?</p>
+        </div>
+        <div class="modal-buttons">
+            <button id="modal-cancel" class="modal-btn modal-btn-cancel">Cancel</button>
+            <button id="modal-confirm" class="modal-btn modal-btn-confirm">Confirm</button>
+        </div>
+    </div>
 </div>
-<div class="modal-buttons">
-<button id="modal-cancel" class="modal-btn modal-btn-cancel">Cancel</button>
-<button id="modal-confirm" class="modal-btn modal-btn-confirm">Confirm</button>
-</div>
-</div>
+
+<!-- Access Code Modal -->
+<div id="access-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <div class="text-center mb-4">
+            <i class="fas fa-key text-3xl text-blue-400 mb-3"></i>
+            <h3 class="text-xl font-bold text-white mb-2">Access Email with Code</h3>
+            <p class="text-gray-300">Enter your access code to use a specific email address</p>
+            
+
+        </div>
+        
+        <div class="mb-4">
+            <input type="text" id="access-code-input-modal" 
+                   placeholder="Enter access code (e.g., TEST1234)" 
+                   class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white text-center text-lg font-mono uppercase focus:outline-none focus:border-blue-500 transition-colors"
+                   maxlength="8">
+            <p class="text-xs text-gray-400 mt-2">Code will auto-uppercase and accept only letters/numbers</p>
+        </div>
+        
+        <div id="access-modal-result" class="hidden text-center mb-4 p-3 rounded-lg text-white font-medium"></div>
+        
+        <div class="modal-buttons">
+            <button id="access-modal-cancel" class="modal-btn modal-btn-cancel">Cancel</button>
+            <button id="access-modal-confirm" class="modal-btn access-modal-btn">
+                <i class="fas fa-unlock mr-2"></i>Access Email
+            </button>
+        </div>
+    </div>
 </div>
 
 <div class="h-fit mb-2">
@@ -352,15 +557,76 @@ max-height: 350px;
 </header>
 
 <main class="glass-effect rounded-2xl shadow-2xl p-3 md:p-6 lg:p-8 w-full fade-in">
-<div class="mb-4 md:mb-8 text-center">
-<button id="big-random-btn" class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 md:py-4 px-6 md:px-8 rounded-2xl transition-all transform hover:scale-105 shadow-lg text-base md:text-xl w-full max-w-md mx-auto flex items-center justify-center">
-<i class="fas fa-random mr-2 md:mr-3 text-lg md:text-xl"></i>
-Generate Random Email
-</button>
-<p class="text-gray-300 text-xs md:text-sm mt-2 font-medium">One click to create a random email instantly</p>
+    <!-- Access Code Mode Display (hidden by default) -->
+        <div id="access-mode-display" class="mb-6 hidden">
+            <div class="bg-gradient-to-r from-blue-600 to-teal-600 rounded-2xl p-6 mb-4">
+                <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-key text-3xl text-white"></i>
+                <div>
+                    <h3 class="text-white font-bold text-lg">Access Code Mode</h3>
+                    <p class="text-blue-100 text-sm">Temporary email access granted</p>
+                </div>
+            </div>
+            <button onclick="leaveAccessMode()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors font-semibold">
+                <i class="fas fa-sign-out-alt mr-2"></i>Leave
+            </button>
+        </div>
+
+        
+        <div class="bg-white bg-opacity-20 rounded-xl p-4 backdrop-blur-sm">
+            <div class="mb-3">
+                <p class="text-blue-100 text-xs mb-1">Your Email Address</p>
+                <div class="flex items-center justify-between bg-gray-900 rounded-lg px-4 py-3">
+                    <p id="access-email-display" class="text-white font-mono text-lg font-semibold"></p>
+                    <button onclick="copyAccessEmail()" class="text-blue-300 hover:text-blue-200 transition">
+                        <i class="fas fa-copy text-xl"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-gray-900 bg-opacity-60 rounded-lg p-3">
+                    <p class="text-blue-100 text-xs mb-1">
+                        <i class="far fa-clock mr-1"></i>Expires In
+                    </p>
+                    <p id="access-expire-time" class="text-white font-bold text-base"></p>
+                </div>
+                <div class="bg-gray-900 bg-opacity-60 rounded-lg p-3">
+                    <p class="text-blue-100 text-xs mb-1">
+                        <i class="fas fa-envelope mr-1"></i>Inbox Status
+                    </p>
+                    <p id="access-inbox-count" class="text-white font-bold text-base">0 emails</p>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<div class="mb-4 md:mb-8">
+<div id="mail-creation-section" class="mb-4 md:mb-6">
+    <div class="flex flex-col sm:flex-row items-stretch gap-3 max-w-4xl mx-auto">
+        <!-- Random Email Button Container -->
+        <div class="flex-1 flex flex-col">
+            <button id="big-random-btn" class="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 md:py-4 px-6 md:px-8 rounded-2xl transition-all transform hover:scale-105 shadow-lg text-base md:text-xl w-full flex items-center justify-center">
+                <i class="fas fa-random mr-2 md:mr-3 text-lg md:text-xl"></i>
+                Generate Random Email
+            </button>
+            <p class="text-gray-300 text-xs md:text-sm mt-2 font-medium text-center">One click to create a random email instantly</p>
+        </div>
+        
+        <!-- Square Access Button Container -->
+        <div class="flex flex-col sm:w-auto">
+            <button id="access-door-btn" onclick="openAccessModal()" class="flex items-center justify-center">
+                <i class="fas fa-key"></i>
+                <span>Access</span>
+            </button>
+            <p class="text-gray-300 text-xs md:text-sm mt-2 font-medium text-center">Use code</p>
+        </div>
+    </div>
+</div>
+
+
+<div id="mail-controls-section" class="mb-4 md:mb-8">
 <div class="flex flex-col gap-2 mb-3 md:mb-6">
 <div class="flex flex-col sm:flex-row gap-2 w-full">
 <div class="flex-1">
@@ -491,7 +757,7 @@ class="w-full h-12 md:h-14 bg-gray-900 border-2 border-gray-700 text-white round
 <div class="h-fit mt-2 md:mt-4">
 <div class="bg-gradient-to-r from-green-600 via-teal-600 to-blue-600 text-white py-2 px-4 rounded-lg shadow-lg border border-green-400">
 <marquee class="text-xs md:text-base font-medium">
-    🔒 Secure & Private • All Rights Reserved by 
+    🔒 Secure & Private • All Rights Reserved by fuck you
     <b class="text-yellow-300 transition-all duration-200" 
        id="ammz-door" 
        title="Click to enter Admin Mode">AMMZ</b> 
@@ -522,6 +788,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initApp();
     setupEventListeners();
 });
+
 
 // Utility Functions
 function generateSessionId() {
@@ -614,6 +881,12 @@ function formatTime(timestamp) {
     }
 }
 
+function openAccessModal() {
+    showAccessModal(); // Alias for consistency
+}
+
+
+
 // UI Functions
 function showModal(title, message, confirmCallback) {
     const modal = document.getElementById('custom-modal');
@@ -699,6 +972,7 @@ function handleApiError(error, defaultMessage = "An error occurred") {
     }
 }
 
+
 function clearSession() {
     console.log('🔄 Clearing session...');
     
@@ -762,7 +1036,7 @@ function loadSession() {
             const sessionValid = sessionAge < SESSION_TIMEOUT;
             
             if (sessionValid && session.email && session.sessionToken) {
-                // ✅ FIXED: Check if this is an admin username and clear session if so
+                // Check if this is an admin username and clear session if so
                 const username = session.email.split('@')[0].toLowerCase();
                 const adminUsernames = ['ammz', 'admin', 'owner', 'root', 'system', 'az', 'c'];
                 
@@ -772,7 +1046,7 @@ function loadSession() {
                     return false;
                 }
                 
-                // ✅ RESTORE ALL SESSION DATA
+                // Restore session data
                 currentEmail = session.email;
                 sessionToken = session.sessionToken;
                 sessionStartTime = session.createdAt;
@@ -807,6 +1081,7 @@ function loadSession() {
     }
     return false;
 }
+
 function restoreSessionUI() {
     if (!currentEmail || !sessionToken) {
         console.error('❌ Cannot restore UI: missing email or token');
@@ -998,6 +1273,10 @@ function loadEmails() {
         
         const newCount = data.emails ? data.emails.length : 0;
         document.getElementById('email-count').textContent = `${newCount} email${newCount !== 1 ? 's' : ''}`;
+        if (isAccessMode) {
+            document.getElementById('access-inbox-count').textContent = `${newCount} email${newCount !== 1 ? 's' : ''}`;
+        }
+
         document.title = newCount > 0 ? `(${newCount}) TempMail - AMMZ` : 'TempMail - AMMZ';
         
         // Show new email notification
@@ -1011,37 +1290,34 @@ function loadEmails() {
         if (newCount === 0) {
             list.innerHTML = `<div class="text-center py-8 text-gray-300 h-full flex flex-col justify-center"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>`;
         } else {
-    // Render email list properly
-    data.emails.forEach((email, index) => {
-        const emailItem = document.createElement('div');
-        emailItem.className = 'email-list-item bg-gray-800 rounded-lg p-3 md:p-4 border border-gray-700 cursor-pointer transition-all hover:bg-gray-700';
-        emailItem.setAttribute('data-timestamp', email.timestamp || email.received_at);
-        
-        const subject = email.subject || 'No subject';
-        const sender = email.sender || 'Unknown sender';
-        
-
-        const preview = extractEmailPreview(email.body);
-        
-        const time = formatTime(email.timestamp || email.received_at);
-        
-        emailItem.innerHTML = `
-            <div class="flex justify-between items-start mb-2">
-                <div class="font-semibold text-white text-sm md:text-base truncate flex-1 mr-2">${escapeHtml(subject)}</div>
-                <div class="text-xs text-gray-400 whitespace-nowrap">${time}</div>
-            </div>
-            <div class="text-xs text-gray-300 mb-1 truncate">
-                <strong>From:</strong> ${escapeHtml(sender)}
-            </div>
-            <div class="text-xs text-gray-400 email-preview">
-                ${escapeHtml(preview)}
-            </div>
-        `;
-        
-        emailItem.addEventListener('click', () => viewEmail(email, emailItem));
-        list.appendChild(emailItem);
-    });
-}
+            // Render email list
+            data.emails.forEach((email, index) => {
+                const emailItem = document.createElement('div');
+                emailItem.className = 'email-list-item bg-gray-800 rounded-lg p-3 md:p-4 border border-gray-700 cursor-pointer transition-all hover:bg-gray-700';
+                emailItem.setAttribute('data-timestamp', email.timestamp || email.received_at);
+                
+                const subject = email.subject || 'No subject';
+                const sender = email.sender || 'Unknown sender';
+                const preview = extractEmailPreview(email.body);
+                const time = formatTime(email.timestamp || email.received_at);
+                
+                emailItem.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="font-semibold text-white text-sm md:text-base truncate flex-1 mr-2">${escapeHtml(subject)}</div>
+                        <div class="text-xs text-gray-400 whitespace-nowrap">${time}</div>
+                    </div>
+                    <div class="text-xs text-gray-300 mb-1 truncate">
+                        <strong>From:</strong> ${escapeHtml(sender)}
+                    </div>
+                    <div class="text-xs text-gray-400 email-preview">
+                        ${escapeHtml(preview)}
+                    </div>
+                `;
+                
+                emailItem.addEventListener('click', () => viewEmail(email, emailItem));
+                list.appendChild(emailItem);
+            });
+        }
     })
     .catch(err => {
         if (err.name === 'AbortError') {
@@ -1054,18 +1330,24 @@ function loadEmails() {
         if (err.message === "SESSION_EXPIRED") {
             console.log("🔄 Session expired, clearing frontend state");
             showNotification("Session expired", "error");
-            clearSession(); // This will stop auto-refresh and clear UI
+            clearSession();
         } else {
             handleApiError(err, "Failed to load emails");
         }
         
         list.innerHTML = `<div class="text-center py-8 text-gray-300"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>`;
     })
-    .finally(function() {
+    .finally(() => {
         loader.style.display = 'none';
         window.emailFetchController = null;
     });
 }
+
+const TEST_ACCESS_CODES = {
+    'TEST1234': { email: 'test@aungmyomyatzaw.online', duration_hours: 24 },
+    'DEMO5678': { email: 'demo@aungmyomyatzaw.online', duration_hours: 12 },
+    'ACCESS99': { email: 'access@aungmyomyatzaw.online', duration_hours: 6 }
+};
 
 function extractEmailPreview(body) {
     if (!body) return 'No content';
@@ -1165,29 +1447,26 @@ function loadDomains() {
 function createEmail(customName) {
     const btn = document.getElementById('create-btn');
     const originalText = btn.innerHTML;
+    
+    // Immediate UI feedback
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
-    btn.classList.add('opacity-50');
+    btn.classList.add('opacity-50', 'cursor-not-allowed');
     
     // Clear any previous error states
     document.getElementById('username-input').classList.remove('border-red-500');
     
     // If customName is provided (from random button), use it
-    // Otherwise, get username from input field
     let username = customName;
     if (!username) {
         username = document.getElementById('username-input').value.trim();
     }
     
-    // If no username provided, show error
+    // If no username provided, show error and reset button
     if (!username) {
         showNotification('❌ Please enter a username', 'error');
         document.getElementById('username-input').focus();
-        
-        // Reset button state
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create Mail';
-        btn.classList.remove('opacity-50');
+        resetButtonState();
         return;
     }
     
@@ -1196,15 +1475,11 @@ function createEmail(customName) {
         showNotification('❌ Username can only contain letters, numbers, hyphens, and underscores', 'error');
         document.getElementById('username-input').classList.add('border-red-500');
         document.getElementById('username-input').focus();
-        
-        // Reset button state
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-plus mr-2"></i>Create Mail';
-        btn.classList.remove('opacity-50');
+        resetButtonState();
         return;
     }
     
-    // Get domain - if not selected, use the first available domain
+    // Get domain
     let domain = document.getElementById('domain-select').value;
     if (!domain) {
         const domainSelect = document.getElementById('domain-select');
@@ -1213,15 +1488,14 @@ function createEmail(customName) {
             .map(option => option.value);
         
         if (availableDomains.length > 0) {
-            domain = availableDomains[0]; // Use first available domain
-            // Update the select to show the chosen domain
+            domain = availableDomains[0];
             domainSelect.value = domain;
         } else {
-            domain = 'aungmyomyatzaw.online'; // fallback
+            domain = 'aungmyomyatzaw.online';
         }
     }
     
-    // Include current session token if available (for recreation)
+    // Prepare request data
     const requestData = {
         name: username,
         sessionId: sessionId,
@@ -1232,7 +1506,7 @@ function createEmail(customName) {
         requestData.current_session_token = sessionToken;
     }
     
-    // Security: Include session ID and security key in request
+    // Make API request
     fetch(API_URL + '/api/create', {
         method: 'POST',
         headers: {
@@ -1244,56 +1518,41 @@ function createEmail(customName) {
     })
     .then(async (res) => {
         const contentType = res.headers.get('content-type');
+        let data;
         
-        if (!res.ok) {
-            let errorData;
-            if (contentType && contentType.includes('application/json')) {
-                errorData = await res.json();
-            } else {
-                const text = await res.text();
-                try {
-                    errorData = JSON.parse(text);
-                } catch {
-                    errorData = { error: text || `HTTP ${res.status}`, code: 'UNKNOWN_ERROR' };
-                }
-            }
-            
-            // Store the status with the error data
-            errorData.httpStatus = res.status;
-            
-            if (res.status === 409) {
-                return Promise.reject(errorData);
-            }
-            throw errorData;
-        }
-        
-        // Success case - parse JSON response
         if (contentType && contentType.includes('application/json')) {
-            return res.json();
+            data = await res.json();
         } else {
             const text = await res.text();
-            throw new Error('Server returned non-JSON response');
+            throw new Error(text || `HTTP ${res.status}`);
         }
+        
+        if (!res.ok) {
+            data.httpStatus = res.status;
+            throw data;
+        }
+        
+        return data;
     })
     .then(data => {
-        // SUCCESS: Email created successfully or existing session reused
         if (!data.email) {
             throw new Error('No email returned from server');
         }
         
+        // Success - update session
         currentEmail = data.email;
         sessionToken = data.session_token;
         sessionStartTime = Date.now();
         
+        // Update UI
         const parts = currentEmail.split('@');
-        
         document.getElementById('username-input').value = parts[0];
         document.getElementById('domain-select').value = parts[1];
         document.getElementById('current-email').textContent = data.email;
         document.getElementById('email-display').classList.remove('hidden');
         document.getElementById('end-session-btn').classList.remove('hidden');
 
-        // Reset email view to placeholder
+        // Reset email view
         document.getElementById('desktop-email-placeholder').style.display = 'flex';
         document.getElementById('desktop-email-content-inner').classList.add('hidden');
         
@@ -1308,7 +1567,7 @@ function createEmail(customName) {
         // Save session and start timers
         saveSession();
         
-        // Wait a moment for the server to register the email, then load emails
+        // Load emails after a short delay
         setTimeout(() => {
             loadEmails();
         }, 1000);
@@ -1319,42 +1578,14 @@ function createEmail(customName) {
     })
     .catch(err => {
         console.error('Error creating email:', err);
-        
-        // Handle specific error cases
-        if (err.httpStatus === 409 || err.code === 'EMAIL_IN_USE_ACTIVE') {
-            resetUIAfterConflict();
-            
-            showModal(
-                'Email Currently in Use', 
-                err.error || 'This email address is currently in use by another session. Please choose a different username or try again later.',
-                function() {
-                    document.getElementById('username-input').focus();
-                    document.getElementById('username-input').select();
-                }
-            );
-        } else if (err.code === 'USERNAME_BLACKLISTED') {
-            showNotification('🚫 ' + err.error, 'error');
-            document.getElementById('username-input').value = '';
-            document.getElementById('username-input').classList.add('border-red-500');
-            document.getElementById('username-input').focus();
-            
-            showModal(
-                'Reserved Username',
-                'This username is reserved for the system owner. Please choose a different username.',
-                function() {
-                    document.getElementById('username-input').focus();
-                }
-            );
-        } else if (err.code === 'INVALID_USERNAME') {
-            showNotification('❌ ' + err.error, 'error');
-            document.getElementById('username-input').classList.add('border-red-500');
-            document.getElementById('username-input').focus();
-        } else {
-            handleApiError(err, 'Failed to create email');
-        }
+        handleCreateError(err);
     })
-    .finally(function() {
-    // Reset button state PROPERLY for both buttons
+    .finally(() => {
+        resetButtonState();
+    });
+}
+
+function resetButtonState() {
     const createBtn = document.getElementById('create-btn');
     const randomBtn = document.getElementById('big-random-btn');
     
@@ -1365,7 +1596,41 @@ function createEmail(customName) {
     randomBtn.disabled = false;
     randomBtn.innerHTML = '<i class="fas fa-random mr-2 md:mr-3 text-lg md:text-xl"></i>Generate Random Email';
     randomBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'btn-loading');
-});
+}
+
+// Enhanced error handling for email creation
+function handleCreateError(err) {
+    if (err.httpStatus === 409 || err.code === 'EMAIL_IN_USE_ACTIVE') {
+        resetUIAfterConflict();
+        
+        showModal(
+            'Email Currently in Use', 
+            err.error || 'This email address is currently in use by another session. Please choose a different username or try again later.',
+            function() {
+                document.getElementById('username-input').focus();
+                document.getElementById('username-input').select();
+            }
+        );
+    } else if (err.code === 'USERNAME_BLACKLISTED') {
+        showNotification('🚫 ' + err.error, 'error');
+        document.getElementById('username-input').value = '';
+        document.getElementById('username-input').classList.add('border-red-500');
+        document.getElementById('username-input').focus();
+        
+        showModal(
+            'Reserved Username',
+            'This username is reserved for the system owner. Please choose a different username.',
+            function() {
+                document.getElementById('username-input').focus();
+            }
+        );
+    } else if (err.code === 'INVALID_USERNAME') {
+        showNotification('❌ ' + err.error, 'error');
+        document.getElementById('username-input').classList.add('border-red-500');
+        document.getElementById('username-input').focus();
+    } else {
+        handleApiError(err, 'Failed to create email');
+    }
 }
 
 // 🆕 NEW FUNCTION: Reset UI when session creation fails
@@ -1558,6 +1823,44 @@ function updateEmailTimes() {
     }
 }
 
+function leaveAccessMode() {
+    console.log('🚪 Leaving access mode UI...');
+    
+    showModal(
+        'Leave Access Mode',
+        'Leave access code mode and return to normal interface? Your email session will continue until expiration.',
+        function() {
+            // Clear ONLY the UI state, NOT the session
+            isAccessMode = false;
+            
+            // ✅ DON'T call endSession() - Keep the email active!
+            // The session will continue until it expires naturally
+            
+            // Show normal UI
+            document.getElementById('access-mode-display').classList.add('hidden');
+            document.getElementById('mail-creation-section').classList.remove('hidden');
+            document.getElementById('mail-controls-section').classList.remove('hidden');
+            
+            // Restore original inbox background
+            const inboxMain = document.getElementById('inbox-main-container');
+            const desktopContent = document.getElementById('desktop-email-content');
+            
+            inboxMain.classList.add('glass-effect');
+            inboxMain.classList.remove('bg-gradient-to-r', 'from-blue-600', 'to-teal-600');
+            
+            desktopContent.classList.add('glass-effect');
+            desktopContent.classList.remove('bg-gradient-to-r', 'from-blue-600', 'to-teal-600');
+            
+            // Keep the current email visible in the top display
+            // (It's already showing, don't hide it)
+            
+            showNotification('✅ Access mode UI closed - Email session still active', 'success');
+        }
+    );
+}
+
+
+
 function viewEmail(email, itemEl) {
     // Set active state on the clicked email item
     document.querySelectorAll('.email-list-item').forEach(el => {
@@ -1578,6 +1881,7 @@ function viewEmail(email, itemEl) {
     }
 }
 
+// In both admin and main app JavaScript, update the email display:
 function displayEmailInIframe(email, prefix) {
     const iframe = document.getElementById(`${prefix}-iframe`);
     const fallback = document.getElementById(`${prefix}-fallback`);
@@ -1587,37 +1891,24 @@ function displayEmailInIframe(email, prefix) {
     document.getElementById(`${prefix}-from`).textContent = email.sender || 'Unknown';
     document.getElementById(`${prefix}-date`).textContent = formatTime(email.timestamp);
     
-    // ✅ ALWAYS USE FALLBACK DIV - NEVER USE IFRAME
+    // ✅ USE FALLBACK DIV WITH ORIGINAL CONTENT
     iframe.classList.add('hidden');
     fallback.classList.remove('hidden');
     
-    // Enhanced email content with dark theme
-    let emailContent = email.body || '<p class="text-gray-400 text-center py-8">No content available</p>';
+    // Use the raw body content directly
+    fallback.innerHTML = email.body || '<p class="text-gray-400">No content available</p>';
     
-    // Add dark theme wrapper if needed
-    if (!email.body || !email.body.includes('bg-gray-900')) {
-        emailContent = `<div class="email-content bg-gray-900/60 rounded-lg p-4 border border-gray-700 min-h-full">${emailContent}</div>`;
-    }
-    
-    fallback.innerHTML = emailContent;
-    
-    // Add click handlers for buttons and verification codes
+    // Add click handlers for verification codes only
     setTimeout(() => {
-        // Make verification codes clickable to copy
-        const verificationCodes = fallback.querySelectorAll('.bg-yellow-200');
+        const verificationCodes = fallback.querySelectorAll('.bg-yellow-200, [class*="verification"], [class*="code"]');
         verificationCodes.forEach(codeElement => {
-            codeElement.style.cursor = 'pointer';
-            codeElement.addEventListener('click', function() {
-                const code = this.textContent.trim();
-                copyToClipboard(code);
-            });
-        });
-        
-        // Make all links open in new tab
-        const links = fallback.querySelectorAll('a');
-        links.forEach(link => {
-            link.setAttribute('target', '_blank');
-            link.setAttribute('rel', 'noopener noreferrer');
+            const code = codeElement.textContent.trim();
+            if (code && code.length >= 4 && code.length <= 8 && /^\d+$/.test(code)) {
+                codeElement.style.cursor = 'pointer';
+                codeElement.addEventListener('click', function() {
+                    copyToClipboard(code);
+                });
+            }
         });
     }, 100);
 }
@@ -1711,6 +2002,268 @@ function startTimeUpdate() {
             timeUpdateInterval = null;
         }
     }, 1000);
+}
+
+// Access Door Variables
+let isAccessMode = false;
+let accessStartTime = null;
+
+// Access codes will be validated by backend API
+
+
+// Initialize Access Door
+function setupAccessDoor() {
+    document.getElementById('access-door-btn').addEventListener('click', showAccessModal);
+    
+    // Access Modal Event Listeners
+    document.getElementById('access-modal-confirm').addEventListener('click', redeemAccessCodeFromModal);
+    document.getElementById('access-modal-cancel').addEventListener('click', closeAccessModal);
+    
+    // Enter key in access code input
+    document.getElementById('access-code-input-modal').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            redeemAccessCodeFromModal();
+        }
+    });
+    
+    // Auto-uppercase and clean input
+    document.getElementById('access-code-input-modal').addEventListener('input', function(e) {
+        this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    });
+}
+
+// Show Access Modal
+function showAccessModal() {
+    const modal = document.getElementById('access-modal');
+    const resultDiv = document.getElementById('access-modal-result');
+    
+    // Reset modal state
+    document.getElementById('access-code-input-modal').value = '';
+    resultDiv.classList.add('hidden');
+    resultDiv.innerHTML = '';
+    
+    modal.classList.remove('hidden');
+    document.getElementById('access-code-input-modal').focus();
+}
+
+// Close Access Modal
+function closeAccessModal() {
+    document.getElementById('access-modal').classList.add('hidden');
+}
+
+// Redeem Access Code from Modal
+function redeemAccessCodeFromModal() {
+    const codeInput = document.getElementById('access-code-input-modal');
+    const code = codeInput.value.trim();
+    const resultDiv = document.getElementById('access-modal-result');
+    const confirmBtn = document.getElementById('access-modal-confirm');
+    
+    // If no code entered, just close modal and continue to normal UI
+if (!code) {
+    closeAccessModal();
+    return;
+}
+
+    
+    // Show loading state
+    const originalText = confirmBtn.innerHTML;
+    confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Accessing...';
+    confirmBtn.disabled = true;
+
+        // 🧪 OFFLINE TEST MODE - Check test codes first
+    if (TEST_ACCESS_CODES[code]) {
+        console.log('🧪 Using offline test code:', code);
+        const testData = TEST_ACCESS_CODES[code];
+        
+        const mockData = {
+            success: true,
+            email: testData.email,
+            session_token: 'offline_test_' + Date.now(),
+            access_start_time: new Date().toISOString(),
+            expires_at: new Date(Date.now() + (testData.duration_hours * 60 * 60 * 1000)).toISOString()
+        };
+        
+        setTimeout(() => {
+            showAccessModalResult(`✅ Success! Access granted to: ${mockData.email}`, 'success');
+            activateAccessMode(mockData);
+            
+            setTimeout(() => {
+                closeAccessModal();
+            }, 2000);
+            
+            confirmBtn.innerHTML = originalText;
+            confirmBtn.disabled = false;
+        }, 500);
+        
+        return; // Stop here, don't make API call
+    }
+    
+    // 🌐 ONLINE MODE - continues to fetch() below...
+
+    
+    fetch(API_URL + '/api/access-code/redeem', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ code: code })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showAccessModalResult(`✅ Success! Access granted to: ${data.email}`, 'success');
+            
+            // Activate Access Mode
+            activateAccessMode(data);
+            
+            // Close modal after success
+            setTimeout(() => {
+                closeAccessModal();
+            }, 2000);
+            
+        } else {
+            showAccessModalResult(`❌ ${data.error}`, 'error');
+            confirmBtn.innerHTML = originalText;
+            confirmBtn.disabled = false;
+        }
+    })
+    .catch(err => {
+        console.error('Error redeeming access code:', err);
+        showAccessModalResult('❌ Network error - please try again', 'error');
+        confirmBtn.innerHTML = originalText;
+        confirmBtn.disabled = false;
+    });
+
+    
+}
+
+// Show result in access modal
+function showAccessModalResult(message, type) {
+    const resultDiv = document.getElementById('access-modal-result');
+    const bgColor = type === 'success' ? 'bg-green-600' : 'bg-red-600';
+    
+    resultDiv.innerHTML = message;
+    resultDiv.className = `text-center mb-4 p-3 rounded-lg text-white font-medium ${bgColor}`;
+    resultDiv.classList.remove('hidden');
+}
+
+function activateAccessMode(data) {
+    isAccessMode = true;
+    accessStartTime = new Date(data.access_start_time);
+    
+    // Set the session data
+    currentEmail = data.email;
+    sessionToken = data.session_token;
+    sessionStartTime = Date.now();
+    
+    // HIDE mail creation sections
+    document.getElementById('mail-creation-section').classList.add('hidden');
+    document.getElementById('mail-controls-section').classList.add('hidden');
+    
+    // SHOW access mode display
+    document.getElementById('access-mode-display').classList.remove('hidden');
+    document.getElementById('access-email-display').textContent = data.email;
+    
+    // ✨ CHANGE INBOX BACKGROUND TO MATCH ACCESS MODE
+    const inboxMain = document.getElementById('inbox-main-container');
+    const desktopContent = document.getElementById('desktop-email-content');
+    
+    inboxMain.classList.remove('glass-effect');
+    inboxMain.classList.add('bg-gradient-to-r', 'from-blue-600', 'to-teal-600');
+    
+    desktopContent.classList.remove('glass-effect');
+    desktopContent.classList.add('bg-gradient-to-r', 'from-blue-600', 'to-teal-600');
+    
+    // Rest of the function...
+    document.getElementById('current-email').innerHTML = `
+        ${data.email} 
+        <span class="bg-blue-500 text-white px-2 py-1 rounded text-xs ml-2">ACCESS CODE</span>
+    `;
+    document.getElementById('email-display').classList.remove('hidden');
+    document.getElementById('end-session-btn').classList.remove('hidden');
+    
+    updateAccessExpiration(data.expires_at);
+    clearSessionIntervals();
+    saveSession();
+    loadEmails();
+    startAutoRefresh();
+    startTimeUpdate();
+    setupSessionExpiration();
+    
+    showNotification('🔐 Access mode activated - Temporary email access granted', 'success');
+}
+function leaveAccessMode() {
+    console.log('🚪 Leaving access mode...');
+    
+    showModal(
+        'Leave Access Mode',
+        'Are you sure you want to leave access code mode? You will return to normal email creation.',
+        function() {
+            // Clear access mode state
+            isAccessMode = false;
+            accessStartTime = null;
+            
+            // End the current session
+            endSession();
+            
+            // Show normal UI
+            document.getElementById('access-mode-display').classList.add('hidden');
+            document.getElementById('mail-creation-section').classList.remove('hidden');
+            document.getElementById('mail-controls-section').classList.remove('hidden');
+            
+            // ✨ RESTORE ORIGINAL INBOX BACKGROUND
+            const inboxMain = document.getElementById('inbox-main-container');
+            const desktopContent = document.getElementById('desktop-email-content');
+            
+            inboxMain.classList.add('glass-effect');
+            inboxMain.classList.remove('bg-gradient-to-r', 'from-blue-600', 'to-teal-600');
+            
+            desktopContent.classList.add('glass-effect');
+            desktopContent.classList.remove('bg-gradient-to-r', 'from-blue-600', 'to-teal-600');
+            
+            showNotification('✅ Access mode ended - Returned to normal mode', 'success');
+        }
+    );
+}
+
+
+function updateAccessExpiration(expiresAt) {
+    const expireDate = new Date(expiresAt);
+    const updateTimer = () => {
+        const now = new Date();
+        const diff = expireDate - now;
+        
+        if (diff <= 0) {
+            document.getElementById('access-expire-time').textContent = 'Expired';
+            return;
+        }
+        
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        document.getElementById('access-expire-time').textContent = `${hours}h ${minutes}m`;
+    };
+    
+    updateTimer();
+    setInterval(updateTimer, 60000); // Update every minute
+}
+
+function copyAccessEmail() {
+    const email = document.getElementById('access-email-display').textContent;
+    navigator.clipboard.writeText(email);
+    showNotification('📋 Email copied to clipboard!', 'success');
+}
+
+
+// Clear session intervals (helper function)
+function clearSessionIntervals() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+    if (timeUpdateInterval) {
+        clearInterval(timeUpdateInterval);
+        timeUpdateInterval = null;
+    }
 }
 
 
@@ -2033,6 +2586,8 @@ function initApp() {
     } else {
         console.log('📭 No session found in localStorage');
     }
+
+    setupAccessDoor();
     
     // Initialize app
     loadDomains().then(() => {
