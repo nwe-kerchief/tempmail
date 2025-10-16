@@ -1134,8 +1134,11 @@ function restoreAccessCodeSession(accessCode) {
     document.getElementById('email-display').classList.remove('hidden');
     document.getElementById('end-session-btn').classList.remove('hidden');
     
-    updateAccessExpiration(accessCode.expires_at);
-    loadEmails();
+    // Use the same time formatting as regular sessions
+    updateSessionTime();
+    clearSessionIntervals();
+    saveSession(); // Save immediately
+    loadEmails(); // Load emails
     startAutoRefresh();
     startTimeUpdate();
     setupSessionExpiration();
@@ -1144,6 +1147,36 @@ function restoreAccessCodeSession(accessCode) {
     if (accessCode.description) {
         showNotification(`🔐 ${accessCode.description}`, 'info');
     }
+}
+
+function updateSessionTime() {
+    if (!isAccessMode || !accessStartTime) return;
+    
+    const updateTimer = () => {
+        const expireDate = new Date(accessStartTime);
+        expireDate.setMinutes(expireDate.getMinutes() + 1440); // 24 hours
+        
+        const now = new Date();
+        const diff = expireDate - now;
+        
+        if (diff <= 0) {
+            document.getElementById('access-expire-time').textContent = 'Expired';
+            return;
+        }
+        
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        
+        // Use the same format as regular sessions
+        if (hours > 0) {
+            document.getElementById('access-expire-time').textContent = `${hours}h ${minutes}m`;
+        } else {
+            document.getElementById('access-expire-time').textContent = `${minutes}m`;
+        }
+    };
+    
+    updateTimer();
+    setInterval(updateTimer, 60000); // Update every minute
 }
 
 function restoreSessionUI() {
