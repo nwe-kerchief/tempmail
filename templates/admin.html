@@ -532,32 +532,50 @@ button:hover {
             </div>
         </div>
 
-                <!-- Access Codes Management Section -->
+        <!-- Access Codes Section -->
         <div class="glass-effect rounded-xl p-4 md:p-6 fade-in">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
                 <h2 class="text-lg md:text-xl font-bold text-white">
                     <i class="fas fa-key mr-2"></i>Access Codes
                 </h2>
-                <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            </div>
+            
+            <!-- Code Generation Form -->
+            <div class="bg-gray-800 rounded-lg p-4 mb-4">
+                <h3 class="text-white font-semibold mb-3">Generate New Access Code</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mb-3">
                     <input type="text" id="generate-code-email" placeholder="Email address" 
-                        class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none w-full sm:w-48 text-sm">
-                    <input type="number" id="generate-code-duration" placeholder="Hours (24)" 
-                        class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none w-full sm:w-32 text-sm">
-                    <input type="number" id="generate-code-uses" placeholder="Max uses (1)" 
-                        class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none w-full sm:w-32 text-sm">
-                    <button onclick="generateAccessCode()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105 whitespace-nowrap text-sm">
-                        <i class="fas fa-plus mr-1"></i> Generate Code
-                    </button>
+                        class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm">
+                    
+                    <input type="text" id="generate-code-custom" placeholder="Custom code (optional)" 
+                        class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm uppercase font-mono"
+                        maxlength="12">
+                    
+                    <select id="generate-code-duration" class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm">
+                        <option value="60">1 Hour</option>
+                        <option value="1440" selected>24 Hours</option>
+                        <option value="10080">7 Days</option>
+                        <option value="43200">30 Days</option>
+                        <option value="custom">Custom Minutes</option>
+                    </select>
+                    
+                    <input type="number" id="generate-code-custom-minutes" placeholder="Custom minutes" 
+                        class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm hidden"
+                        min="1" max="525600">
+                    
+                    <input type="number" id="generate-code-uses" placeholder="Max uses" 
+                        class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm"
+                        min="1" max="1000" value="1">
                 </div>
+                <button onclick="generateAccessCode()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105 text-sm w-full">
+                    <i class="fas fa-plus mr-1"></i> Generate Access Code
+                </button>
             </div>
             
             <div id="access-codes-list" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
                 <p class="text-gray-400 text-center py-8">Loading access codes...</p>
             </div>
         </div>
-    </div>
-</div>
-
 
 <script>
 var API_URL = window.location.origin;
