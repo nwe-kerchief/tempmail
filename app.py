@@ -469,6 +469,40 @@ def get_display_body(parsed_email):
             'verification_codes': parsed_email['verification_codes']
         }
 
+def format_time(timestamp):
+    """Format timestamp for display"""
+    if not timestamp:
+        return 'never'
+    
+    try:
+        if isinstance(timestamp, str):
+            # Handle string timestamps
+            date = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+        else:
+            date = timestamp
+            
+        now = datetime.now()
+        diff = now - date
+        
+        seconds = diff.total_seconds()
+        minutes = seconds // 60
+        hours = minutes // 60
+        days = hours // 24
+        
+        if seconds < 60:
+            return 'just now'
+        if minutes < 60:
+            return f'{int(minutes)} min ago'
+        if hours < 24:
+            return f'{int(hours)} hour{"s" if hours > 1 else ""} ago'
+        if days < 7:
+            return f'{int(days)} day{"s" if days > 1 else ""} ago'
+        
+        return date.strftime('%b %d, %H:%M')
+        
+    except Exception as e:
+        logger.error(f"Time formatting error: {e}")
+        return 'unknown'
 
 def format_email_content(text, verification_codes):
     """Format email content for HTML display - preserve original structure"""
@@ -1212,7 +1246,7 @@ def admin_addresses():
         conn = get_db()
         c = conn.cursor(cursor_factory=RealDictCursor)
         
-        # ✅ FIXED: Get addresses sorted by newest email received
+        # Get addresses sorted by newest email received
         c.execute('''
             SELECT 
                 recipient as address, 
@@ -1226,8 +1260,7 @@ def admin_addresses():
         addresses = []
         for row in c.fetchall():
             if row['last_email_time']:
-                local_time = row['last_email_time']
-                last_email_str = formatTime(local_time.isoformat())
+                last_email_str = format_time(row['last_email_time'])
             else:
                 last_email_str = 'never'
                 
@@ -1300,7 +1333,7 @@ def generate_access_code():
         data = request.get_json() or {}
         email_address = data.get('email_address', '').strip()
         custom_code = data.get('custom_code', '').strip().upper()
-        duration_minutes = data.get('duration_minutes', 1440)  # Default 24 hours
+        duration_minutes = data.get('duration_minutes', 1440)
         max_uses = data.get('max_uses', 1)
         
         if not email_address:
@@ -1340,7 +1373,7 @@ def generate_access_code():
         conn.commit()
         conn.close()
         
-        logger.info(f"✅ Access code generated: {code} for {email_address} (expires in {duration_minutes} minutes)")
+        logger.info(f"✅ Access code generated: {code} for {email_address}")
         
         return jsonify({
             'success': True,
@@ -1460,21 +1493,24 @@ def revoke_access_code(code):
         conn = get_db()
         c = conn.cursor()
         
+        # Check if code exists
+        c.execute('SELECT code FROM access_codes WHERE code = %s', (code,))
+        if not c.fetchone():
+            conn.close()
+            return jsonify({'error': 'Access code not found'}), 404
+        
+        # Revoke the code
         c.execute('''
             UPDATE access_codes 
             SET is_active = FALSE 
             WHERE code = %s
         ''', (code,))
         
-        if c.rowcount == 0:
-            conn.close()
-            return jsonify({'error': 'Access code not found'}), 404
-        
         conn.commit()
         conn.close()
         
         logger.info(f"✅ Access code revoked: {code}")
-        return jsonify({'success': True, 'message': f'Access code {code} revoked'})
+        return jsonify({'success': True, 'message': f'Access code {code} revoked successfully'})
         
     except Exception as e:
         logger.error(f"❌ Error revoking access code: {e}")
