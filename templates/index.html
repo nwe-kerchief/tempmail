@@ -2322,11 +2322,6 @@ function showAccessModal() {
     document.getElementById('access-code-input-modal').focus();
 }
 
-// Close Access Modal
-function closeAccessModal() {
-    document.getElementById('access-modal').classList.add('hidden');
-}
-
 function redeemAccessCodeFromModal() {
     const codeInput = document.getElementById('access-code-input-modal');
     const resultDiv = document.getElementById('access-modal-result');
@@ -2369,7 +2364,10 @@ function redeemAccessCodeFromModal() {
     })
     .then(data => {
         if (data.success) {
-            // ✅ Save to localStorage for automatic future access
+            // ✅ Remove any expired session data for this email first
+            removeAccessCodeFromLocalStorage(data.email);
+            
+            // ✅ Save the new access code session
             saveAccessCodeToLocalStorage(data);
             
             showAccessModalResult(`✅ Success! Access granted to: ${data.email}`, 'success');
