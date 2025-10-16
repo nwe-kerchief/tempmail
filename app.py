@@ -1267,20 +1267,38 @@ def generate_access_code():
     try:
         data = request.get_json() or {}
         email_address = data.get('email_address', '').strip()
-        duration_hours = data.get('duration_hours', 24)  # Default 24 hours
-        max_uses = data.get('max_uses', 1)  # Default 1 use
+        custom_code = data.get('custom_code', '').strip().upper()
+        duration_minutes = data.get('duration_minutes', 1440)  # Default 24 hours
+        max_uses = data.get('max_uses', 1)
         
         if not email_address:
             return jsonify({'error': 'Email address is required'}), 400
         
-        # Generate a random 8-character code
-        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+        # Validate email format
+        if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email_address):
+            return jsonify({'error': 'Invalid email address format'}), 400
+        
+        # Validate custom code or generate random
+        if custom_code:
+            # Validate custom code format
+            if not re.match(r'^[A-Z0-9]{4,12}$', custom_code):
+                return jsonify({'error': 'Custom code must be 4-12 uppercase letters and numbers only'}), 400
+            code = custom_code
+        else:
+            # Generate a random 8-character code
+            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
         
         conn = get_db()
         c = conn.cursor()
         
+        # Check if code already exists
+        c.execute('SELECT code FROM access_codes WHERE code = %s', (code,))
+        if c.fetchone():
+            conn.close()
+            return jsonify({'error': f'Code "{code}" already exists. Please choose a different one.'}), 409
+        
         created_at = datetime.now()
-        expires_at = created_at + timedelta(hours=duration_hours)
+        expires_at = created_at + timedelta(minutes=duration_minutes)
         
         c.execute('''
             INSERT INTO access_codes (code, email_address, created_at, expires_at, max_uses)
@@ -1290,21 +1308,21 @@ def generate_access_code():
         conn.commit()
         conn.close()
         
-        logger.info(f"✅ Access code generated: {code} for {email_address}")
+        logger.info(f"✅ Access code generated: {code} for {email_address} (expires in {duration_minutes} minutes)")
         
         return jsonify({
             'success': True,
             'code': code,
             'email_address': email_address,
             'expires_at': expires_at.isoformat(),
-            'max_uses': max_uses
+            'max_uses': max_uses,
+            'duration_minutes': duration_minutes
         })
         
     except Exception as e:
         logger.error(f"❌ Error generating access code: {e}")
         return jsonify({'error': str(e)}), 500
     
-# In your access code generation, ensure proper timezone handling
 @app.route('/api/access-code/redeem', methods=['POST'])
 def redeem_access_code():
     """Redeem an access code to get temporary access to specific email"""
@@ -1334,18 +1352,19 @@ def redeem_access_code():
         # Validate code
         if not access_code['is_active']:
             conn.close()
-            return jsonify({'error': 'Access code has been revoked'}), 403
+            return jsonify({'error': 'This access code has been revoked'}), 403
         
-        # ✅ FIX: Use UTC time for comparison
-        if datetime.utcnow() > access_code['expires_at']:
+        # Check expiration using simple datetime comparison
+        current_time = datetime.now()
+        if current_time > access_code['expires_at']:
             conn.close()
-            return jsonify({'error': 'Access code has expired'}), 403
+            return jsonify({'error': 'This access code has expired'}), 403
         
         if access_code['used_count'] >= access_code['max_uses']:
             conn.close()
-            return jsonify({'error': 'Access code usage limit reached'}), 403
+            return jsonify({'error': 'This access code has reached its usage limit'}), 403
         
-        # ✅ CREATE SESSION - Mark it as access_code session
+        # Create session - Mark it as access_code session
         email_address = access_code['email_address']
         session_token = secrets.token_urlsafe(32)
         expires_at = access_code['expires_at']
@@ -1354,7 +1373,7 @@ def redeem_access_code():
         c.execute('''
             INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity, is_active, is_access_code)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
-        ''', (session_token, email_address, datetime.utcnow(), expires_at, datetime.utcnow(), True, True))
+        ''', (session_token, email_address, current_time, expires_at, current_time, True, True))
         
         # Update access code usage count
         c.execute('''
@@ -1372,13 +1391,13 @@ def redeem_access_code():
             'success': True,
             'email': email_address,
             'session_token': session_token,
-            'access_start_time': datetime.utcnow().isoformat() + 'Z',  # ✅ Explicit UTC
-            'expires_at': expires_at.isoformat() + 'Z'  # ✅ Explicit UTC
+            'access_start_time': current_time.isoformat(),
+            'expires_at': expires_at.isoformat()
         })
         
     except Exception as e:
         logger.error(f"❌ Error redeeming access code: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Server error while processing access code'}), 500
 
 @app.route('/api/admin/access-codes', methods=['GET'])
 @admin_required
