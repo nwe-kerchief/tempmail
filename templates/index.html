@@ -982,6 +982,8 @@ function clearSession() {
     currentEmail = '';
     sessionToken = '';
     sessionStartTime = null;
+    isAccessMode = false;
+    accessStartTime = null;
 
     // Stop all intervals
     if (autoRefreshInterval) {
@@ -1007,11 +1009,17 @@ function clearSession() {
         window.emailFetchController = null;
     }
 
+    // Clear localStorage
+    localStorage.removeItem('tempMailSession');
+    
     // Reset UI
     document.getElementById('username-input').value = '';
     document.getElementById('domain-select').selectedIndex = 0;
     document.getElementById('email-display').classList.add('hidden');
     document.getElementById('end-session-btn').classList.add('hidden');
+    document.getElementById('access-mode-display').classList.add('hidden');
+    document.getElementById('mail-creation-section').classList.remove('hidden');
+    document.getElementById('mail-controls-section').classList.remove('hidden');
     document.getElementById('email-count').textContent = '0 emails';
     document.getElementById('email-list').innerHTML = '';
     document.getElementById('no-emails-default').style.display = 'flex';
@@ -1034,8 +1042,8 @@ function loadSession() {
             const now = Date.now();
             const sessionAge = now - session.createdAt;
             
-            // Session expires after 1 hour
-            const sessionValid = sessionAge < SESSION_TIMEOUT;
+            // Session expires after the specified time (not just 1 hour)
+            const sessionValid = sessionAge < (session.durationMinutes * 60 * 1000) || sessionAge < SESSION_TIMEOUT;
             
             if (sessionValid && session.email && session.sessionToken) {
                 // Check if this is an admin username and clear session if so
@@ -1052,8 +1060,10 @@ function loadSession() {
                 currentEmail = session.email;
                 sessionToken = session.sessionToken;
                 sessionStartTime = session.createdAt;
+                isAccessMode = session.isAccessMode || false;
+                accessStartTime = session.accessStartTime ? new Date(session.accessStartTime) : null;
                 
-                console.log('🔄 Session restored from localStorage:', currentEmail);
+                console.log('🔄 Session restored from localStorage:', currentEmail, 'Access Mode:', isAccessMode);
                 
                 // Wait for domains to load before restoring UI
                 if (domainsLoaded) {
@@ -1171,14 +1181,111 @@ function saveSession() {
         email: currentEmail,
         sessionToken: sessionToken,
         createdAt: sessionStartTime || Date.now(),
-        lastEmailTime: Date.now()
+        lastEmailTime: Date.now(),
+        isAccessMode: isAccessMode,
+        accessStartTime: accessStartTime ? accessStartTime.toISOString() : null,
+        durationMinutes: isAccessMode ? 1440 : 60 // Store duration for validation
     };
     
     localStorage.setItem('tempMailSession', JSON.stringify(session));
-    console.log('💾 Session saved:', currentEmail);
+    console.log('💾 Session saved:', currentEmail, 'Access Mode:', isAccessMode);
 }
 
-// Add this function - it was missing!
+function endCurrentSessionForNewEmail() {
+    return new Promise((resolve, reject) => {
+        console.log('🔄 Ending current session for new email creation...');
+        
+        // If no active session, just resolve immediately
+        if (!currentEmail || !sessionToken) {
+            console.log('📭 No active session to end');
+            resolve();
+            return;
+        }
+        
+        // Save current session data for backend call
+        const endEmail = currentEmail;
+        const endToken = sessionToken;
+
+        // Clear frontend state immediately
+        currentEmail = '';
+        sessionToken = '';
+        sessionStartTime = null;
+        isAccessMode = false;
+        accessStartTime = null;
+        
+        // Stop all refresh intervals
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+        if (timeUpdateInterval) {
+            clearInterval(timeUpdateInterval);
+            timeUpdateInterval = null;
+        }
+        
+        // Clear any session expiration timeout
+        if (window.sessionExpirationTimeout) {
+            clearTimeout(window.sessionExpirationTimeout);
+            window.sessionExpirationTimeout = null;
+        }
+        
+        // Clear any pending email fetch requests
+        if (window.emailFetchController) {
+            window.emailFetchController.abort();
+            window.emailFetchController = null;
+        }
+
+        // Reset UI immediately
+        document.getElementById('email-display').classList.add('hidden');
+        document.getElementById('end-session-btn').classList.add('hidden');
+        document.getElementById('access-mode-display').classList.add('hidden');
+        document.getElementById('email-count').textContent = '0 emails';
+        document.getElementById('email-list').innerHTML = '';
+        document.getElementById('no-emails-default').style.display = 'flex';
+        
+        // Reset email view
+        document.getElementById('desktop-email-placeholder').style.display = 'flex';
+        document.getElementById('desktop-email-content-inner').classList.add('hidden');
+        
+        console.log('✅ Frontend session cleared for new email');
+
+        // Notify backend to end session
+        if (endEmail && endToken) {
+            console.log('📡 Notifying backend to end previous session...');
+            fetch(API_URL + '/api/session/end', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    session_token: endToken,
+                    email_address: endEmail
+                })
+            })
+            .then(res => {
+                if (!res.ok) {
+                    console.log('⚠️ Backend session end failed, but continuing');
+                } else {
+                    console.log('✅ Backend session ended');
+                }
+                return res.json();
+            })
+            .then(data => {
+                console.log('✅ Backend confirmed session end');
+                resolve(); // Resolve the promise to continue
+            })
+            .catch(err => {
+                console.log('❌ Backend session end error (ignoring):', err);
+                resolve(); // Still resolve to continue creation
+            });
+        } else {
+            // No session to end, just resolve
+            console.log('📭 No backend session to end');
+            resolve();
+        }
+    });
+}
+
 function endSessionBackend() {
     return new Promise((resolve) => {
         if (!currentEmail || !sessionToken) {
@@ -1229,7 +1336,6 @@ function setupSessionExpiration() {
     }, SESSION_TIMEOUT);
 }
 
-// Enhanced email loading with better session handling
 function loadEmails() {
     if (!currentEmail || !sessionToken) {
         console.log("❌ No current email or session token to load");
@@ -1265,7 +1371,13 @@ function loadEmails() {
                 return { emails: [] };
             }
             if (res.status === 403) {
-                throw new Error("SESSION_EXPIRED");
+                // Check if it's an access code revocation
+                return res.json().then(errorData => {
+                    if (errorData.error && errorData.error.includes("Access code has been revoked")) {
+                        throw new Error("ACCESS_CODE_REVOKED");
+                    }
+                    throw new Error("SESSION_EXPIRED");
+                });
             }
             throw new Error(`Failed to fetch emails: ${res.status}`);
         }
@@ -1290,7 +1402,6 @@ function loadEmails() {
         
         list.innerHTML = '';
         
-        // 🔧 REPLACE THE ABOVE CODE WITH THIS:
         if (newCount === 0) {
             if (isAccessMode) {
                 list.innerHTML = `
@@ -1351,18 +1462,11 @@ function loadEmails() {
         if (err.message === "SESSION_EXPIRED") {
             console.log("🔄 Session expired, clearing frontend state");
             showNotification("Session expired", "error");
-            
-            // Special handling for access mode sessions
-            if (isAccessMode) {
-                console.log("🔄 Access mode session expired, keeping UI but stopping refresh");
-                if (autoRefreshInterval) {
-                    clearInterval(autoRefreshInterval);
-                    autoRefreshInterval = null;
-                }
-                showNotification("Access session expired - emails won't refresh", "error");
-            } else {
-                clearSession();
-            }
+            clearSession();
+        } else if (err.message === "ACCESS_CODE_REVOKED") {
+            console.log("🔐 Access code revoked, ending session");
+            showNotification("Access code has been revoked by admin", "error");
+            clearSession();
         } else {
             handleApiError(err, "Failed to load emails");
         }
@@ -1374,7 +1478,6 @@ function loadEmails() {
         window.emailFetchController = null;
     });
 }
-
 
 function extractEmailPreview(body) {
     if (!body) return 'No content';
@@ -1855,7 +1958,7 @@ function leaveAccessMode() {
     
     showModal(
         'Leave Access Mode',
-        'Leave access code mode and return to normal interface? Your email session will continue until expiration.',
+        'Leave access code mode and return to normal interface? Your email session will continue until expiration and you can still receive emails.',
         function() {
             // Clear ONLY the UI state, NOT the session
             isAccessMode = false;
@@ -1878,14 +1981,10 @@ function leaveAccessMode() {
             desktopContent.classList.add('glass-effect');
             desktopContent.classList.remove('bg-gradient-to-r', 'from-blue-600', 'to-teal-600');
             
-            // Keep the current email visible in the top display
-            // (It's already showing, don't hide it)
-            
-            showNotification('✅ Access mode UI closed - Email session still active', 'success');
+            showNotification('✅ Access mode UI closed - Email session still active until expiration', 'success');
         }
     );
 }
-
 
 
 function viewEmail(email, itemEl) {
@@ -2158,7 +2257,7 @@ function activateAccessMode(data) {
     isAccessMode = true;
     accessStartTime = new Date(data.access_start_time);
     
-    // Show access mode display
+    // Update UI
     const accessDisplay = document.getElementById('access-mode-display');
     const mailCreation = document.getElementById('mail-creation-section');
     const mailControls = document.getElementById('mail-controls-section');
@@ -2167,22 +2266,18 @@ function activateAccessMode(data) {
     if (mailCreation) mailCreation.classList.add('hidden');
     if (mailControls) mailControls.classList.add('hidden');
     
-    // Safely update access email display
-    const accessEmailDisplay = document.getElementById('access-email-display');
-    if (accessEmailDisplay) {
-        accessEmailDisplay.textContent = data.email;
-    }
-    
     // Set session data
     currentEmail = data.email;
     sessionToken = data.session_token;
     sessionStartTime = Date.now();
     
-    // Update main email display
+    // Update displays
+    const accessEmailDisplay = document.getElementById('access-email-display');
     const currentEmailElement = document.getElementById('current-email');
     const emailDisplay = document.getElementById('email-display');
     const endSessionBtn = document.getElementById('end-session-btn');
     
+    if (accessEmailDisplay) accessEmailDisplay.textContent = data.email;
     if (currentEmailElement) {
         currentEmailElement.innerHTML = `
             ${data.email} 
@@ -2194,8 +2289,8 @@ function activateAccessMode(data) {
     
     updateAccessExpiration(data.expires_at);
     clearSessionIntervals();
-    saveSession();
-    loadEmails();
+    saveSession(); // Save immediately
+    loadEmails(); // Load emails
     startAutoRefresh();
     startTimeUpdate();
     setupSessionExpiration();
@@ -2218,40 +2313,6 @@ function getTimeRemaining(expiresAt) {
     if (days > 0) return `${days}d ${hours % 24}h`;
     if (hours > 0) return `${hours}h ${minutes % 60}m`;
     return `${minutes}m`;
-}
-
-function leaveAccessMode() {
-    console.log('🚪 Leaving access mode...');
-    
-    showModal(
-        'Leave Access Mode',
-        'Are you sure you want to leave access code mode? You will return to normal email creation.',
-        function() {
-            // Clear access mode state
-            isAccessMode = false;
-            accessStartTime = null;
-            
-            // End the current session
-            endSession();
-            
-            // Show normal UI
-            document.getElementById('access-mode-display').classList.add('hidden');
-            document.getElementById('mail-creation-section').classList.remove('hidden');
-            document.getElementById('mail-controls-section').classList.remove('hidden');
-            
-            // ✨ RESTORE ORIGINAL INBOX BACKGROUND
-            const inboxMain = document.getElementById('inbox-main-container');
-            const desktopContent = document.getElementById('desktop-email-content');
-            
-            inboxMain.classList.add('glass-effect');
-            inboxMain.classList.remove('bg-gradient-to-r', 'from-blue-600', 'to-teal-600');
-            
-            desktopContent.classList.add('glass-effect');
-            desktopContent.classList.remove('bg-gradient-to-r', 'from-blue-600', 'to-teal-600');
-            
-            showNotification('✅ Access mode ended - Returned to normal mode', 'success');
-        }
-    );
 }
 
 
@@ -2642,7 +2703,6 @@ function initApp() {
 
 function setupEventListeners() {
 // Create button
-// Create button
 document.getElementById('create-btn').addEventListener('click', function() {
     const btn = this;
     const username = document.getElementById('username-input').value.trim();
@@ -2668,10 +2728,15 @@ document.getElementById('create-btn').addEventListener('click', function() {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
     btn.classList.add('opacity-50', 'cursor-not-allowed');
     
-    // Use setTimeout to ensure UI updates before API call
-    setTimeout(() => {
+    // ✅ END CURRENT SESSION before creating new one
+    endCurrentSessionForNewEmail().then(() => {
+        // After ending current session, create new email
         createEmail(username);
-    }, 10);
+    }).catch(err => {
+        console.error('Error ending session:', err);
+        // Still try to create new email even if ending fails
+        createEmail(username);
+    });
 });
 
 // Enter key in username field - works exactly like Create button
