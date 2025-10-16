@@ -235,6 +235,10 @@ background-color: #2563eb;
 background-color: #1d4ed8;
 }
 
+.bg-red-500 {
+    background-color: #ef4444 !important;
+}
+
 .session-item {
 transition: all 0.2s ease;
 cursor: pointer;
@@ -252,7 +256,7 @@ transform: translateY(-1px);
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
 }
 
-.mark-highlight {
+.mark {
     background-color: #fef3c7;
     color: #92400e;
     padding: 0 2px;
@@ -368,6 +372,9 @@ transform: translateY(-1px);
                                 class="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none w-48 text-sm pl-10">
                             <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
                         </div>
+                        <button onclick="clearSearch()" id="clear-search-btn" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded-lg transition-all text-sm hidden">
+                            <i class="fas fa-times mr-1"></i> Clear
+                        </button>
                         <button onclick="loadAddresses()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition-all transform hover:scale-105 text-sm">
                             <i class="fas fa-sync-alt mr-1"></i> Refresh
                         </button>
@@ -500,6 +507,22 @@ document.addEventListener('DOMContentLoaded', function() {
             searchEmails();
         }
     });
+        // Add search functionality
+    const searchInput = document.getElementById('email-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', searchEmails);
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchEmails();
+            }
+        });
+    }
+    if (document.getElementById('admin-dashboard')) {
+        setTimeout(() => {
+            loadAddresses();
+        }, 1000);
+    }
+
 });
 
 // Blacklist management functions
@@ -817,36 +840,55 @@ function prepareEmailForIframe(rawBody) {
 // Global variables for search
 let allAddresses = [];
 let blacklistedUsernames = [];
+let currentSearchTerm = '';
 
 // Search function
 function searchEmails() {
-    const searchTerm = document.getElementById('email-search').value.toLowerCase().trim();
-    const list = document.getElementById('address-list');
+    currentSearchTerm = document.getElementById('email-search').value.toLowerCase().trim();
+    const clearBtn = document.getElementById('clear-search-btn');
+    
+    // Show/hide clear button
+    if (currentSearchTerm) {
+        clearBtn.classList.remove('hidden');
+    } else {
+        clearBtn.classList.add('hidden');
+    }
     
     if (!allAddresses.length) {
-        list.innerHTML = '<p class="text-gray-400 text-center py-8">No addresses to search</p>';
+        document.getElementById('address-list').innerHTML = '<p class="text-gray-400 text-center py-8">No addresses to search</p>';
         return;
     }
     
     let filteredAddresses = allAddresses;
     
-    if (searchTerm) {
+    if (currentSearchTerm) {
         filteredAddresses = allAddresses.filter(addr => {
             const username = addr.address.split('@')[0].toLowerCase();
-            return username.includes(searchTerm);
+            return username.includes(currentSearchTerm);
         });
     }
     
     renderAddressList(filteredAddresses);
 }
 
-// Render address list with search highlighting
+// Clear search
+function clearSearch() {
+    document.getElementById('email-search').value = '';
+    currentSearchTerm = '';
+    document.getElementById('clear-search-btn').classList.add('hidden');
+    searchEmails();
+}
+
+// Render address list with search highlighting and blacklist detection
 function renderAddressList(addresses) {
     const list = document.getElementById('address-list');
-    const searchTerm = document.getElementById('email-search').value.toLowerCase().trim();
     
     if (addresses.length === 0) {
-        list.innerHTML = '<p class="text-gray-400 text-center py-8">No matching addresses found</p>';
+        if (currentSearchTerm) {
+            list.innerHTML = '<p class="text-gray-400 text-center py-8">No addresses found for "' + currentSearchTerm + '"</p>';
+        } else {
+            list.innerHTML = '<p class="text-gray-400 text-center py-8">No email addresses yet</p>';
+        }
         return;
     }
     
@@ -857,10 +899,10 @@ function renderAddressList(addresses) {
         const isBlacklisted = blacklistedUsernames.includes(username.toLowerCase());
         
         // Highlight search term in username
-        let displayUsername = username;
-        if (searchTerm) {
-            const regex = new RegExp(`(${searchTerm})`, 'gi');
-            displayUsername = username.replace(regex, '<mark class="bg-yellow-200 text-yellow-900">$1</mark>');
+        let displayUsername = escapeHtml(username);
+        if (currentSearchTerm) {
+            const regex = new RegExp(`(${escapeRegex(currentSearchTerm)})`, 'gi');
+            displayUsername = username.replace(regex, '<mark class="bg-yellow-200 text-yellow-900 px-1 rounded">$1</mark>');
         }
         
         const item = document.createElement('div');
@@ -873,29 +915,29 @@ function renderAddressList(addresses) {
         item.innerHTML = `
             <div class="flex justify-between items-center">
                 <div class="flex-1">
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 mb-1">
                         <p class="text-white font-semibold truncate text-xs md:text-sm">
-                            ${displayUsername}<span class="text-gray-400">@${DOMAIN}</span>
+                            <span class="username">${displayUsername}</span><span class="text-gray-400">@${DOMAIN}</span>
                         </p>
                         ${isBlacklisted ? 
-                            '<span class="bg-red-500 text-white px-2 py-1 rounded text-xs font-bold"><i class="fas fa-ban mr-1"></i>Blacklisted</span>' : 
+                            '<span class="bg-red-500 text-white px-2 py-1 rounded text-xs font-bold flex items-center"><i class="fas fa-ban mr-1"></i>Blacklisted</span>' : 
                             ''
                         }
                     </div>
-                    <p class="text-xs text-gray-400 mt-1">
+                    <p class="text-xs text-gray-400">
                         ${addr.count || 0} email${(addr.count || 0) !== 1 ? 's' : ''} • 
                         ${formatTime(addr.last_email)}
                     </p>
                 </div>
                 <div class="flex gap-1">
-                    <button onclick="viewEmails('${escapeHtml(addr.address)}')" class="text-blue-400 hover:text-blue-300 p-1 md:p-2 rounded transition-colors" title="View emails">
+                    <button onclick="event.stopPropagation(); viewEmails('${escapeHtml(addr.address)}')" class="text-blue-400 hover:text-blue-300 p-1 md:p-2 rounded transition-colors" title="View emails">
                         <i class="fas fa-eye text-xs md:text-sm"></i>
                     </button>
-                    <button onclick="deleteAddress('${escapeHtml(addr.address)}')" class="text-red-400 hover:text-red-300 p-1 md:p-2 rounded transition-colors" title="Delete all emails">
+                    <button onclick="event.stopPropagation(); deleteAddress('${escapeHtml(addr.address)}')" class="text-red-400 hover:text-red-300 p-1 md:p-2 rounded transition-colors" title="Delete all emails">
                         <i class="fas fa-trash text-xs md:text-sm"></i>
                     </button>
                     ${!isBlacklisted ? 
-                        `<button onclick="blacklistFromAddress('${escapeHtml(username)}')" class="text-orange-400 hover:text-orange-300 p-1 md:p-2 rounded transition-colors" title="Blacklist username">
+                        `<button onclick="event.stopPropagation(); blacklistFromAddress('${escapeHtml(username)}')" class="text-orange-400 hover:text-orange-300 p-1 md:p-2 rounded transition-colors" title="Blacklist username">
                             <i class="fas fa-ban text-xs md:text-sm"></i>
                         </button>` : 
                         ''
@@ -904,13 +946,20 @@ function renderAddressList(addresses) {
             </div>
         `;
         
+        // Add click handler to view emails
+        item.addEventListener('click', function(e) {
+            if (!e.target.closest('button')) {
+                viewEmails(addr.address);
+            }
+        });
+        
         list.appendChild(item);
     });
 }
 
 // Load blacklist for highlighting
 function loadBlacklistForHighlight() {
-    fetch(`${API_URL}/api/admin/blacklist`, {
+    return fetch(`${API_URL}/api/admin/blacklist`, {
         credentials: 'include'
     })
     .then(res => res.json())
@@ -918,13 +967,16 @@ function loadBlacklistForHighlight() {
         if (data && data.blacklist) {
             blacklistedUsernames = data.blacklist.map(item => {
                 if (typeof item === 'string') return item.toLowerCase();
-                if (typeof item === 'object') return (item.username || '').toLowerCase();
+                if (typeof item === 'object' && item.username) return item.username.toLowerCase();
                 return String(item).toLowerCase();
-            });
+            }).filter(username => username); // Remove empty strings
+            console.log('Loaded blacklisted usernames:', blacklistedUsernames);
         }
+        return data;
     })
     .catch(err => {
         console.error('Error loading blacklist for highlighting:', err);
+        return [];
     });
 }
 
@@ -944,8 +996,10 @@ function blacklistFromAddress(username) {
             .then(data => {
                 if (data.success) {
                     showNotification(`✅ Username ${username} added to blacklist`, 'success');
-                    loadBlacklistForHighlight();
-                    loadAddresses(); // Reload the list to update highlighting
+                    // Reload blacklist and refresh the display
+                    loadBlacklistForHighlight().then(() => {
+                        searchEmails(); // Re-apply current search/filter
+                    });
                 } else {
                     showNotification(`❌ ${data.error || 'Failed to blacklist username'}`, 'error');
                 }
@@ -977,22 +1031,22 @@ function loadAddresses() {
         }
         
         allAddresses = data.addresses || [];
+        console.log('Loaded addresses:', allAddresses.length);
         
-        if (!allAddresses.length) {
-            document.getElementById('address-list').innerHTML = '<p class="text-gray-400 text-center py-8">No email addresses yet</p>';
-            return;
-        }
-        
-        // Load blacklist for highlighting
-        loadBlacklistForHighlight();
-        
-        // Render the list (will apply search filter if any)
-        searchEmails();
+        // Load blacklist for highlighting, then render
+        loadBlacklistForHighlight().then(() => {
+            searchEmails(); // This will render the list with current search
+        });
     })
     .catch(err => {
         console.error('Error loading addresses:', err);
         document.getElementById('address-list').innerHTML = '<p class="text-red-400 text-center py-8">Failed to load addresses</p>';
     });
+}
+
+// Utility function to escape regex characters
+function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // Show email list
@@ -1008,62 +1062,6 @@ function deleteCurrentEmail() {
     deleteEmail(currentViewingEmail.id);
 }
 
-// Load addresses
-function loadAddresses() {
-    fetch(API_URL + '/api/admin/addresses', {
-        credentials: 'include'
-    })
-    .then(res => {
-        if (res.status === 401) {
-            location.reload();
-            return;
-        }
-        return res.json();
-    })
-    .then(data => {
-        if (!data || data.error) {
-            document.getElementById('address-list').innerHTML = '<p class="text-red-400 text-center py-8">Error loading addresses</p>';
-            return;
-        }
-        
-        var list = document.getElementById('address-list');
-        list.innerHTML = '';
-        
-        if (!data.addresses || data.addresses.length === 0) {
-            list.innerHTML = '<p class="text-gray-400 text-center py-8">No email addresses yet</p>';
-            return;
-        }
-        
-        data.addresses.forEach(addr => {
-            var item = document.createElement('div');
-            item.className = 'address-item bg-gray-800 p-3 md:p-4 rounded-lg border border-gray-700 hover:border-gray-600';
-            item.innerHTML = `
-                <div class="flex justify-between items-center">
-                    <div class="flex-1">
-                        <p class="text-white font-semibold truncate text-xs md:text-sm">${escapeHtml(addr.address)}</p>
-                        <p class="text-xs text-gray-400 mt-1">
-                            ${addr.count || 0} email${(addr.count || 0) !== 1 ? 's' : ''} • 
-                            ${formatTime(addr.last_email)}
-                        </p>
-                    </div>
-                    <div class="flex gap-1">
-                        <button onclick="viewEmails('${escapeHtml(addr.address)}')" class="text-blue-400 hover:text-blue-300 p-1 md:p-2 rounded transition-colors" title="View emails">
-                            <i class="fas fa-eye text-xs md:text-sm"></i>
-                        </button>
-                        <button onclick="deleteAddress('${escapeHtml(addr.address)}')" class="text-red-400 hover:text-red-300 p-1 md:p-2 rounded transition-colors" title="Delete all emails">
-                            <i class="fas fa-trash text-xs md:text-sm"></i>
-                        </button>
-                    </div>
-                </div>
-            `;
-            list.appendChild(item);
-        });
-    })
-    .catch(err => {
-        console.error('Error loading addresses:', err);
-        document.getElementById('address-list').innerHTML = '<p class="text-red-400 text-center py-8">Failed to load addresses</p>';
-    });
-}
 
 function viewEmails(address) {
     selectedAddress = address;
