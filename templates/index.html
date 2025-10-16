@@ -2058,56 +2058,23 @@ function closeAccessModal() {
     document.getElementById('access-modal').classList.add('hidden');
 }
 
-// Redeem Access Code from Modal
 function redeemAccessCodeFromModal() {
     const codeInput = document.getElementById('access-code-input-modal');
-    const code = codeInput.value.trim();
+    const code = codeInput.value.trim().toUpperCase();
     const resultDiv = document.getElementById('access-modal-result');
     const confirmBtn = document.getElementById('access-modal-confirm');
     
-    // If no code entered, just close modal and continue to normal UI
-if (!code) {
-    closeAccessModal();
-    return;
-}
-
+    if (!code) {
+        showAccessModalResult('❌ Please enter an access code', 'error');
+        return;
+    }
     
     // Show loading state
     const originalText = confirmBtn.innerHTML;
-    confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Accessing...';
+    confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Checking...';
     confirmBtn.disabled = true;
-
-        // 🧪 OFFLINE TEST MODE - Check test codes first
-    if (TEST_ACCESS_CODES[code]) {
-        console.log('🧪 Using offline test code:', code);
-        const testData = TEST_ACCESS_CODES[code];
-        
-        const mockData = {
-            success: true,
-            email: testData.email,
-            session_token: 'offline_test_' + Date.now(),
-            access_start_time: new Date().toISOString(),
-            expires_at: new Date(Date.now() + (testData.duration_hours * 60 * 60 * 1000)).toISOString()
-        };
-        
-        setTimeout(() => {
-            showAccessModalResult(`✅ Success! Access granted to: ${mockData.email}`, 'success');
-            activateAccessMode(mockData);
-            
-            setTimeout(() => {
-                closeAccessModal();
-            }, 2000);
-            
-            confirmBtn.innerHTML = originalText;
-            confirmBtn.disabled = false;
-        }, 500);
-        
-        return; // Stop here, don't make API call
-    }
     
-    // 🌐 ONLINE MODE - continues to fetch() below...
-
-    
+    // Online mode only - no test codes
     fetch(API_URL + '/api/access-code/redeem', {
         method: 'POST',
         headers: {
@@ -2115,15 +2082,19 @@ if (!code) {
         },
         body: JSON.stringify({ code: code })
     })
-    .then(res => res.json())
+    .then(res => {
+        if (!res.ok) {
+            return res.json().then(errorData => {
+                throw new Error(errorData.error || `HTTP ${res.status}`);
+            });
+        }
+        return res.json();
+    })
     .then(data => {
         if (data.success) {
             showAccessModalResult(`✅ Success! Access granted to: ${data.email}`, 'success');
-            
-            // Activate Access Mode
             activateAccessMode(data);
             
-            // Close modal after success
             setTimeout(() => {
                 closeAccessModal();
             }, 2000);
@@ -2136,12 +2107,10 @@ if (!code) {
     })
     .catch(err => {
         console.error('Error redeeming access code:', err);
-        showAccessModalResult('❌ Network error - please try again', 'error');
+        showAccessModalResult(`❌ ${err.message || 'Network error - please try again'}`, 'error');
         confirmBtn.innerHTML = originalText;
         confirmBtn.disabled = false;
     });
-
-    
 }
 
 // Show result in access modal
