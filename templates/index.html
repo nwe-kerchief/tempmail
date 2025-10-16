@@ -2074,9 +2074,15 @@ function closeAccessModal() {
 
 function redeemAccessCodeFromModal() {
     const codeInput = document.getElementById('access-code-input-modal');
-    const code = codeInput.value.trim().toUpperCase();
     const resultDiv = document.getElementById('access-modal-result');
     const confirmBtn = document.getElementById('access-modal-confirm');
+    
+    if (!codeInput || !resultDiv || !confirmBtn) {
+        console.error('Access modal elements not found');
+        return;
+    }
+    
+    const code = codeInput.value.trim().toUpperCase();
     
     if (!code) {
         showAccessModalResult('❌ Please enter an access code', 'error');
@@ -2088,7 +2094,7 @@ function redeemAccessCodeFromModal() {
     confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Checking...';
     confirmBtn.disabled = true;
     
-    // Online mode only - no test codes
+    // Online mode
     fetch(API_URL + '/api/access-code/redeem', {
         method: 'POST',
         headers: {
@@ -2127,6 +2133,17 @@ function redeemAccessCodeFromModal() {
     });
 }
 
+function showAccessModalResult(message, type) {
+    const resultDiv = document.getElementById('access-modal-result');
+    if (!resultDiv) return;
+    
+    const bgColor = type === 'success' ? 'bg-green-600' : 'bg-red-600';
+    
+    resultDiv.innerHTML = message;
+    resultDiv.className = `text-center mb-4 p-3 rounded-lg text-white font-medium ${bgColor}`;
+    resultDiv.classList.remove('hidden');
+}
+
 // Show result in access modal
 function showAccessModalResult(message, type) {
     const resultDiv = document.getElementById('access-modal-result');
@@ -2141,25 +2158,39 @@ function activateAccessMode(data) {
     isAccessMode = true;
     accessStartTime = new Date(data.access_start_time);
     
-    // Update UI to show access period
-    document.getElementById('access-mode-display').classList.remove('hidden');
-    document.getElementById('mail-creation-section').classList.add('hidden');
-    document.getElementById('mail-controls-section').classList.add('hidden');
+    // Show access mode display
+    const accessDisplay = document.getElementById('access-mode-display');
+    const mailCreation = document.getElementById('mail-creation-section');
+    const mailControls = document.getElementById('mail-controls-section');
     
-    document.getElementById('access-email-display').textContent = data.email;
-    document.getElementById('access-start-time').textContent = `Access started: ${formatTime(data.access_start_time)}`;
+    if (accessDisplay) accessDisplay.classList.remove('hidden');
+    if (mailCreation) mailCreation.classList.add('hidden');
+    if (mailControls) mailControls.classList.add('hidden');
     
-    // Rest of your existing code...
+    // Safely update access email display
+    const accessEmailDisplay = document.getElementById('access-email-display');
+    if (accessEmailDisplay) {
+        accessEmailDisplay.textContent = data.email;
+    }
+    
+    // Set session data
     currentEmail = data.email;
     sessionToken = data.session_token;
     sessionStartTime = Date.now();
     
-    document.getElementById('current-email').innerHTML = `
-        ${data.email} 
-        <span class="bg-blue-500 text-white px-2 py-1 rounded text-xs ml-2">ACCESS CODE</span>
-    `;
-    document.getElementById('email-display').classList.remove('hidden');
-    document.getElementById('end-session-btn').classList.remove('hidden');
+    // Update main email display
+    const currentEmailElement = document.getElementById('current-email');
+    const emailDisplay = document.getElementById('email-display');
+    const endSessionBtn = document.getElementById('end-session-btn');
+    
+    if (currentEmailElement) {
+        currentEmailElement.innerHTML = `
+            ${data.email} 
+            <span class="bg-blue-500 text-white px-2 py-1 rounded text-xs ml-2">ACCESS CODE</span>
+        `;
+    }
+    if (emailDisplay) emailDisplay.classList.remove('hidden');
+    if (endSessionBtn) endSessionBtn.classList.remove('hidden');
     
     updateAccessExpiration(data.expires_at);
     clearSessionIntervals();
@@ -2170,7 +2201,23 @@ function activateAccessMode(data) {
     setupSessionExpiration();
     
     showNotification('🔐 Access mode activated - Showing emails received after access started', 'success');
-    console.log("🔐 Access mode started at:", accessStartTime);
+}
+
+// Add this function to your main app JavaScript
+function getTimeRemaining(expiresAt) {
+    const now = new Date();
+    const expires = new Date(expiresAt);
+    const diff = expires - now;
+    
+    if (diff <= 0) return 'Expired';
+    
+    const minutes = Math.floor(diff / (1000 * 60));
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) return `${days}d ${hours % 24}h`;
+    if (hours > 0) return `${hours}h ${minutes % 60}m`;
+    return `${minutes}m`;
 }
 
 function leaveAccessMode() {
