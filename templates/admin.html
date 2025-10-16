@@ -540,39 +540,43 @@ button:hover {
                 </h2>
             </div>
             
-            <!-- Code Generation Form -->
-            <div class="bg-gray-800 rounded-lg p-4 mb-4">
-                <h3 class="text-white font-semibold mb-3">Generate New Access Code</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mb-3">
-                    <input type="text" id="generate-code-email" placeholder="Email address" 
-                        class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm">
-                    
-                    <input type="text" id="generate-code-custom" placeholder="Custom code (optional)" 
-                        class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm uppercase font-mono"
-                        maxlength="12">
-                    
-                    <select id="generate-code-duration" class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm">
-                        <option value="60">1 Hour</option>
-                        <option value="1440" selected>24 Hours</option>
-                        <option value="10080">7 Days</option>
-                        <option value="43200">30 Days</option>
-                        <option value="custom">Custom Minutes</option>
-                    </select>
-                    
-                    <input type="number" id="generate-code-custom-minutes" placeholder="Custom minutes" 
-                        class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm hidden"
-                        min="1" max="525600">
-                    
-                    <input type="number" id="generate-code-uses" placeholder="Max uses" 
-                        class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm"
-                        min="1" max="1000" value="1">
-                </div>
-                <button onclick="generateAccessCode()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105 text-sm w-full">
-                    <i class="fas fa-plus mr-1"></i> Generate Access Code
-                </button>
+            <!-- Updated Access Code Generation Form -->
+        <div class="bg-gray-800 rounded-lg p-4 mb-4">
+            <h3 class="text-white font-semibold mb-3">Generate New Access Code</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 mb-3">
+                <input type="text" id="generate-code-email" placeholder="Username" 
+                    class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm">
+                
+                <select id="generate-code-domain" class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm">
+                    <option value="aungmyomyatzaw.online">@aungmyomyatzaw.online</option>
+                    <!-- Add more domains if needed -->
+                </select>
+                
+                <input type="text" id="generate-code-custom" placeholder="Custom code (optional)" 
+                    class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm uppercase font-mono"
+                    maxlength="12">
+                
+                <select id="generate-code-duration" class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm">
+                    <option value="60">1 Hour</option>
+                    <option value="1440" selected>24 Hours</option>
+                    <option value="10080">7 Days</option>
+                    <option value="43200">30 Days</option>
+                    <option value="custom">Custom Minutes</option>
+                </select>
+                
+                <input type="number" id="generate-code-custom-minutes" placeholder="Custom minutes" 
+                    class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm hidden"
+                    min="1" max="525600">
+                
+                <input type="number" id="generate-code-uses" placeholder="Max uses" 
+                    class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm"
+                    min="1" max="1000" value="1">
             </div>
-            
-            <div id="access-codes-list" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+            <button onclick="generateAccessCode()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105 text-sm w-full">
+                <i class="fas fa-plus mr-1"></i> Generate Access Code
+            </button>
+        </div>
+        <div id="access-codes-list" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
                 <p class="text-gray-400 text-center py-8">Loading access codes...</p>
             </div>
         </div>
@@ -660,15 +664,20 @@ function loadBlacklist() {
         
         sortedBlacklist.forEach(item => {
             let username;
+            let addedAt;
+            
             if (typeof item === 'string') {
                 username = item;
+                addedAt = null;
             } else if (typeof item === 'object' && item !== null) {
                 username = item.username || item.name || item.value || String(item);
+                addedAt = item.added_at;
             } else {
                 username = String(item);
+                addedAt = null;
             }
             
-            const addedTime = item.added_at ? formatTime(item.added_at) : 'unknown';
+            const addedTime = addedAt ? formatTimeDetailed(addedAt) : 'unknown';
             
             const itemDiv = document.createElement('div');
             itemDiv.className = 'bg-gray-800 p-3 rounded-lg border border-red-500 flex justify-between items-center blacklisted-item';
@@ -698,6 +707,104 @@ function loadBlacklist() {
             '<p class="text-red-400 text-center py-8">Failed to load blacklist</p>';
     });
 }
+
+// Delete all emails for address - ENDS sessions
+function deleteAddress(address) {
+    showModal(
+        'Delete All Emails',
+        `Are you sure you want to delete ALL emails for <strong>${escapeHtml(address)}</strong>?<br><br>This action cannot be undone and will permanently remove all emails for this address. All active sessions for this address will be ended.`,
+        function() {
+            fetch(API_URL + '/api/admin/delete-address/' + encodeURIComponent(address), {
+                method: 'DELETE',
+                credentials: 'include'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    // Also end any active sessions for this address
+                    endSessionsForAddress(address);
+                    
+                    loadAddresses();
+                    loadStats();
+                    document.getElementById('email-details').innerHTML = '<p class="text-gray-400 text-center py-8">Select an email address to view emails</p>';
+                    document.getElementById('selected-address').textContent = 'None selected';
+                    document.getElementById('email-count-badge').classList.add('hidden');
+                    showNotification('✅ All emails deleted and sessions ended for ' + address, 'success');
+                } else {
+                    showNotification('❌ Failed to delete emails', 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error deleting address:', err);
+                showNotification('❌ Error deleting emails', 'error');
+            });
+        }
+    );
+}
+
+// Function to end sessions for a specific address
+function endSessionsForAddress(emailAddress) {
+    fetch(API_URL + '/api/admin/end-sessions/' + encodeURIComponent(emailAddress), {
+        method: 'POST',
+        credentials: 'include'
+    })
+    .then(res => {
+        if (res.ok) {
+            console.log(`✅ Sessions ended for ${emailAddress}`);
+        }
+    })
+    .catch(err => {
+        console.error('Error ending sessions:', err);
+    });
+}
+
+// Add detailed time formatting function
+function formatTimeDetailed(timestamp) {
+    if (!timestamp) return 'unknown';
+    
+    try {
+        let date;
+        if (typeof timestamp === 'string') {
+            const cleanTimestamp = timestamp.replace(/[\+\-]\d{2}:?\d{2}$/, '');
+            date = new Date(cleanTimestamp + 'Z');
+            
+            if (isNaN(date.getTime())) {
+                date = new Date(timestamp);
+            }
+        } else {
+            date = new Date(timestamp);
+        }
+        
+        if (isNaN(date.getTime())) {
+            return 'unknown';
+        }
+        
+        const now = new Date();
+        const diff = now - date;
+        const minutes = Math.floor(diff / (1000 * 60));
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+        
+        if (minutes < 1) return 'just now';
+        if (minutes < 60) return `${minutes} min ago`;
+        if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+        if (days < 7) return `${days} day${days > 1 ? 's' : ''} ago`;
+        
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+    } catch (e) {
+        console.error('Error formatting detailed time:', e);
+        return 'unknown';
+    }
+}
+
+
 function addToBlacklist() {
     var usernameInput = document.getElementById('new-blacklist-username');
     var username = usernameInput.value.trim().toLowerCase();
@@ -864,33 +971,63 @@ function loadAccessCodes() {
 }
 
 function generateAccessCode() {
-    const email = document.getElementById('generate-code-email').value.trim();
-    const duration = parseInt(document.getElementById('generate-code-duration').value) || 24;
+    const username = document.getElementById('generate-code-email').value.trim();
+    const domain = document.getElementById('generate-code-domain').value;
+    const customCode = document.getElementById('generate-code-custom').value.trim();
+    const durationSelect = document.getElementById('generate-code-duration');
+    const customMinutes = document.getElementById('generate-code-custom-minutes').value;
     const maxUses = parseInt(document.getElementById('generate-code-uses').value) || 1;
     
-    if (!email) {
-        showNotification('❌ Please enter an email address', 'error');
+    if (!username) {
+        showNotification('❌ Please enter a username', 'error');
         return;
+    }
+    
+    // Validate username format
+    if (!/^[a-zA-Z0-9-_]+$/.test(username)) {
+        showNotification('❌ Username can only contain letters, numbers, hyphens, and underscores', 'error');
+        return;
+    }
+    
+    const email = `${username}@${domain}`;
+    
+    let durationMinutes;
+    if (durationSelect.value === 'custom') {
+        durationMinutes = parseInt(customMinutes);
+        if (!durationMinutes || durationMinutes < 1) {
+            showNotification('❌ Please enter valid custom minutes', 'error');
+            return;
+        }
+    } else {
+        durationMinutes = parseInt(durationSelect.value);
+    }
+    
+    const requestData = {
+        email_address: email,
+        max_uses: maxUses,
+        duration_minutes: durationMinutes
+    };
+    
+    if (customCode) {
+        requestData.custom_code = customCode;
     }
     
     fetch(`${API_URL}/api/admin/access-codes/generate`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         credentials: 'include',
-        body: JSON.stringify({
-            email_address: email,
-            duration_hours: duration,
-            max_uses: maxUses
-        })
+        body: JSON.stringify(requestData)
     })
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            showNotification(`✅ Access code generated: ${data.code}`, 'success');
-            // Clear inputs
+            showNotification(`✅ Access code generated: ${data.code} for ${data.email_address}`, 'success');
+            // Clear form
             document.getElementById('generate-code-email').value = '';
-            document.getElementById('generate-code-duration').value = '';
-            document.getElementById('generate-code-uses').value = '';
+            document.getElementById('generate-code-custom').value = '';
+            document.getElementById('generate-code-uses').value = '1';
+            durationSelect.value = '1440';
+            document.getElementById('generate-code-custom-minutes').classList.add('hidden');
             // Reload list
             loadAccessCodes();
         } else {
