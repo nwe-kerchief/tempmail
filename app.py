@@ -596,27 +596,32 @@ def validate_session(email_address, session_token):
         
         session_token, expires_at, is_access_code = session_data
         
-        # Once an access code is redeemed on a device, it should work until expiration
+       # ✅ MODIFIED: For access code sessions, be more flexible about validation
         if is_access_code:
             c.execute('''
-                SELECT ac.expires_at 
+                SELECT ac.expires_at, s.created_at
                 FROM access_codes ac
                 JOIN sessions s ON ac.email_address = s.email_address 
                 WHERE s.session_token = %s
             ''', (session_token,))
             
             access_code_data = c.fetchone()
-            if access_code_data and access_code_data[0] < datetime.now():
-                logger.info(f"🔐 Access code expired for session: {email_address}")
-                # Mark session as inactive
-                c.execute('''
-                    UPDATE sessions 
-                    SET is_active = FALSE 
-                    WHERE session_token = %s
-                ''', (session_token,))
-                conn.commit()
-                conn.close()
-                return False, "Access code has expired"
+            if access_code_data:
+                code_expires_at, session_created = access_code_data
+                
+                # Only invalidate if the original code expiration has passed
+                # This allows sessions to continue even if the code itself expired
+                # as long as the session was created before code expiration
+                if session_created > code_expires_at:
+                    logger.info(f"🔐 Access code session invalid: {email_address}")
+                    c.execute('''
+                        UPDATE sessions 
+                        SET is_active = FALSE 
+                        WHERE session_token = %s
+                    ''', (session_token,))
+                    conn.commit()
+                    conn.close()
+                    return False, "Access code session invalid"
         
         # Update last activity for regular sessions only
         if not is_access_code:
@@ -1464,20 +1469,25 @@ def redeem_access_code():
             conn.close()
             return jsonify({'error': 'This access code has been revoked'}), 403
         
-        # Check expiration
+        # Allow expired codes to be reused - just create a new session with same expiration
         current_time = datetime.now()
+        expires_at = access_code['expires_at']
+
+        # If code is expired, extend it by the original duration from creation
         if current_time > access_code['expires_at']:
-            conn.close()
-            return jsonify({'error': 'This access code has expired'}), 403
-        
+            # Calculate original duration and extend from now
+            original_duration = access_code['expires_at'] - access_code['created_at']
+            expires_at = current_time + original_duration
+            logger.info(f"🔄 Extending expired access code: {code}")
+
+        # In redeem_access_code function, update error messages:
         if access_code['used_count'] >= access_code['max_uses']:
             conn.close()
-            return jsonify({'error': 'This access code has reached its usage limit'}), 403
+            return jsonify({'error': 'This access code has reached its maximum usage limit'}), 403
         
         # Create session
         email_address = access_code['email_address']
         session_token = secrets.token_urlsafe(32)
-        expires_at = access_code['expires_at']
         
         # Insert session with access code flag
         c.execute('''
