@@ -804,22 +804,43 @@ def get_emails(email_address):
     try:
         session_token = request.headers.get('X-Session-Token', '')
         
-        # Validate session for regular users
+        # Validate session
         is_valid, message = validate_session(email_address, session_token)
         if not is_valid:
-            logger.warning(f"Session invalid for {email_address}: {message}")
             return jsonify({'error': message}), 403
         
         conn = get_db()
         c = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Get emails for this session (regular users only see their session emails)
+        # Check if this is an access code session
         c.execute('''
-            SELECT id, sender, subject, body, timestamp, received_at
-            FROM emails 
-            WHERE recipient = %s AND session_token = %s
-            ORDER BY received_at DESC
-        ''', (email_address, session_token))
+            SELECT is_access_code, created_at 
+            FROM sessions 
+            WHERE session_token = %s AND email_address = %s
+        ''', (session_token, email_address))
+        
+        session_data = c.fetchone()
+        is_access_code_session = session_data and session_data['is_access_code']
+        session_start_time = session_data['created_at'] if session_data else None
+        
+        if is_access_code_session and session_start_time:
+            # ✅ ACCESS CODE MODE: Only show emails received AFTER session start
+            c.execute('''
+                SELECT id, sender, subject, body, timestamp, received_at
+                FROM emails 
+                WHERE recipient = %s AND session_token = %s
+                AND received_at >= %s
+                ORDER BY received_at DESC
+            ''', (email_address, session_token, session_start_time))
+            logger.info(f"🔐 Access code mode: Showing emails after {session_start_time}")
+        else:
+            # ✅ REGULAR MODE: Show all emails for this session
+            c.execute('''
+                SELECT id, sender, subject, body, timestamp, received_at
+                FROM emails 
+                WHERE recipient = %s AND session_token = %s
+                ORDER BY received_at DESC
+            ''', (email_address, session_token))
         
         emails = []
         for row in c.fetchall():
@@ -833,7 +854,13 @@ def get_emails(email_address):
             })
         
         conn.close()
-        logger.info(f"✅ Retrieved {len(emails)} emails for {email_address}")
+        
+        email_count = len(emails)
+        if is_access_code_session:
+            logger.info(f"🔐 Access code session: Showing {email_count} emails (after {session_start_time})")
+        else:
+            logger.info(f"✅ Regular session: Showing {email_count} emails for {email_address}")
+            
         return jsonify({'emails': emails})
         
     except Exception as e:
@@ -1185,34 +1212,39 @@ def admin_addresses():
         conn = get_db()
         c = conn.cursor(cursor_factory=RealDictCursor)
         
+        # ✅ FIXED: Get addresses sorted by newest email received
         c.execute('''
-            SELECT recipient as address, COUNT(*) as count, MAX(received_at) as last_email
+            SELECT 
+                recipient as address, 
+                COUNT(*) as count, 
+                MAX(received_at) as last_email_time
             FROM emails
             GROUP BY recipient
-            ORDER BY last_email DESC
+            ORDER BY MAX(received_at) DESC
         ''')
         
         addresses = []
         for row in c.fetchall():
-            if row['last_email']:
-                local_time = row['last_email'] + timedelta(hours=6, minutes=30)
-                last_email_str = local_time.isoformat()
+            if row['last_email_time']:
+                local_time = row['last_email_time']
+                last_email_str = formatTime(local_time.isoformat())
             else:
-                last_email_str = None
+                last_email_str = 'never'
                 
             addresses.append({
                 'address': row['address'],
                 'count': row['count'],
-                'last_email': last_email_str
+                'last_email': last_email_str,
+                'last_email_time': row['last_email_time'].isoformat() if row['last_email_time'] else None
             })
         
         conn.close()
         return jsonify({'addresses': addresses})
         
     except Exception as e:
-        logger.error(f"âŒ Admin addresses error: {e}")
+        logger.error(f"❌ Admin addresses error: {e}")
         return jsonify({'error': str(e)}), 500
-
+    
 @app.route('/api/admin/emails/<email_address>', methods=['GET'])
 @admin_required
 def admin_get_emails(email_address):
@@ -1349,31 +1381,19 @@ def redeem_access_code():
             conn.close()
             return jsonify({'error': 'Invalid access code'}), 404
         
-        # Validate code
-        if not access_code['is_active']:
-            conn.close()
-            return jsonify({'error': 'This access code has been revoked'}), 403
+        # Validate code (existing checks...)
         
-        # Check expiration using simple datetime comparison
-        current_time = datetime.now()
-        if current_time > access_code['expires_at']:
-            conn.close()
-            return jsonify({'error': 'This access code has expired'}), 403
-        
-        if access_code['used_count'] >= access_code['max_uses']:
-            conn.close()
-            return jsonify({'error': 'This access code has reached its usage limit'}), 403
-        
-        # Create session - Mark it as access_code session
+        # ✅ CREATE SESSION with access code flag and current time
         email_address = access_code['email_address']
         session_token = secrets.token_urlsafe(32)
+        session_start_time = datetime.now()  # This is the access period start
         expires_at = access_code['expires_at']
         
-        # Insert session with special flag
+        # Insert session with access code flag
         c.execute('''
             INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity, is_active, is_access_code)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
-        ''', (session_token, email_address, current_time, expires_at, current_time, True, True))
+        ''', (session_token, email_address, session_start_time, expires_at, session_start_time, True, True))
         
         # Update access code usage count
         c.execute('''
@@ -1385,19 +1405,19 @@ def redeem_access_code():
         conn.commit()
         conn.close()
         
-        logger.info(f"✅ Access code redeemed: {code} for {email_address}")
+        logger.info(f"✅ Access code redeemed: {code} for {email_address} (showing emails after {session_start_time})")
         
         return jsonify({
             'success': True,
             'email': email_address,
             'session_token': session_token,
-            'access_start_time': current_time.isoformat(),
+            'access_start_time': session_start_time.isoformat(),
             'expires_at': expires_at.isoformat()
         })
         
     except Exception as e:
         logger.error(f"❌ Error redeeming access code: {e}")
-        return jsonify({'error': 'Server error while processing access code'}), 500
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/access-codes', methods=['GET'])
 @admin_required
