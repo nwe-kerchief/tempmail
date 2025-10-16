@@ -782,6 +782,8 @@ let emailSecurityKey = generateSecurityKey();
 let sessionStartTime = null;
 let domainsLoaded = false;
 let isAdminMode = false;
+let isAccessMode = false;
+let accessStartTime = null;
 
 // Initialize functions when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
@@ -1288,8 +1290,26 @@ function loadEmails() {
         
         list.innerHTML = '';
         
+        // 🔧 REPLACE THE ABOVE CODE WITH THIS:
         if (newCount === 0) {
-            list.innerHTML = `<div class="text-center py-8 text-gray-300 h-full flex flex-col justify-center"><i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i><p class="text-base font-medium">No emails yet</p><p class="text-sm mt-1 text-gray-400">Waiting for messages...</p></div>`;
+            if (isAccessMode) {
+                list.innerHTML = `
+                    <div class="text-center py-8 text-gray-300 h-full flex flex-col justify-center">
+                        <i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i>
+                        <p class="text-base font-medium">No new emails yet</p>
+                        <p class="text-sm mt-1 text-gray-400">Waiting for messages after ${formatTime(accessStartTime)}</p>
+                        <p class="text-xs mt-2 text-blue-400">Access code mode: Only showing emails received after access started</p>
+                    </div>
+                `;
+            } else {
+                list.innerHTML = `
+                    <div class="text-center py-8 text-gray-300 h-full flex flex-col justify-center">
+                        <i class="fas fa-envelope-open text-3xl mb-3 opacity-60"></i>
+                        <p class="text-base font-medium">No emails yet</p>
+                        <p class="text-sm mt-1 text-gray-400">Waiting for messages...</p>
+                    </div>
+                `;
+            }
         } else {
             // Render email list
             data.emails.forEach((email, index) => {
@@ -2011,12 +2031,6 @@ function startTimeUpdate() {
     }, 1000);
 }
 
-// Access Door Variables
-let isAccessMode = false;
-let accessStartTime = null;
-
-// Access codes will be validated by backend API
-
 
 // Initialize Access Door
 function setupAccessDoor() {
@@ -2127,30 +2141,19 @@ function activateAccessMode(data) {
     isAccessMode = true;
     accessStartTime = new Date(data.access_start_time);
     
-    // Set the session data
+    // Update UI to show access period
+    document.getElementById('access-mode-display').classList.remove('hidden');
+    document.getElementById('mail-creation-section').classList.add('hidden');
+    document.getElementById('mail-controls-section').classList.add('hidden');
+    
+    document.getElementById('access-email-display').textContent = data.email;
+    document.getElementById('access-start-time').textContent = `Access started: ${formatTime(data.access_start_time)}`;
+    
+    // Rest of your existing code...
     currentEmail = data.email;
     sessionToken = data.session_token;
     sessionStartTime = Date.now();
     
-    // HIDE mail creation sections
-    document.getElementById('mail-creation-section').classList.add('hidden');
-    document.getElementById('mail-controls-section').classList.add('hidden');
-    
-    // SHOW access mode display
-    document.getElementById('access-mode-display').classList.remove('hidden');
-    document.getElementById('access-email-display').textContent = data.email;
-    
-    // ✨ CHANGE INBOX BACKGROUND TO MATCH ACCESS MODE
-    const inboxMain = document.getElementById('inbox-main-container');
-    const desktopContent = document.getElementById('desktop-email-content');
-    
-    inboxMain.classList.remove('glass-effect');
-    inboxMain.classList.add('bg-gradient-to-r', 'from-blue-600', 'to-teal-600');
-    
-    desktopContent.classList.remove('glass-effect');
-    desktopContent.classList.add('bg-gradient-to-r', 'from-blue-600', 'to-teal-600');
-    
-    // Rest of the function...
     document.getElementById('current-email').innerHTML = `
         ${data.email} 
         <span class="bg-blue-500 text-white px-2 py-1 rounded text-xs ml-2">ACCESS CODE</span>
@@ -2166,8 +2169,10 @@ function activateAccessMode(data) {
     startTimeUpdate();
     setupSessionExpiration();
     
-    showNotification('🔐 Access mode activated - Temporary email access granted', 'success');
+    showNotification('🔐 Access mode activated - Showing emails received after access started', 'success');
+    console.log("🔐 Access mode started at:", accessStartTime);
 }
+
 function leaveAccessMode() {
     console.log('🚪 Leaving access mode...');
     
