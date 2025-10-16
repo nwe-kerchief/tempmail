@@ -541,14 +541,14 @@ def escapeHtml(text):
     return html.escape(text)
 
 def validate_session(email_address, session_token):
-    """Validate if session is valid with better error handling"""
+    """Validate if session is valid - FIXED for access code sessions"""
     try:
         conn = get_db()
         c = conn.cursor()
         
         # Check if session exists and is active
         c.execute('''
-            SELECT session_token, expires_at 
+            SELECT session_token, expires_at, is_access_code
             FROM sessions 
             WHERE email_address = %s AND session_token = %s 
             AND expires_at > NOW() AND is_active = TRUE
@@ -561,21 +561,25 @@ def validate_session(email_address, session_token):
             logger.warning(f"❌ Session validation failed for {email_address}")
             return False, "Invalid or expired session"
         
-        # Update last activity
-        try:
-            conn = get_db()
-            c = conn.cursor()
-            c.execute('''
-                UPDATE sessions 
-                SET last_activity = %s 
-                WHERE session_token = %s
-            ''', (datetime.now(), session_token))
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            logger.warning(f"Could not update session activity: {e}")
+        # ✅ FIX: Special handling for access code sessions
+        session_token, expires_at, is_access_code = session_data
         
-        logger.info(f"✅ Session validated for {email_address}")
+        # Update last activity for regular sessions only (not access code sessions)
+        if not is_access_code:
+            try:
+                conn = get_db()
+                c = conn.cursor()
+                c.execute('''
+                    UPDATE sessions 
+                    SET last_activity = %s 
+                    WHERE session_token = %s
+                ''', (datetime.now(), session_token))
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                logger.warning(f"Could not update session activity: {e}")
+        
+        logger.info(f"✅ Session validated for {email_address} (access_code: {is_access_code})")
         return True, "Valid session"
         
     except Exception as e:
@@ -1021,9 +1025,9 @@ def webhook_inbound():
             session_token = session_data[0]
             logger.info(f"  ✅ Found active session for {recipient}")
         else:
-            logger.info(f"  ℹ️ No active session found for {recipient}, but storing email anyway")
-
-                # Store email (with session_token if available, otherwise NULL)
+            logger.info(f"  ℹ️ No active session found for {recipient}, storing email without session")
+        
+        # ✅ FIXED: Store email with session_token (can be NULL)
         c.execute('''
             INSERT INTO emails (recipient, sender, subject, body, timestamp, received_at, session_token)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -1041,7 +1045,7 @@ def webhook_inbound():
         conn.commit()
         conn.close()
         
-        logger.info(f"✅ Email stored permanently: {sender} → {recipient}")
+        logger.info(f"✅ Email stored: {sender} → {recipient}")
         return '', 204
         
     except Exception as e:
@@ -1300,6 +1304,7 @@ def generate_access_code():
         logger.error(f"❌ Error generating access code: {e}")
         return jsonify({'error': str(e)}), 500
     
+# In your access code generation, ensure proper timezone handling
 @app.route('/api/access-code/redeem', methods=['POST'])
 def redeem_access_code():
     """Redeem an access code to get temporary access to specific email"""
@@ -1331,7 +1336,8 @@ def redeem_access_code():
             conn.close()
             return jsonify({'error': 'Access code has been revoked'}), 403
         
-        if datetime.now() > access_code['expires_at']:
+        # ✅ FIX: Use UTC time for comparison
+        if datetime.utcnow() > access_code['expires_at']:
             conn.close()
             return jsonify({'error': 'Access code has expired'}), 403
         
@@ -1339,7 +1345,7 @@ def redeem_access_code():
             conn.close()
             return jsonify({'error': 'Access code usage limit reached'}), 403
         
-        # ✅ CREATE SESSION - Mark it as access_code session to bypass blacklist
+        # ✅ CREATE SESSION - Mark it as access_code session
         email_address = access_code['email_address']
         session_token = secrets.token_urlsafe(32)
         expires_at = access_code['expires_at']
@@ -1348,7 +1354,7 @@ def redeem_access_code():
         c.execute('''
             INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity, is_active, is_access_code)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
-        ''', (session_token, email_address, datetime.now(), expires_at, datetime.now(), True, True))
+        ''', (session_token, email_address, datetime.utcnow(), expires_at, datetime.utcnow(), True, True))
         
         # Update access code usage count
         c.execute('''
@@ -1366,14 +1372,13 @@ def redeem_access_code():
             'success': True,
             'email': email_address,
             'session_token': session_token,
-            'access_start_time': datetime.now().isoformat(),
-            'expires_at': expires_at.isoformat()
+            'access_start_time': datetime.utcnow().isoformat() + 'Z',  # ✅ Explicit UTC
+            'expires_at': expires_at.isoformat() + 'Z'  # ✅ Explicit UTC
         })
         
     except Exception as e:
         logger.error(f"❌ Error redeeming access code: {e}")
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/api/admin/access-codes', methods=['GET'])
 @admin_required
