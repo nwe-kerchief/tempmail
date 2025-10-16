@@ -9,7 +9,7 @@
 <!-- Already fixed! No line-clamp plugin -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em'   font-size='90'>🛡️</text></svg>">
 <style>
 body {
 font-family: 'Inter', sans-serif;
@@ -273,6 +273,54 @@ transform: translateY(-1px);
 .address-item {
     transition: all 0.2s ease-in-out;
 }
+
+/* Enhanced dark mode for email content */
+.email-original {
+    background: #1f2937 !important;
+    color: #e5e7eb !important;
+    padding: 20px;
+    border-radius: 8px;
+    font-family: inherit;
+    line-height: 1.6;
+}
+
+.email-original h1, 
+.email-original h2, 
+.email-original h3 {
+    color: #f9fafb !important;
+    margin-bottom: 1rem;
+}
+
+.email-original p {
+    color: #e5e7eb !important;
+    margin-bottom: 1rem;
+}
+
+.email-original a {
+    color: #60a5fa !important;
+    text-decoration: underline;
+}
+
+.email-original code {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+    color: #e5e7eb;
+}
+
+/* Better button hover effects */
+button:hover {
+    transform: translateY(-1px);
+    transition: all 0.2s ease;
+}
+
+/* Improved modal styling */
+.modal-content {
+    background: linear-gradient(135deg, #1e293b 0%, #374151 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px);
+}
 </style>
 </head>
 <body class="text-gray-100 min-h-screen p-4">
@@ -463,6 +511,8 @@ transform: translateY(-1px);
             </div>
         </div>
 
+
+
         <!-- Blacklist Management Section -->
         <div class="glass-effect rounded-xl p-4 md:p-6 fade-in">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
@@ -481,8 +531,33 @@ transform: translateY(-1px);
                 <p class="text-gray-400 text-center py-8">Loading blacklist...</p>
             </div>
         </div>
+
+                <!-- Access Codes Management Section -->
+        <div class="glass-effect rounded-xl p-4 md:p-6 fade-in">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                <h2 class="text-lg md:text-xl font-bold text-white">
+                    <i class="fas fa-key mr-2"></i>Access Codes
+                </h2>
+                <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                    <input type="text" id="generate-code-email" placeholder="Email address" 
+                        class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none w-full sm:w-48 text-sm">
+                    <input type="number" id="generate-code-duration" placeholder="Hours (24)" 
+                        class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none w-full sm:w-32 text-sm">
+                    <input type="number" id="generate-code-uses" placeholder="Max uses (1)" 
+                        class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none w-full sm:w-32 text-sm">
+                    <button onclick="generateAccessCode()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105 whitespace-nowrap text-sm">
+                        <i class="fas fa-plus mr-1"></i> Generate Code
+                    </button>
+                </div>
+            </div>
+            
+            <div id="access-codes-list" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+                <p class="text-gray-400 text-center py-8">Loading access codes...</p>
+            </div>
+        </div>
     </div>
 </div>
+
 
 <script>
 var API_URL = window.location.origin;
@@ -491,7 +566,6 @@ var autoRefreshInterval = null;
 var DOMAIN = 'aungmyomyatzaw.online';
 var currentViewingEmail = null;
 
-// Initialize functions when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
     // Set up event listeners
     document.getElementById('admin-login-btn').addEventListener('click', adminLogin);
@@ -501,13 +575,8 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('logout-btn').addEventListener('click', adminLogout);
     document.getElementById('admin-back-btn').addEventListener('click', showAdminEmailList);
     document.getElementById('admin-delete-email-btn').addEventListener('click', deleteCurrentEmail);
-    document.getElementById('email-search').addEventListener('input', searchEmails);
-    document.getElementById('email-search').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            searchEmails();
-        }
-    });
-        // Add search functionality
+    
+    // Enhanced search functionality
     const searchInput = document.getElementById('email-search');
     if (searchInput) {
         searchInput.addEventListener('input', searchEmails);
@@ -517,72 +586,88 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-    if (document.getElementById('admin-dashboard')) {
-        setTimeout(() => {
+    
+    // Initialize with a small delay to ensure DOM is ready
+    setTimeout(() => {
+        if (document.getElementById('admin-dashboard')) {
             loadAddresses();
-        }, 1000);
-    }
-
+        }
+    }, 500);
 });
 
-// Blacklist management functions
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+
 function loadBlacklist() {
     fetch(`${API_URL}/api/admin/blacklist`, {
         credentials: 'include'
     })
-        .then(res => {
-            if (res.status === 401) {
-                location.reload();
-                return;
+    .then(res => {
+        if (res.status === 401) {
+            location.reload();
+            return;
+        }
+        return res.json();
+    })
+    .then(data => {
+        const blacklistEl = document.getElementById('blacklist-list');
+        
+        if (!data || data.error) {
+            blacklistEl.innerHTML = '<p class="text-red-400 text-center py-8">Error loading blacklist</p>';
+            return;
+        }
+        
+        if (!data.blacklist || data.blacklist.length === 0) {
+            blacklistEl.innerHTML = '<p class="text-gray-400 text-center py-8">No blacklisted usernames</p>';
+            return;
+        }
+        
+        blacklistEl.innerHTML = '';
+        
+        data.blacklist.forEach(item => {
+            let username;
+            if (typeof item === 'string') {
+                username = item;
+            } else if (typeof item === 'object' && item !== null) {
+                username = item.username || item.name || item.value || String(item);
+            } else {
+                username = String(item);
             }
-            return res.json();
-        })
-        .then(data => {
-            var blacklistEl = document.getElementById('blacklist-list');
             
-            if (!data || data.error) {
-                blacklistEl.innerHTML = '<p class="text-red-400 text-center py-8">Error loading blacklist</p>';
-                return;
-            }
-            
-            if (!data.blacklist || data.blacklist.length === 0) {
-                blacklistEl.innerHTML = '<p class="text-gray-400 text-center py-8">No blacklisted usernames</p>';
-                return;
-            }
-            
-            blacklistEl.innerHTML = '';
-            
-            data.blacklist.forEach(item => {
-                let username;
-                if (typeof item === 'string') {
-                    username = item;
-                } else if (typeof item === 'object' && item !== null) {
-                    username = item.username || item.name || item.value || String(item);
-                } else {
-                    username = String(item);
-                }
-                
-                var itemDiv = document.createElement('div');
-                itemDiv.className = 'bg-gray-800 p-3 rounded-lg border border-gray-700 flex justify-between items-center';
-                itemDiv.innerHTML = `
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'bg-gray-800 p-3 rounded-lg border border-gray-700 flex justify-between items-center blacklisted-item';
+            itemDiv.innerHTML = `
+                <div class="flex items-center">
+                    <i class="fas fa-ban text-red-400 mr-3"></i>
                     <div>
                         <span class="text-white font-semibold text-sm">${escapeHtml(username)}</span>
                         <span class="text-xs text-gray-400 ml-2">@${DOMAIN}</span>
+                        ${item.added_by ? `<span class="text-xs text-gray-500 ml-2">by ${escapeHtml(item.added_by)}</span>` : ''}
                     </div>
-                    <button onclick="removeFromBlacklist('${escapeHtml(username)}')" 
-                            class="text-green-400 hover:text-green-300 p-1 rounded transition-colors" 
-                            title="Remove from blacklist">
-                        <i class="fas fa-times"></i>
-                    </button>
-                `;
-                blacklistEl.appendChild(itemDiv);
-            });
-        })
-        .catch(err => {
-            console.error('Error loading blacklist:', err);
-            document.getElementById('blacklist-list').innerHTML = 
-                '<p class="text-red-400 text-center py-8">Failed to load blacklist</p>';
+                </div>
+                <button onclick="removeFromBlacklist('${escapeHtml(username)}')" 
+                        class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition-colors" 
+                        title="Remove from blacklist">
+                    <i class="fas fa-times mr-1"></i>Remove
+                </button>
+            `;
+            blacklistEl.appendChild(itemDiv);
         });
+    })
+    .catch(err => {
+        console.error('Error loading blacklist:', err);
+        document.getElementById('blacklist-list').innerHTML = 
+            '<p class="text-red-400 text-center py-8">Failed to load blacklist</p>';
+    });
 }
 
 function addToBlacklist() {
@@ -653,6 +738,200 @@ function removeFromBlacklist(username) {
     );
 }
 
+function loadAccessCodes() {
+    fetch(`${API_URL}/api/admin/access-codes`, {
+        credentials: 'include'
+    })
+    .then(res => res.json())
+    .then(data => {
+        const list = document.getElementById('access-codes-list');
+        
+        if (!data || data.error) {
+            list.innerHTML = '<p class="text-red-400 text-center py-8">Error loading access codes</p>';
+            return;
+        }
+        
+        if (!data.access_codes || data.access_codes.length === 0) {
+            list.innerHTML = '<p class="text-gray-400 text-center py-8">No access codes generated yet</p>';
+            return;
+        }
+        
+        list.innerHTML = '';
+        
+        data.access_codes.forEach(code => {
+            const isExpired = new Date(code.expires_at) < new Date();
+            const isUsedUp = code.remaining_uses <= 0;
+            const isRevoked = !code.is_active;
+            
+            const statusClass = isRevoked ? 'border-red-500 bg-red-900/20' : 
+                              isExpired ? 'border-orange-500 bg-orange-900/20' :
+                              isUsedUp ? 'border-yellow-500 bg-yellow-900/20' : 
+                              'border-green-500 bg-green-900/20';
+            
+            const item = document.createElement('div');
+            item.className = `p-4 rounded-lg border ${statusClass} transition-all hover:scale-[1.02]`;
+            
+            item.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-2">
+                            <code class="text-white font-mono font-bold text-lg bg-black/30 px-2 py-1 rounded">${code.code}</code>
+                            ${isExpired ? '<span class="bg-red-500 text-white px-2 py-1 rounded text-xs font-bold">Expired</span>' : ''}
+                            ${isRevoked ? '<span class="bg-red-500 text-white px-2 py-1 rounded text-xs font-bold">Revoked</span>' : ''}
+                            ${isUsedUp ? '<span class="bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold">Used Up</span>' : ''}
+                            ${!isExpired && !isRevoked && !isUsedUp ? '<span class="bg-green-500 text-white px-2 py-1 rounded text-xs font-bold">Active</span>' : ''}
+                        </div>
+                        <p class="text-white font-medium mb-2">${code.email_address}</p>
+                        <div class="grid grid-cols-2 gap-4 text-sm text-gray-300">
+                            <div>
+                                <i class="fas fa-clock mr-1"></i>
+                                Expires: ${formatTime(code.expires_at)}
+                            </div>
+                            <div>
+                                <i class="fas fa-chart-bar mr-1"></i>
+                                Uses: ${code.used_count}/${code.max_uses}
+                            </div>
+                            <div>
+                                <i class="fas fa-calendar mr-1"></i>
+                                Created: ${formatTime(code.created_at)}
+                            </div>
+                            <div>
+                                <i class="fas fa-bolt mr-1"></i>
+                                Status: ${isRevoked ? 'Revoked' : isExpired ? 'Expired' : isUsedUp ? 'Used Up' : 'Active'}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 ml-4">
+                        ${!isRevoked && !isExpired ? `
+                            <button onclick="revokeAccessCode('${code.code}')" 
+                                    class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm transition-colors flex items-center"
+                                    title="Revoke Code">
+                                <i class="fas fa-ban mr-1"></i>Revoke
+                            </button>
+                        ` : ''}
+                        <button onclick="copyToClipboard('${code.code}')" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm transition-colors flex items-center"
+                                title="Copy Code">
+                            <i class="fas fa-copy mr-1"></i>Copy
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            list.appendChild(item);
+        });
+    })
+    .catch(err => {
+        console.error('Error loading access codes:', err);
+        document.getElementById('access-codes-list').innerHTML = 
+            '<p class="text-red-400 text-center py-8">Failed to load access codes</p>';
+    });
+}
+
+function generateAccessCode() {
+    const email = document.getElementById('generate-code-email').value.trim();
+    const duration = parseInt(document.getElementById('generate-code-duration').value) || 24;
+    const maxUses = parseInt(document.getElementById('generate-code-uses').value) || 1;
+    
+    if (!email) {
+        showNotification('❌ Please enter an email address', 'error');
+        return;
+    }
+    
+    fetch(`${API_URL}/api/admin/access-codes/generate`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'include',
+        body: JSON.stringify({
+            email_address: email,
+            duration_hours: duration,
+            max_uses: maxUses
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(`✅ Access code generated: ${data.code}`, 'success');
+            // Clear inputs
+            document.getElementById('generate-code-email').value = '';
+            document.getElementById('generate-code-duration').value = '';
+            document.getElementById('generate-code-uses').value = '';
+            // Reload list
+            loadAccessCodes();
+        } else {
+            showNotification(`❌ ${data.error}`, 'error');
+        }
+    })
+    .catch(err => {
+        console.error('Error generating access code:', err);
+        showNotification('❌ Error generating access code', 'error');
+    });
+}
+
+function revokeAccessCode(code) {
+    showModal(
+        'Revoke Access Code',
+        `Are you sure you want to revoke access code <strong>${code}</strong>?<br><br>This will prevent anyone from using this code.`,
+        function() {
+            fetch(`${API_URL}/api/admin/access-codes/${code}/revoke`, {
+                method: 'POST',
+                credentials: 'include'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(`✅ Access code ${code} revoked`, 'success');
+                    loadAccessCodes();
+                } else {
+                    showNotification(`❌ ${data.error}`, 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error revoking access code:', err);
+                showNotification('❌ Error revoking access code', 'error');
+            });
+        }
+    );
+}
+
+// Enhanced error handling wrapper
+function handleAdminApiError(error, context = 'operation') {
+    console.error(`Admin ${context} error:`, error);
+    
+    if (error.message && error.message.includes('Failed to fetch')) {
+        showNotification('❌ Network error - check your connection', 'error');
+    } else if (error.message && (error.message.includes('401') || error.message.includes('403'))) {
+        showNotification('❌ Session expired - please login again', 'error');
+        setTimeout(() => location.reload(), 2000);
+    } else {
+        showNotification(`❌ ${error.message || `Failed to complete ${context}`}`, 'error');
+    }
+}
+
+// Enhanced fetch wrapper with error handling
+async function adminFetch(url, options = {}) {
+    try {
+        const response = await fetch(url, {
+            credentials: 'include',
+            ...options
+        });
+        
+        if (response.status === 401) {
+            throw new Error('Session expired');
+        }
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        return await response.json();
+    } catch (error) {
+        handleAdminApiError(error, 'fetch operation');
+        throw error;
+    }
+}
+
+
 // End user session from admin
 function endUserSession(sessionToken, email) {
     showModal(
@@ -680,7 +959,6 @@ function endUserSession(sessionToken, email) {
     );
 }
 
-// Update the startAutoRefresh to include blacklist
 function startAutoRefresh() {
     if (autoRefreshInterval) clearInterval(autoRefreshInterval);
     autoRefreshInterval = setInterval(() => {
@@ -688,8 +966,9 @@ function startAutoRefresh() {
         loadAddresses();
         loadActiveSessions();
         loadBlacklist();
+        loadAccessCodes();
         if (selectedAddress) viewEmails(selectedAddress);
-    }, 10000);
+    }, 15000); // Increased to 15 seconds to reduce server load
 }
 
 // Custom Modal Functions
@@ -756,6 +1035,7 @@ function adminLogin() {
             loadStats();
             loadAddresses();
             loadActiveSessions();
+            loadAccessCodes();
             loadBlacklist();
             startAutoRefresh();
             showNotification('✅ Successfully logged in', 'success');
@@ -809,8 +1089,7 @@ function formatPlainTextEmail(text) {
 
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(function() {
-        // Show success notification
-        showNotification('✅ Verification code copied: ' + text, 'success');
+        showNotification('✅ Copied: ' + text, 'success');
     }).catch(function() {
         // Fallback for older browsers
         const textArea = document.createElement('textarea');
@@ -819,9 +1098,10 @@ function copyToClipboard(text) {
         textArea.select();
         document.execCommand('copy');
         document.body.removeChild(textArea);
-        showNotification('✅ Verification code copied: ' + text, 'success');
+        showNotification('✅ Copied: ' + text, 'success');
     });
 }
+
 
 function prepareEmailForIframe(rawBody) {
     if (!rawBody || rawBody.trim() === '') {
@@ -831,9 +1111,10 @@ function prepareEmailForIframe(rawBody) {
         };
     }
 
+    // Return the raw body wrapped in a dark container
     return { 
         isHtml: false, 
-        content: `<div class="bg-gray-900/80 p-4 rounded-lg min-h-full">${rawBody}</div>`
+        content: `<div class="bg-gray-900/80 p-4 rounded-lg min-h-full email-original">${rawBody}</div>`
     };
 }
 
@@ -1157,23 +1438,25 @@ function viewFullAdminEmail(email) {
     const iframe = document.getElementById('admin-email-iframe');
     const fallback = document.getElementById('admin-email-fallback');
     
-    const emailContent = prepareEmailForIframe(email.body || 'No content');
-    
     // ✅ ALWAYS USE FALLBACK DIV - NEVER USE IFRAME
     iframe.classList.add('hidden');
     fallback.classList.remove('hidden');
-    fallback.innerHTML = emailContent.content;
     
-    // Add click handlers for buttons and verification codes
+    // Use the raw body content directly
+    fallback.innerHTML = email.body || '<p class="text-gray-400 text-center py-8">No content available</p>';
+    
+    // Add click handlers for verification codes and improve styling
     setTimeout(() => {
         // Make verification codes clickable to copy
-        const verificationCodes = fallback.querySelectorAll('.bg-yellow-200');
+        const verificationCodes = fallback.querySelectorAll('.bg-yellow-200, .bg-gradient-to-r, [class*="verification"], [class*="code"]');
         verificationCodes.forEach(codeElement => {
-            codeElement.style.cursor = 'pointer';
-            codeElement.addEventListener('click', function() {
-                const code = this.textContent.trim();
-                copyToClipboard(code);
-            });
+            const code = codeElement.textContent.trim();
+            if (code && code.length >= 4 && code.length <= 8 && /^\d+$/.test(code)) {
+                codeElement.style.cursor = 'pointer';
+                codeElement.addEventListener('click', function() {
+                    copyToClipboard(code);
+                });
+            }
         });
         
         // Make all links open in new tab
@@ -1181,9 +1464,17 @@ function viewFullAdminEmail(email) {
         links.forEach(link => {
             link.setAttribute('target', '_blank');
             link.setAttribute('rel', 'noopener noreferrer');
+            link.classList.add('text-blue-400', 'hover:underline');
         });
+        
+        // Improve overall styling for dark mode
+        const emailContent = fallback.querySelector('.email-original');
+        if (emailContent) {
+            emailContent.classList.add('text-gray-200', 'leading-relaxed');
+        }
     }, 100);
 }
+
 // Add this copy function to admin panel JavaScript
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(function() {
@@ -1350,30 +1641,50 @@ function formatTime(timestamp) {
     if (!timestamp) return 'never';
     
     try {
-        var date;
+        let date;
+        
+        // Handle different timestamp formats
         if (typeof timestamp === 'string') {
+            // Remove any timezone info and treat as UTC
+            const cleanTimestamp = timestamp.replace(/[\+\-]\d{2}:?\d{2}$/, '');
+            date = new Date(cleanTimestamp + 'Z');
+            
+            // If still invalid, try direct parsing
+            if (isNaN(date.getTime())) {
+                date = new Date(timestamp);
+            }
+        } else if (typeof timestamp === 'number') {
             date = new Date(timestamp);
-        } else if (timestamp instanceof Date) {
-            date = timestamp;
         } else {
-            date = new Date(timestamp);
+            return 'unknown';
         }
         
-        var now = new Date();
-        var diff = now - date;
-        var seconds = Math.floor(diff / 1000);
-        var minutes = Math.floor(seconds / 60);
-        var hours = Math.floor(minutes / 60);
-        var days = Math.floor(hours / 24);
+        // Final check for valid date
+        if (isNaN(date.getTime())) {
+            return 'unknown';
+        }
         
-        if (seconds < 10) return 'just now';
-        if (seconds < 60) return seconds + ' sec ago';
+        const now = new Date();
+        const diff = now - date;
+        const seconds = Math.floor(diff / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+        
+        if (seconds < 60) return 'just now';
         if (minutes < 60) return minutes + ' min ago';
-        if (hours < 24) return hours + ' hour ago';
-        if (days < 7) return days + ' day ago';
+        if (hours < 24) return hours + ' hour' + (hours > 1 ? 's' : '') + ' ago';
+        if (days < 7) return days + ' day' + (days > 1 ? 's' : '') + ' ago';
         
-        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+        return date.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
     } catch (e) {
+        console.error('Error formatting time:', e);
         return 'unknown';
     }
 }
