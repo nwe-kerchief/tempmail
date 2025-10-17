@@ -40,10 +40,11 @@ INITIAL_BLACKLIST = ['ammz', 'admin', 'owner', 'root', 'system', 'az', 'c']
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', secrets.token_urlsafe(32))
 app.config.update(
-    SESSION_COOKIE_SECURE=True,  # Set to True in production with HTTPS
+    SESSION_COOKIE_SECURE=False,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
-    PERMANENT_SESSION_LIFETIME=timedelta(hours=1)
+    PERMANENT_SESSION_LIFETIME=timedelta(minutes=30),  # Shorter session
+    SESSION_REFRESH_EACH_REQUEST=False  # Don't refresh on each request
 )
 CORS(app, origins=[os.getenv('FRONTEND_URL', '*')], supports_credentials=True)
 
@@ -476,13 +477,12 @@ def get_display_body(parsed_email):
         }
 
 def format_time(timestamp):
-    """Format timestamp for display"""
+    """Format PAST timestamp for display"""
     if not timestamp:
         return 'never'
     
     try:
         if isinstance(timestamp, str):
-            # Handle string timestamps
             date = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
         else:
             date = timestamp
@@ -498,17 +498,51 @@ def format_time(timestamp):
         if seconds < 60:
             return 'just now'
         if minutes < 60:
-            return f'{int(minutes)} min ago'
+            return f'{int(minutes)}m ago'
         if hours < 24:
-            return f'{int(hours)} hour{"s" if hours > 1 else ""} ago'
+            return f'{int(hours)}h ago'
         if days < 7:
-            return f'{int(days)} day{"s" if days > 1 else ""} ago'
+            return f'{int(days)}d ago'
         
         return date.strftime('%b %d, %H:%M')
         
     except Exception as e:
         logger.error(f"Time formatting error: {e}")
         return 'unknown'
+
+def format_future_time(timestamp):
+    """Format FUTURE timestamp for countdown display"""
+    if not timestamp:
+        return 'never'
+    
+    try:
+        if isinstance(timestamp, str):
+            date = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+        else:
+            date = timestamp
+            
+        now = datetime.now()
+        diff = date - now
+        
+        if diff.total_seconds() <= 0:
+            return 'Expired'
+        
+        seconds = diff.total_seconds()
+        minutes = seconds // 60
+        hours = minutes // 60
+        days = hours // 24
+        
+        if days > 0:
+            return f'{int(days)}d {int(hours % 24)}h'
+        if hours > 0:
+            return f'{int(hours)}h {int(minutes % 60)}m'
+        if minutes > 0:
+            return f'{int(minutes)}m'
+        return '<1m'
+        
+    except Exception as e:
+        logger.error(f"Future time formatting error: {e}")
+        return 'error'
 
 def format_email_content(text, verification_codes):
     """Format email content for HTML display - preserve original structure"""
@@ -588,7 +622,7 @@ def validate_session(email_address, session_token):
         
         # Check if session exists and is active
         c.execute('''
-            SELECT session_token, expires_at, is_access_code
+            SELECT session_token, expires_at, is_access_code, is_active
             FROM sessions 
             WHERE email_address = %s AND session_token = %s 
             AND expires_at > NOW() AND is_active = TRUE
@@ -600,24 +634,28 @@ def validate_session(email_address, session_token):
             logger.warning(f"❌ Session validation failed for {email_address}")
             return False, "Invalid or expired session"
         
-        session_token, expires_at, is_access_code = session_data
+        session_token, expires_at, is_access_code, is_active = session_data
         
-       # For access code sessions, check if the access code is still active
+        # For access code sessions, check if the access code is still active
         if is_access_code:
             c.execute('''
-                SELECT ac.is_active, ac.expires_at
+                SELECT ac.is_active, ac.expires_at, ac.used_count, ac.max_uses
                 FROM access_codes ac
-                JOIN sessions s ON ac.email_address = s.email_address 
-                WHERE s.session_token = %s
-            ''', (session_token,))
+                WHERE ac.email_address = %s AND ac.code IN (
+                    SELECT SUBSTRING(s.session_token FROM 1 FOR 8) 
+                    FROM sessions s 
+                    WHERE s.session_token = %s AND s.is_access_code = TRUE
+                )
+            ''', (email_address, session_token))
             
             access_code_data = c.fetchone()
             if access_code_data:
-                is_active, expires_at = access_code_data
+                is_active_code, code_expires_at, used_count, max_uses = access_code_data
                 
                 # Check if access code is revoked or expired
-                if not is_active or datetime.now() > expires_at:
-                    logger.info(f"🔐 Access code invalid for session: {email_address}")
+                current_time = datetime.now()
+                if not is_active_code:
+                    logger.info(f"🔐 Access code revoked for session: {email_address}")
                     c.execute('''
                         UPDATE sessions 
                         SET is_active = FALSE 
@@ -625,7 +663,29 @@ def validate_session(email_address, session_token):
                     ''', (session_token,))
                     conn.commit()
                     conn.close()
-                    return False, "Access code has been revoked or expired"
+                    return False, "ACCESS_CODE_REVOKED"
+                
+                if current_time > code_expires_at:
+                    logger.info(f"🔐 Access code expired for session: {email_address}")
+                    c.execute('''
+                        UPDATE sessions 
+                        SET is_active = FALSE 
+                        WHERE session_token = %s
+                    ''', (session_token,))
+                    conn.commit()
+                    conn.close()
+                    return False, "ACCESS_CODE_EXPIRED"
+                
+                if used_count >= max_uses:
+                    logger.info(f"🔐 Access code used up for session: {email_address}")
+                    c.execute('''
+                        UPDATE sessions 
+                        SET is_active = FALSE 
+                        WHERE session_token = %s
+                    ''', (session_token,))
+                    conn.commit()
+                    conn.close()
+                    return False, "ACCESS_CODE_USED_UP"
         
         # Update last activity for regular sessions only
         if not is_access_code:
@@ -1294,9 +1354,17 @@ def verify_admin():
 def admin_status():
     """Check if user is admin authenticated"""
     try:
-        authenticated = session.get('admin_authenticated', False)
-        logger.info(f"🔐 Admin status check: {authenticated}")
-        return jsonify({'authenticated': authenticated})
+        # Clear any existing admin session to force fresh login
+        if not session.get('admin_authenticated'):
+            logger.info("🔐 Admin status: Not authenticated - forcing login")
+            return jsonify({'authenticated': False})
+        
+        # For development: Always return false to force login
+        # Comment this out in production
+        logger.info("🔐 Admin status: Clearing session for fresh login")
+        session.pop('admin_authenticated', None)
+        return jsonify({'authenticated': False})
+        
     except Exception as e:
         logger.error(f"Admin status error: {e}")
         return jsonify({'authenticated': False})
@@ -1487,14 +1555,12 @@ def generate_access_code():
     except Exception as e:
         logger.error(f"❌ Error generating access code: {e}")
         return jsonify({'error': str(e)}), 500
-    
-@app.route('/api/access-code/redeem', methods=['POST'])
+@app.route('/api/access-codes/redeem', methods=['POST'])
 def redeem_access_code():
     """Redeem an access code to get temporary access to specific email"""
     try:
         data = request.get_json() or {}
         code = data.get('code', '').strip().upper()
-        device_id = data.get('device_id', '')
         
         if not code:
             return jsonify({'error': 'Access code is required'}), 400
@@ -1518,24 +1584,23 @@ def redeem_access_code():
         # Validate code
         if not access_code['is_active']:
             conn.close()
-            return jsonify({'error': 'This access code has been revoked'}), 403
+            return jsonify({'error': 'ACCESS_CODE_REVOKED'}), 403
         
-        # Check expiration - DO NOT AUTO-EXTEND
+        # Check expiration
         current_time = datetime.now()
         if current_time > access_code['expires_at']:
             conn.close()
-            return jsonify({'error': 'This access code has expired'}), 403
+            return jsonify({'error': 'ACCESS_CODE_EXPIRED'}), 403
 
-        expires_at = access_code['expires_at']
-
-        # In redeem_access_code function, update error messages:
+        # Check usage
         if access_code['used_count'] >= access_code['max_uses']:
             conn.close()
-            return jsonify({'error': 'This access code has reached its maximum usage limit'}), 403
+            return jsonify({'error': 'ACCESS_CODE_USED_UP'}), 403
         
         # Create session
         email_address = access_code['email_address']
         session_token = secrets.token_urlsafe(32)
+        expires_at = access_code['expires_at']
         
         # Insert session with access code flag
         c.execute('''
@@ -1553,7 +1618,7 @@ def redeem_access_code():
         conn.commit()
         conn.close()
         
-        logger.info(f"✅ Access code redeemed: {code} for {email_address} by device {device_id}")
+        logger.info(f"✅ Access code redeemed: {code} for {email_address}")
         
         return jsonify({
             'success': True,
@@ -1583,17 +1648,27 @@ def get_access_codes():
         ''')
                 
         codes = []
+        current_time = datetime.now()
         for row in c.fetchall():
+            expires_at = row['expires_at']
+            is_expired = current_time > expires_at
+            is_used_up = row['used_count'] >= row['max_uses']
+            is_revoked = not row['is_active']
+            
             codes.append({
                 'code': row['code'],
                 'email_address': row['email_address'],
+                'description': row['description'],
                 'created_at': row['created_at'].isoformat(),
-                'expires_at': row['expires_at'].isoformat(),
+                'expires_at': expires_at.isoformat(),
                 'used_count': row['used_count'],
                 'max_uses': row['max_uses'],
                 'is_active': row['is_active'],
-                'is_expired': row['expires_at'] < datetime.now(),
-                'remaining_uses': row['max_uses'] - row['used_count']
+                'is_expired': is_expired,
+                'is_used_up': is_used_up,
+                'is_revoked': is_revoked,
+                'remaining_uses': max(0, row['max_uses'] - row['used_count']),
+                'time_remaining': format_future_time(expires_at)  # Add this field
             })
         
         conn.close()
