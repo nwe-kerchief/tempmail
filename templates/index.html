@@ -1268,8 +1268,7 @@ function saveSession() {
         createdAt: sessionStartTime || Date.now(),
         lastEmailTime: Date.now(),
         isAccessMode: isAccessMode,
-        accessStartTime: accessStartTime ? accessStartTime.toISOString() : null,
-        durationMinutes: isAccessMode ? 1440 : 60 // Store duration for validation
+        accessStartTime: accessStartTime ? accessStartTime.toISOString() : null
     };
     
     localStorage.setItem('tempMailSession', JSON.stringify(session));
@@ -2322,7 +2321,6 @@ function showAccessModal() {
     document.getElementById('access-code-input-modal').focus();
 }
 
-// Close Access Modal
 function closeAccessModal() {
     document.getElementById('access-modal').classList.add('hidden');
 }
@@ -2417,46 +2415,40 @@ function showAccessModalResult(message, type) {
 function activateAccessMode(data) {
     isAccessMode = true;
     accessStartTime = new Date(data.access_start_time);
-    
-    // Update UI
-    const accessDisplay = document.getElementById('access-mode-display');
-    const mailCreation = document.getElementById('mail-creation-section');
-    const mailControls = document.getElementById('mail-controls-section');
-    
-    if (accessDisplay) accessDisplay.classList.remove('hidden');
-    if (mailCreation) mailCreation.classList.add('hidden');
-    if (mailControls) mailControls.classList.add('hidden');
-    
-    // Set session data
     currentEmail = data.email;
     sessionToken = data.session_token;
     sessionStartTime = Date.now();
     
-    // Update displays
-    const accessEmailDisplay = document.getElementById('access-email-display');
-    const currentEmailElement = document.getElementById('current-email');
-    const emailDisplay = document.getElementById('email-display');
-    const endSessionBtn = document.getElementById('end-session-btn');
+    console.log('🔐 Access mode activated:', currentEmail);
     
-    if (accessEmailDisplay) accessEmailDisplay.textContent = data.email;
-    if (currentEmailElement) {
-        currentEmailElement.innerHTML = `
-            ${data.email} 
-            <span class="bg-blue-500 text-white px-2 py-1 rounded text-xs ml-2">ACCESS CODE</span>
-        `;
-    }
-    if (emailDisplay) emailDisplay.classList.remove('hidden');
-    if (endSessionBtn) endSessionBtn.classList.remove('hidden');
+    // Update UI for access mode
+    document.getElementById('access-mode-display').classList.remove('hidden');
+    document.getElementById('mail-creation-section').classList.add('hidden');
+    document.getElementById('mail-controls-section').classList.add('hidden');
     
-    updateAccessExpiration(data.expires_at);
-    clearSessionIntervals();
-    saveSession(); // Save immediately
-    loadEmails(); // Load emails
+    document.getElementById('access-email-display').textContent = currentEmail;
+    document.getElementById('current-email').innerHTML = `
+        ${currentEmail} 
+        <span class="bg-blue-500 text-white px-2 py-1 rounded text-xs ml-2">ACCESS CODE</span>
+    `;
+    document.getElementById('email-display').classList.remove('hidden');
+    document.getElementById('end-session-btn').classList.remove('hidden');
+    
+    // Use the same time formatting as regular sessions
+    updateSessionTime();
+    
+    // ✅ CRITICAL: Save session properly
+    saveSession();
+    
+    loadEmails();
     startAutoRefresh();
     startTimeUpdate();
     setupSessionExpiration();
     
-    showNotification('🔐 Access mode activated - Showing emails received after access started', 'success');
+    // Show description if available
+    if (data.description) {
+        showNotification(`🔐 ${data.description}`, 'info');
+    }
 }
 
 // Add this function to your main app JavaScript
