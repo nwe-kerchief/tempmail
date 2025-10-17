@@ -616,7 +616,7 @@ max-height: 350px;
         
         <!-- Square Access Button Container -->
         <div class="flex flex-col sm:w-auto">
-            <button id="access-door-btn" onclick="openAccessModal()" class="flex items-center justify-center">
+            <button id="access-door-btn" class="flex items-center justify-center">
                 <i class="fas fa-key"></i>
                 <span>Access</span>
             </button>
@@ -884,9 +884,78 @@ function formatTime(timestamp) {
 }
 
 function openAccessModal() {
-    showAccessModal(); // Alias for consistency
+    console.log('🚪 Access button clicked - checking session state...');
+    
+    // ✅ FIRST: Check if we have an active access code session in localStorage
+    const savedAccessCodes = getAccessCodesFromLocalStorage();
+    const currentDeviceId = generateDeviceId();
+    const now = new Date();
+    
+    // Look for active access code sessions for this device
+    const activeAccessSession = savedAccessCodes.find(accessCode => {
+        return accessCode.device_id === currentDeviceId && 
+               new Date(accessCode.expires_at) > now;
+    });
+    
+    console.log('🔐 Active access session found:', activeAccessSession);
+    
+    // ✅ If active access session exists, RESTORE it immediately
+    if (activeAccessSession && !isAccessMode) {
+        console.log('🔐 Active access session found in localStorage, restoring...', activeAccessSession.email);
+        
+        // Verify session is still valid with backend
+        fetch(`${API_URL}/api/emails/${encodeURIComponent(activeAccessSession.email)}`, {
+            headers: {
+                'X-Session-Token': activeAccessSession.session_token,
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(res => {
+            if (res.ok) {
+                // Session is valid, restore it
+                console.log('✅ Backend session validation successful');
+                restoreAccessCodeSession(activeAccessSession);
+            } else {
+                // Session expired, remove from localStorage and show code modal
+                console.log('❌ Access session expired, removing from localStorage');
+                removeAccessCodeFromLocalStorage(activeAccessSession.email);
+                showAccessModal();
+            }
+        })
+        .catch(err => {
+            console.log('❌ Error verifying access session, showing code modal:', err);
+            showAccessModal();
+        });
+        
+        return;
+    }
+    
+    // ✅ If already IN access mode, just show the session (no modal)
+    if (isAccessMode && currentEmail) {
+        console.log('🔐 Already in access mode - showing session');
+        document.getElementById('access-mode-display').classList.remove('hidden');
+        document.getElementById('mail-creation-section').classList.add('hidden');
+        document.getElementById('mail-controls-section').classList.add('hidden');
+        return;
+    }
+    
+    // ✅ No active access session - show code input modal
+    console.log('📭 No active access session - showing code modal');
+    showAccessModal();
 }
 
+function showAccessModal() {
+    const modal = document.getElementById('access-modal');
+    const resultDiv = document.getElementById('access-modal-result');
+    
+    // Reset modal state
+    document.getElementById('access-code-input-modal').value = '';
+    resultDiv.classList.add('hidden');
+    resultDiv.innerHTML = '';
+    
+    modal.classList.remove('hidden');
+    document.getElementById('access-code-input-modal').focus();
+}
 
 
 // UI Functions
@@ -976,14 +1045,14 @@ function handleApiError(error, defaultMessage = "An error occurred") {
 
 
 function clearSession() {
-    console.log('🔄 Clearing session...');
+    console.log('🔄 Clearing ALL sessions for fresh start...');
     
-    // Clear frontend state
+    // Clear ALL frontend state
     currentEmail = '';
     sessionToken = '';
     sessionStartTime = null;
-    isAccessMode = false;
-    accessStartTime = null;
+    // Note: We keep isAccessMode=true when in access mode
+    // accessStartTime = null; // Keep this for access mode timer
 
     // Stop all intervals
     if (autoRefreshInterval) {
@@ -1009,17 +1078,14 @@ function clearSession() {
         window.emailFetchController = null;
     }
 
-    // Clear localStorage
+    // Clear localStorage (only normal sessions)
     localStorage.removeItem('tempMailSession');
     
-    // Reset UI
+    // Reset UI to fresh state
     document.getElementById('username-input').value = '';
     document.getElementById('domain-select').selectedIndex = 0;
     document.getElementById('email-display').classList.add('hidden');
     document.getElementById('end-session-btn').classList.add('hidden');
-    document.getElementById('access-mode-display').classList.add('hidden');
-    document.getElementById('mail-creation-section').classList.remove('hidden');
-    document.getElementById('mail-controls-section').classList.remove('hidden');
     document.getElementById('email-count').textContent = '0 emails';
     document.getElementById('email-list').innerHTML = '';
     document.getElementById('no-emails-default').style.display = 'flex';
@@ -1031,7 +1097,57 @@ function clearSession() {
     // Reset title
     document.title = 'TempMail - AMMZ';
     
-    console.log('✅ Session cleared completely');
+    console.log('✅ Normal session cleared - Fresh interface ready');
+}
+
+// Add this function to fix access code expiration time
+function getAccessCodeTimeRemaining(expiresAt) {
+    try {
+        let date;
+        
+        if (typeof expiresAt === 'string') {
+            // Use same parsing logic as emails
+            const cleanTimestamp = expiresAt.replace(/[\+\-]\d{2}:?\d{2}$/, '');
+            date = new Date(cleanTimestamp + 'Z');
+            
+            if (isNaN(date.getTime())) {
+                date = new Date(expiresAt);
+            }
+        } else {
+            date = new Date(expiresAt);
+        }
+        
+        if (isNaN(date.getTime())) {
+            return 'Expired';
+        }
+        
+        // Convert to Myanmar Time (UTC+6:30) - SAME AS EMAILS
+        const utcTime = date.getTime();
+        const myanmarOffset = 6.5 * 60 * 60 * 1000;
+        const myanmarExpireTime = new Date(utcTime + myanmarOffset);
+        
+        // Get current time in Myanmar timezone
+        const nowUtc = new Date().getTime();
+        const nowMyanmar = new Date(nowUtc + myanmarOffset);
+        
+        const diff = myanmarExpireTime - nowMyanmar;
+        
+        if (diff <= 0) return 'Expired';
+        
+        const minutes = Math.floor(diff / (1000 * 60));
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+        
+        // Format like email times but for future
+        if (days > 0) return `${days}d ${hours % 24}h ${minutes % 60}m`;
+        if (hours > 0) return `${hours}h ${minutes % 60}m`;
+        if (minutes > 0) return `${minutes}m`;
+        return '<1m';
+        
+    } catch (e) {
+        console.error('Error calculating access code time remaining:', e);
+        return 'Error';
+    }
 }
 
 function loadSession() {
@@ -1040,7 +1156,7 @@ function loadSession() {
     const currentDeviceId = generateDeviceId();
     const now = new Date();
     
-    // First, check for active access code sessions
+    // First priority: Restore access code sessions
     for (const accessCode of savedAccessCodes) {
         if (accessCode.device_id === currentDeviceId && new Date(accessCode.expires_at) > now) {
             console.log('🔐 Found active access code session:', accessCode.email);
@@ -1072,23 +1188,14 @@ function loadSession() {
         }
     }
     
-    // If no access code session, check normal session
-    if (savedSession) {
+    // Second priority: Restore normal sessions (only if no access mode)
+    if (savedSession && !isAccessMode) {
         try {
             const session = JSON.parse(savedSession);
             const sessionAge = Date.now() - session.createdAt;
             const sessionValid = sessionAge < SESSION_TIMEOUT;
             
             if (sessionValid && session.email && session.sessionToken) {
-                // Check if this is an admin username
-                const username = session.email.split('@')[0].toLowerCase();
-                const adminUsernames = ['ammz', 'admin', 'owner', 'root', 'system', 'az', 'c'];
-                
-                if (adminUsernames.includes(username)) {
-                    localStorage.removeItem('tempMailSession');
-                    return false;
-                }
-                
                 // Restore normal session
                 currentEmail = session.email;
                 sessionToken = session.sessionToken;
@@ -1113,13 +1220,16 @@ function loadSession() {
 }
 
 function restoreAccessCodeSession(accessCode) {
+    console.log('🔄 Restoring access code session from localStorage');
+    
     isAccessMode = true;
     accessStartTime = new Date(accessCode.access_start_time);
     currentEmail = accessCode.email;
     sessionToken = accessCode.session_token;
     sessionStartTime = Date.now();
     
-    console.log('🔐 Access code session restored:', currentEmail);
+    // ✅ FIX: Hide the access modal FIRST
+    closeAccessModal();
     
     // Update UI for access mode
     document.getElementById('access-mode-display').classList.remove('hidden');
@@ -1134,11 +1244,14 @@ function restoreAccessCodeSession(accessCode) {
     document.getElementById('email-display').classList.remove('hidden');
     document.getElementById('end-session-btn').classList.remove('hidden');
     
-    // Use the same time formatting as regular sessions
-    updateSessionTime();
+    // Start timer with stored expiration
+    startAccessCodeTimer(accessCode.expires_at);
+    
+    // Clear any normal session intervals
     clearSessionIntervals();
-    saveSession(); // Save immediately
-    loadEmails(); // Load emails
+    
+    // Load emails and start refresh
+    loadEmails();
     startAutoRefresh();
     startTimeUpdate();
     setupSessionExpiration();
@@ -1147,37 +1260,37 @@ function restoreAccessCodeSession(accessCode) {
     if (accessCode.description) {
         showNotification(`🔐 ${accessCode.description}`, 'info');
     }
+    
+    console.log('✅ Access code session restored successfully');
 }
 
-function updateSessionTime() {
-    if (!isAccessMode || !accessStartTime) return;
+function startAccessCodeTimer(expiresAt) {
+    console.log('⏰ Starting access code timer with expiration:', expiresAt);
+    
+    // Clear any existing timer
+    if (window.accessCodeTimer) {
+        clearInterval(window.accessCodeTimer);
+    }
     
     const updateTimer = () => {
-        const expireDate = new Date(accessStartTime);
-        expireDate.setMinutes(expireDate.getMinutes() + 1440); // 24 hours
+        const timeRemaining = getAccessCodeTimeRemaining(expiresAt);
+        document.getElementById('access-expire-time').textContent = timeRemaining;
         
-        const now = new Date();
-        const diff = expireDate - now;
+        console.log('⏰ Time remaining:', timeRemaining);
         
-        if (diff <= 0) {
+        if (timeRemaining === 'Expired') {
+            clearInterval(window.accessCodeTimer);
             document.getElementById('access-expire-time').textContent = 'Expired';
-            return;
-        }
-        
-        const hours = Math.floor(diff / (1000 * 60 * 60));
-        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        
-        // Use the same format as regular sessions
-        if (hours > 0) {
-            document.getElementById('access-expire-time').textContent = `${hours}h ${minutes}m`;
-        } else {
-            document.getElementById('access-expire-time').textContent = `${minutes}m`;
+            showNotification('🔐 Access code session has expired', 'error');
         }
     };
     
+    // Run immediately and every minute
     updateTimer();
-    setInterval(updateTimer, 60000); // Update every minute
+    window.accessCodeTimer = setInterval(updateTimer, 60000);
 }
+
+
 function restoreSessionUI() {
     if (!currentEmail || !sessionToken) {
         console.error('❌ Cannot restore UI: missing email or token');
@@ -1276,25 +1389,33 @@ function saveSession() {
 
 function endCurrentSessionForNewEmail() {
     return new Promise((resolve, reject) => {
-        console.log('🔄 Ending current session for new email creation...');
+        console.log('🔄 Ending current NORMAL session for new email creation...');
         
-        // If no active session, just resolve immediately
-        if (!currentEmail || !sessionToken) {
-            console.log('📭 No active session to end');
+        // ✅ FIX: Don't end access mode sessions
+        if (isAccessMode) {
+            console.log('🔐 Access mode active - skipping session end');
             resolve();
             return;
         }
         
-        // Save current session data for backend call
+        // If no active normal session, just resolve immediately
+        if (!currentEmail || !sessionToken) {
+            console.log('📭 No normal session to end');
+            resolve();
+            return;
+        }
+        
+        // Save current normal session data for backend call
         const endEmail = currentEmail;
         const endToken = sessionToken;
 
-        // Clear frontend state immediately
+        // Clear frontend state immediately (only normal sessions)
         currentEmail = '';
         sessionToken = '';
         sessionStartTime = null;
-        isAccessMode = false;
-        accessStartTime = null;
+        
+        // Clear localStorage (only for normal sessions)
+        localStorage.removeItem('tempMailSession');
         
         // Stop all refresh intervals
         if (autoRefreshInterval) {
@@ -1319,9 +1440,10 @@ function endCurrentSessionForNewEmail() {
         }
 
         // Reset UI immediately
+        document.getElementById('username-input').value = '';
+        document.getElementById('domain-select').selectedIndex = 0;
         document.getElementById('email-display').classList.add('hidden');
         document.getElementById('end-session-btn').classList.add('hidden');
-        document.getElementById('access-mode-display').classList.add('hidden');
         document.getElementById('email-count').textContent = '0 emails';
         document.getElementById('email-list').innerHTML = '';
         document.getElementById('no-emails-default').style.display = 'flex';
@@ -1330,11 +1452,11 @@ function endCurrentSessionForNewEmail() {
         document.getElementById('desktop-email-placeholder').style.display = 'flex';
         document.getElementById('desktop-email-content-inner').classList.add('hidden');
         
-        console.log('✅ Frontend session cleared for new email');
+        console.log('✅ Frontend normal session cleared for new email');
 
-        // Notify backend to end session
+        // Notify backend to end session (only for normal sessions)
         if (endEmail && endToken) {
-            console.log('📡 Notifying backend to end previous session...');
+            console.log('📡 Notifying backend to end previous NORMAL session...');
             fetch(API_URL + '/api/session/end', {
                 method: 'POST',
                 headers: {
@@ -1349,12 +1471,12 @@ function endCurrentSessionForNewEmail() {
                 if (!res.ok) {
                     console.log('⚠️ Backend session end failed, but continuing');
                 } else {
-                    console.log('✅ Backend session ended');
+                    console.log('✅ Backend normal session ended');
                 }
                 return res.json();
             })
             .then(data => {
-                console.log('✅ Backend confirmed session end');
+                console.log('✅ Backend confirmed normal session end');
                 resolve(); // Resolve the promise to continue
             })
             .catch(err => {
@@ -1363,11 +1485,12 @@ function endCurrentSessionForNewEmail() {
             });
         } else {
             // No session to end, just resolve
-            console.log('📭 No backend session to end');
+            console.log('📭 No backend normal session to end');
             resolve();
         }
     });
 }
+
 
 function endSessionBackend() {
     return new Promise((resolve) => {
@@ -1661,6 +1784,21 @@ function createEmail(customName) {
     const btn = document.getElementById('create-btn');
     const originalText = btn.innerHTML;
     
+    // ✅ FIX: End current normal session before creating new one
+    if (currentEmail && sessionToken && !isAccessMode) {
+        console.log('🔄 Ending current normal session for new email...');
+        endCurrentSessionForNewEmail().then(() => {
+            // Continue with email creation after session is ended
+            continueEmailCreation(customName, btn);
+        });
+        return;
+    }
+    
+    // If no session to end, continue directly
+    continueEmailCreation(customName, btn);
+}
+
+function continueEmailCreation(customName, btn) {
     // Immediate UI feedback
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
@@ -1715,7 +1853,7 @@ function createEmail(customName) {
         admin_mode: isAdminMode
     };
     
-    if (sessionToken) {
+    if (sessionToken && !isAccessMode) {
         requestData.current_session_token = sessionToken;
     }
     
@@ -2108,37 +2246,44 @@ function generateDeviceId() {
 }
 
 function leaveAccessMode() {
-    console.log('🚪 Leaving access mode UI...');
+    console.log('🚪 Leaving access mode - frontend state only');
     
     showModal(
         'Leave Access Mode',
-        'Leave access code mode and return to normal interface? Your email session will continue until expiration and you can still receive emails.',
+        'Leave access code mode and return to normal interface?<br><br><strong>Note:</strong> Your access session will remain active and you can return using the Access button.',
         function() {
-            // Clear ONLY the UI state, NOT the session
+            // ✅ Only clear FRONTEND state, keep backend session active
             isAccessMode = false;
+            accessStartTime = null;
             
-            // ✅ DON'T call endSession() - Keep the email active!
-            // The session will continue until it expires naturally
+            // Stop access mode timers (UI only)
+            if (window.accessCodeTimer) {
+                clearInterval(window.accessCodeTimer);
+                window.accessCodeTimer = null;
+            }
             
-            // Show normal UI
+            // Clear access mode UI - but DON'T end backend session
             document.getElementById('access-mode-display').classList.add('hidden');
             document.getElementById('mail-creation-section').classList.remove('hidden');
             document.getElementById('mail-controls-section').classList.remove('hidden');
             
-            // Restore original inbox background
-            const inboxMain = document.getElementById('inbox-main-container');
-            const desktopContent = document.getElementById('desktop-email-content');
+            // Clear the email display but keep session data
+            document.getElementById('email-display').classList.add('hidden');
+            document.getElementById('current-email').textContent = '';
             
-            inboxMain.classList.add('glass-effect');
-            inboxMain.classList.remove('bg-gradient-to-r', 'from-blue-600', 'to-teal-600');
+            // Reset inbox to empty state
+            document.getElementById('email-count').textContent = '0 emails';
+            document.getElementById('email-list').innerHTML = '';
+            document.getElementById('no-emails-default').style.display = 'flex';
             
-            desktopContent.classList.add('glass-effect');
-            desktopContent.classList.remove('bg-gradient-to-r', 'from-blue-600', 'to-teal-600');
+            showNotification('✅ Switched to normal mode - Use Access button to return', 'success');
             
-            showNotification('✅ Access mode UI closed - Email session still active until expiration', 'success');
+            // ✅ IMPORTANT: Don't clear session data from localStorage
+            // The access session remains active for quick return
         }
     );
 }
+
 
 
 function viewEmail(email, itemEl) {
@@ -2293,7 +2438,12 @@ function startTimeUpdate() {
 
 // Initialize Access Door
 function setupAccessDoor() {
-    document.getElementById('access-door-btn').addEventListener('click', showAccessModal);
+    // Remove any existing onclick handlers and use event listeners instead
+    const accessDoorBtn = document.getElementById('access-door-btn');
+    if (accessDoorBtn) {
+        accessDoorBtn.onclick = null; // Remove old onclick
+        accessDoorBtn.addEventListener('click', showAccessModal);
+    }
     
     // Access Modal Event Listeners
     document.getElementById('access-modal-confirm').addEventListener('click', redeemAccessCodeFromModal);
@@ -2312,22 +2462,25 @@ function setupAccessDoor() {
     });
 }
 
-// Show Access Modal
-function showAccessModal() {
+function closeAccessModal() {
     const modal = document.getElementById('access-modal');
     const resultDiv = document.getElementById('access-modal-result');
     
-    // Reset modal state
-    document.getElementById('access-code-input-modal').value = '';
-    resultDiv.classList.add('hidden');
-    resultDiv.innerHTML = '';
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+    if (resultDiv) {
+        resultDiv.classList.add('hidden');
+        resultDiv.innerHTML = '';
+    }
     
-    modal.classList.remove('hidden');
-    document.getElementById('access-code-input-modal').focus();
-}
-
-function closeAccessModal() {
-    document.getElementById('access-modal').classList.add('hidden');
+    // Also clear the input field
+    const codeInput = document.getElementById('access-code-input-modal');
+    if (codeInput) {
+        codeInput.value = '';
+    }
+    
+    console.log('✅ Access modal closed');
 }
 
 function redeemAccessCodeFromModal() {
@@ -2352,7 +2505,13 @@ function redeemAccessCodeFromModal() {
     confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Checking...';
     confirmBtn.disabled = true;
     
-    fetch(API_URL + '/api/access-code/redeem', {
+    // ✅ FIX: Clear any existing session before redeeming new code
+    if (currentEmail && sessionToken) {
+        console.log('🔄 Clearing existing session before redeeming new access code');
+        clearSession();
+    }
+    
+    fetch(API_URL + '/api/access-codes/redeem', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -2394,32 +2553,25 @@ function redeemAccessCodeFromModal() {
     })
     .catch(err => {
         console.error('Error redeeming access code:', err);
-        showAccessModalResult(`❌ ${err.message || 'Network error - please try again'}`, 'error');
+        
+        // ✅ FIX: Better error messages for different scenarios
+        let errorMessage = err.message || 'Network error - please try again';
+        if (err.message.includes('ACCESS_CODE_REVOKED')) {
+            errorMessage = 'This access code has been revoked by admin';
+        } else if (err.message.includes('ACCESS_CODE_EXPIRED')) {
+            errorMessage = 'This access code has expired';
+        } else if (err.message.includes('ACCESS_CODE_USED_UP')) {
+            errorMessage = 'This access code has been used up';
+        } else if (err.message.includes('currently in use')) {
+            errorMessage = 'This email address is currently in use by another session';
+        }
+        
+        showAccessModalResult(`❌ ${errorMessage}`, 'error');
         confirmBtn.innerHTML = originalText;
         confirmBtn.disabled = false;
     });
 }
 
-function showAccessModalResult(message, type) {
-    const resultDiv = document.getElementById('access-modal-result');
-    if (!resultDiv) return;
-    
-    const bgColor = type === 'success' ? 'bg-green-600' : 'bg-red-600';
-    
-    resultDiv.innerHTML = message;
-    resultDiv.className = `text-center mb-4 p-3 rounded-lg text-white font-medium ${bgColor}`;
-    resultDiv.classList.remove('hidden');
-}
-
-// Show result in access modal
-function showAccessModalResult(message, type) {
-    const resultDiv = document.getElementById('access-modal-result');
-    const bgColor = type === 'success' ? 'bg-green-600' : 'bg-red-600';
-    
-    resultDiv.innerHTML = message;
-    resultDiv.className = `text-center mb-4 p-3 rounded-lg text-white font-medium ${bgColor}`;
-    resultDiv.classList.remove('hidden');
-}
 
 function activateAccessMode(data) {
     isAccessMode = true;
@@ -2430,7 +2582,10 @@ function activateAccessMode(data) {
     
     console.log('🔐 Access mode activated:', currentEmail);
     
-    // Update UI for access mode
+    // ✅ FIX: Hide modal FIRST
+    closeAccessModal();
+    
+    // ✅ Show only access mode UI, hide normal mode
     document.getElementById('access-mode-display').classList.remove('hidden');
     document.getElementById('mail-creation-section').classList.add('hidden');
     document.getElementById('mail-controls-section').classList.add('hidden');
@@ -2443,10 +2598,11 @@ function activateAccessMode(data) {
     document.getElementById('email-display').classList.remove('hidden');
     document.getElementById('end-session-btn').classList.remove('hidden');
     
-    // Use the same time formatting as regular sessions
-    updateSessionTime();
+    // Use the backend expiration time directly
+    const backendExpiresAt = data.expires_at;
+    startAccessCodeTimer(backendExpiresAt);
     
-    // ✅ CRITICAL: Save session properly
+    // Save session properly
     saveSession();
     
     loadEmails();
@@ -2454,10 +2610,23 @@ function activateAccessMode(data) {
     startTimeUpdate();
     setupSessionExpiration();
     
-    // Show description if available
     if (data.description) {
         showNotification(`🔐 ${data.description}`, 'info');
     }
+}
+
+function startAccessCodeTimer(expiresAt) {
+    const updateTimer = () => {
+        const timeRemaining = getAccessCodeTimeRemaining(expiresAt);
+        document.getElementById('access-expire-time').textContent = timeRemaining;
+        
+        if (timeRemaining === 'Expired') {
+            clearInterval(timerInterval);
+        }
+    };
+    
+    updateTimer(); // Run immediately
+    const timerInterval = setInterval(updateTimer, 60000); // Update every minute
 }
 
 // Add this function to your main app JavaScript
@@ -2526,9 +2695,14 @@ function setupAMMZDoor() {
             console.log('✅ Setting up AMMZ door');
             el.title = 'Click to enter Admin Mode';
             el.classList.add('hover:underline', 'transition-all', 'duration-200');
+            el.style.cursor = 'pointer';
+            
+            // Remove any existing listeners first
+            el.replaceWith(el.cloneNode(true));
+            const newEl = document.querySelector('.text-yellow-300[title="Click to enter Admin Mode"]');
             
             // Add click event
-            el.addEventListener('click', function(e) {
+            newEl.addEventListener('click', function(e) {
                 console.log('🎯 AMMZ door clicked!');
                 e.preventDefault();
                 e.stopPropagation();
@@ -2819,95 +2993,50 @@ function validateCurrentSession() {
 
 function initApp() {
     console.log('🚀 Initializing app...');
-    console.log('💾 Checking localStorage for session...');
     
-    // Check what's actually in localStorage
-    const savedSession = localStorage.getItem('tempMailSession');
-    if (savedSession) {
-        console.log('📦 Found saved session in localStorage');
-        try {
-            const session = JSON.parse(savedSession);
-            console.log('🔍 Session data:', {
-                email: session.email,
-                hasToken: !!session.sessionToken,
-                createdAt: new Date(session.createdAt).toISOString(),
-                age: Date.now() - session.createdAt
-            });
-        } catch (e) {
-            console.error('❌ Invalid session data in localStorage:', e);
-        }
-    } else {
-        console.log('📭 No session found in localStorage');
-    }
-
     setupAccessDoor();
     
     // Initialize app
     loadDomains().then(() => {
         console.log('✅ Domains loaded');
-        // Try to restore session after domains are loaded
-        if (!loadSession()) {
-            // No valid session, clear any leftover state
-            console.log('ℹ️ No valid session found or restored');
-            clearSession();
+        
+        // ✅ Check for access code sessions FIRST
+        const savedAccessCodes = getAccessCodesFromLocalStorage();
+        const currentDeviceId = generateDeviceId();
+        const now = new Date();
+        
+        const activeAccessSession = savedAccessCodes.find(accessCode => {
+            return accessCode.device_id === currentDeviceId && 
+                   new Date(accessCode.expires_at) > now;
+        });
+        
+        if (activeAccessSession) {
+            console.log('🔐 Active access session found on page load');
+            // Don't auto-restore here - let user click Access button
+        } else {
+            // Try to restore normal session
+            if (!loadSession()) {
+                console.log('ℹ️ No valid session found or restored');
+                clearSession();
+            }
         }
     }).catch(err => {
         console.error('❌ Error loading domains:', err);
-        // Still try to load session even if domains fail
         if (!loadSession()) {
             clearSession();
         }
     });
     
     // Set up periodic session validation
-    setInterval(validateCurrentSession, 30000); // Check every 30 seconds
+    setInterval(validateCurrentSession, 30000);
 }
 
 function setupEventListeners() {
-// Create button
-document.getElementById('create-btn').addEventListener('click', function() {
-    const btn = this;
-    const username = document.getElementById('username-input').value.trim();
-    
-    // If no username provided, show error
-    if (!username) {
-        showNotification('❌ Please enter a username', 'error');
-        document.getElementById('username-input').focus();
-        return;
-    }
-    
-    // Validate username format
-    if (!/^[a-zA-Z0-9-_]+$/.test(username)) {
-        showNotification('❌ Username can only contain letters, numbers, hyphens, and underscores', 'error');
-        document.getElementById('username-input').classList.add('border-red-500');
-        document.getElementById('username-input').focus();
-        return;
-    }
-    
-    // 🚨 IMMEDIATELY show loading state
-    const originalText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
-    btn.classList.add('opacity-50', 'cursor-not-allowed');
-    
-    // ✅ END CURRENT SESSION before creating new one
-    endCurrentSessionForNewEmail().then(() => {
-        // After ending current session, create new email
-        createEmail(username);
-    }).catch(err => {
-        console.error('Error ending session:', err);
-        // Still try to create new email even if ending fails
-        createEmail(username);
-    });
-});
-
-// Enter key in username field - works exactly like Create button
-document.getElementById('username-input').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-        e.preventDefault(); // Prevent form submission
+    // Create button
+    document.getElementById('create-btn').addEventListener('click', function() {
+        const btn = this;
         const username = document.getElementById('username-input').value.trim();
         
-        // If no username provided, show error
         if (!username) {
             showNotification('❌ Please enter a username', 'error');
             document.getElementById('username-input').focus();
@@ -2922,64 +3051,172 @@ document.getElementById('username-input').addEventListener('keypress', function(
             return;
         }
         
-        createEmail(username); // Same function as Create button
-    }
-});
-    
-// Random email button - FIXED loading state
-document.getElementById('big-random-btn').addEventListener('click', function() {
-    const btn = this;
-    console.log('🎲 Random button clicked - checking current session...');
-    
-    // 🚨 IMMEDIATELY show loading state
-    const originalText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
-    btn.classList.add('opacity-50', 'cursor-not-allowed');
-    
-    // If there's an active session, end it first
-    if (currentEmail && sessionToken) {
-        console.log('🔄 Ending current session before creating new one...');
+        // 🚨 IMMEDIATELY show loading state
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
         
-        // End current session first
-        endSessionForNewEmail().then(() => {
-            console.log('✅ Current session ended, now creating new email...');
-            
-            // Generate random username and set it in the input
-            const randomUsername = generateRandomUsername();
-            document.getElementById('username-input').value = randomUsername;
-            
-            // Wait a moment for cleanup to complete, then create new random email
-            setTimeout(() => {
-                createEmail(randomUsername);
-            }, 500);
-            
+        // ✅ END CURRENT SESSION before creating new one
+        endCurrentSessionForNewEmail().then(() => {
+            // After ending current session, create new email
+            createEmail(username);
         }).catch(err => {
-            console.error('❌ Error ending session:', err);
-            
+            console.error('Error ending session:', err);
             // Still try to create new email even if ending fails
+            createEmail(username);
+        });
+    });
+
+    // Enter key in username field - works exactly like Create button
+    document.getElementById('username-input').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault(); // Prevent form submission
+            const username = document.getElementById('username-input').value.trim();
+            
+            if (!username) {
+                showNotification('❌ Please enter a username', 'error');
+                document.getElementById('username-input').focus();
+                return;
+            }
+            
+            if (!/^[a-zA-Z0-9-_]+$/.test(username)) {
+                showNotification('❌ Username can only contain letters, numbers, hyphens, and underscores', 'error');
+                document.getElementById('username-input').classList.add('border-red-500');
+                document.getElementById('username-input').focus();
+                return;
+            }
+            
+            createEmail(username);
+        }
+    });
+    
+    // Random email button
+    document.getElementById('big-random-btn').addEventListener('click', function() {
+        const btn = this;
+        console.log('🎲 Random button clicked - checking current session...');
+        
+        // 🚨 IMMEDIATELY show loading state
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+        
+        // If there's an active session, end it first
+        if (currentEmail && sessionToken) {
+            console.log('🔄 Ending current session before creating new one...');
+            
+            endSessionForNewEmail().then(() => {
+                console.log('✅ Current session ended, now creating new email...');
+                
+                const randomUsername = generateRandomUsername();
+                document.getElementById('username-input').value = randomUsername;
+                
+                setTimeout(() => {
+                    createEmail(randomUsername);
+                }, 500);
+                
+            }).catch(err => {
+                console.error('❌ Error ending session:', err);
+                
+                const randomUsername = generateRandomUsername();
+                document.getElementById('username-input').value = randomUsername;
+                
+                setTimeout(() => {
+                    createEmail(randomUsername);
+                }, 500);
+            });
+            
+        } else {
+            console.log('📭 No active session, creating new email directly...');
+            
             const randomUsername = generateRandomUsername();
             document.getElementById('username-input').value = randomUsername;
             
             setTimeout(() => {
                 createEmail(randomUsername);
-            }, 500);
+            }, 10);
+        }
+    });
+    
+    // Copy button
+    document.getElementById('copy-btn').addEventListener('click', function() {
+        if (!currentEmail) {
+            showNotification('❌ No email to copy', 'error');
+            return;
+        }
+        
+        navigator.clipboard.writeText(currentEmail).then(function() {
+            showNotification('✅ Email copied to clipboard', 'success');
+        }).catch(function() {
+            const textArea = document.createElement('textarea');
+            textArea.value = currentEmail;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            showNotification('✅ Email copied to clipboard', 'success');
         });
-        
-    } else {
-        // No active session, generate random username and create
-        console.log('📭 No active session, creating new email directly...');
-        
-        // Generate random username and set it in the input
-        const randomUsername = generateRandomUsername();
-        document.getElementById('username-input').value = randomUsername;
-        
-        // Small delay to ensure UI updates
-        setTimeout(() => {
-            createEmail(randomUsername);
-        }, 10);
-    }
-});
+    });
+    
+    // End session button
+    document.getElementById('end-session-btn').addEventListener('click', function() {
+        showModal(
+            'End Session',
+            'Are you sure you want to end this session? All emails will be cleared.',
+            function() {
+                console.log('🎯 User confirmed session end');
+                endSession();
+            }
+        );
+    });
+
+    // ✅ ACCESS BUTTON - This was missing!
+    document.getElementById('access-door-btn').addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('🔑 Access door button clicked');
+        openAccessModal();
+    });
+
+    // Refresh button
+    document.getElementById('refresh-btn').addEventListener('click', function() {
+        if (currentEmail && sessionToken) {
+            loadEmails();
+            showNotification('🔄 Refreshing inbox...', 'info');
+        } else {
+            showNotification('❌ No active session', 'error');
+        }
+    });
+    
+    // Back to list button (mobile)
+    document.getElementById('back-to-list').addEventListener('click', function() {
+        showEmailList();
+    });
+    
+    // Clear username error when typing
+    document.getElementById('username-input').addEventListener('input', function() {
+        this.classList.remove('border-red-500');
+    });
+    
+    // Admin mode keyboard shortcut (Ctrl+Alt+A)
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.altKey && e.key === 'a') {
+            e.preventDefault();
+            toggleAdminMode();
+        }
+    });
+    
+    // Handle page visibility changes
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden && currentEmail) {
+            loadEmails();
+        }
+    });
+
+    // ✅ AMMZ DOOR Setup - This was also missing!
+    setupAMMZDoor();
+}
 
 function endSessionForNewEmail() {
     return new Promise((resolve, reject) => {
@@ -3070,128 +3307,6 @@ function endSessionForNewEmail() {
             // No session to end, just resolve
             console.log('📭 No backend session to end');
             resolve();
-        }
-    });
-}
-
-// Add this function to properly end session in backend
-function endSessionBackend() {
-    return new Promise((resolve) => {
-        if (!currentEmail || !sessionToken) {
-            resolve();
-            return;
-        }
-        
-        fetch(API_URL + '/api/session/end', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                session_token: sessionToken,
-                email_address: currentEmail
-            })
-        })
-        .then(res => {
-            if (!res.ok) {
-                console.log('Backend session end failed, but continuing');
-            }
-            return res.json();
-        })
-        .then(data => {
-            console.log('✅ Backend session ended');
-            resolve();
-        })
-        .catch(err => {
-            console.log('❌ Backend session end error (ignoring):', err);
-            resolve();
-        });
-    });
-}
-    
-    // Copy button
-    document.getElementById('copy-btn').addEventListener('click', function() {
-        if (!currentEmail) {
-            showNotification('❌ No email to copy', 'error');
-            return;
-        }
-        
-        navigator.clipboard.writeText(currentEmail).then(function() {
-            showNotification('✅ Email copied to clipboard', 'success');
-        }).catch(function() {
-            // Fallback for older browsers
-            const textArea = document.createElement('textarea');
-            textArea.value = currentEmail;
-            document.body.appendChild(textArea);
-            textArea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textArea);
-            showNotification('✅ Email copied to clipboard', 'success');
-        });
-    });
-    
-// End session button
-document.getElementById('end-session-btn').addEventListener('click', function() {
-    showModal(
-        'End Session',
-        'Are you sure you want to end this session? All emails will be cleared.',
-        function() {
-            console.log('🎯 User confirmed session end');
-            endSession(); // This will now work without page reload
-        }
-    );
-});
-
-    document.addEventListener('click', function(e) {
-        // Check if clicked element is the AMMZ text in the marquee
-        if (e.target.classList.contains('text-yellow-300') && 
-            e.target.textContent === 'AMMZ' &&
-            e.target.closest('marquee')) {
-            e.preventDefault();
-            toggleAdminMode();
-        }
-    });
-    
-// Refresh button
-document.getElementById('refresh-btn').addEventListener('click', function() {
-    if (currentEmail && sessionToken) {
-        loadEmails();
-        showNotification('🔄 Refreshing inbox...', 'info');
-    } else {
-        showNotification('❌ No active session', 'error');
-    }
-});
-    
-    // Back to list button (mobile)
-    document.getElementById('back-to-list').addEventListener('click', function() {
-        showEmailList();
-    });
-    
-    // Enter key in username field
-    document.getElementById('username-input').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            document.getElementById('create-btn').click();
-        }
-    });
-    
-    // Clear username error when typing
-    document.getElementById('username-input').addEventListener('input', function() {
-        this.classList.remove('border-red-500');
-    });
-    
-    // Admin mode keyboard shortcut (Ctrl+Alt+A)
-    document.addEventListener('keydown', function(e) {
-        if (e.ctrlKey && e.altKey && e.key === 'a') {
-            e.preventDefault();
-            toggleAdminMode();
-        }
-    });
-    
-    // Handle page visibility changes
-    document.addEventListener('visibilitychange', function() {
-        if (!document.hidden && currentEmail) {
-            // Page became visible, refresh emails
-            loadEmails();
         }
     });
 }
