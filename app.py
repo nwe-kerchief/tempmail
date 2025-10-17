@@ -854,6 +854,14 @@ def end_session():
     except Exception as e:
         logger.error(f"âŒ Error ending session: {e}")
         return jsonify({'error': 'Failed to end session'}), 500
+
+app.config.update(
+    SECRET_KEY=os.getenv('SECRET_KEY', secrets.token_urlsafe(32)),
+    SESSION_COOKIE_SECURE=False,  # Set to True in production
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=1)
+)
     
 @app.route('/api/emails/<email_address>', methods=['GET'])
 def get_emails(email_address):
@@ -1808,13 +1816,16 @@ def admin_clear_sessions():
         logger.error(f"âŒ Error clearing admin sessions: {e}")
         return jsonify({'error': str(e)}), 500
 
+# Fix admin session configuration
 @app.before_request
-def check_admin_session():
-    """Check and expire admin sessions automatically"""
-    if session.get('admin_authenticated'):
-        # Set session to expire after 1 hour of inactivity
-        session.permanent = True
-        app.permanent_session_lifetime = timedelta(hours=1)
+def make_session_permanent():
+    session.permanent = True
+    app.permanent_session_lifetime = timedelta(hours=1)
+
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
 
 # Error handlers
 @app.errorhandler(404)
