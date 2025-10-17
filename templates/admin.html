@@ -580,83 +580,9 @@ var currentViewingEmail = null;
 let loginAttemptInProgress = false;
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🛑 Admin panel loaded - checking authentication');
+    console.log('🛑 Admin panel loaded - NO AUTO-REFRESH');
     
-    // Set up event listeners first
-    document.getElementById('admin-login-btn').addEventListener('click', adminLogin);
-    document.getElementById('admin-password').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') adminLogin();
-    });
-    document.getElementById('logout-btn').addEventListener('click', adminLogout);
-    
-    // Check admin status without auto-refresh
-    checkAdminStatus();
-    
-    // DON'T start auto-refresh until after login
-});
-
-function checkAdminStatus() {
-    console.log('🔐 Checking admin authentication status...');
-    
-    fetch(`${API_URL}/api/admin/status`, {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-            'Cache-Control': 'no-cache'
-        }
-    })
-    .then(res => {
-        console.log('Admin status response:', res.status);
-        if (res.ok) {
-            return res.json();
-        }
-        // If not authenticated, just show login screen
-        throw new Error('Not authenticated');
-    })
-    .then(data => {
-        console.log('Admin status data:', data);
-        if (data.authenticated) {
-            console.log('✅ Admin already authenticated, showing dashboard');
-            showAdminDashboard();
-        } else {
-            console.log('❌ Admin not authenticated, showing login screen');
-            showLoginScreen();
-        }
-    })
-    .catch(err => {
-        console.log('⚠️ Admin status check failed, showing login screen:', err.message);
-        showLoginScreen();
-    });
-}
-
-function showLoginScreen() {
-    document.getElementById('login-screen').style.display = 'flex';
-    document.getElementById('admin-dashboard').style.display = 'none';
-    // Clear any password field
-    document.getElementById('admin-password').value = '';
-}
-
-function showAdminDashboard() {
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('admin-dashboard').style.display = 'block';
-    loadAdminData();
-}
-
-function loadAdminData() {
-    // Only load data after successful login
-    loadStats();
-    loadAddresses();
-    loadActiveSessions();
-    loadAccessCodes();
-    loadBlacklist();
-    loadDomainsForAdmin();
-    
-    // Start auto-refresh ONLY after login
-    startAutoRefresh();
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    // Set up event listeners
+    // Set up ALL event listeners here
     document.getElementById('admin-login-btn').addEventListener('click', adminLogin);
     document.getElementById('admin-password').addEventListener('keypress', function(e) {
         if (e.key === 'Enter') adminLogin();
@@ -676,13 +602,66 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Initialize with a small delay to ensure DOM is ready
-    setTimeout(() => {
-        if (document.getElementById('admin-dashboard')) {
-            loadAddresses();
-        }
-    }, 500);
+    // ONLY check admin status - NO data loading until logged in
+    checkAdminStatus();
 });
+
+function checkAdminStatus() {
+    console.log('🔐 Checking admin authentication status...');
+    
+    fetch(`${API_URL}/api/admin/status`, {
+        method: 'GET',
+        credentials: 'include'
+    })
+    .then(res => {
+        console.log('Admin status response:', res.status);
+        if (res.ok) {
+            return res.json();
+        }
+        // If 401 or other error, just show login
+        throw new Error('Not authenticated');
+    })
+    .then(data => {
+        console.log('Admin status data:', data);
+        if (data.authenticated) {
+            console.log('✅ Admin authenticated, loading dashboard');
+            showAdminDashboard();
+        } else {
+            console.log('❌ Admin not authenticated, showing login screen');
+            showLoginScreen();
+        }
+    })
+    .catch(err => {
+        console.log('⚠️ Admin status check failed:', err.message);
+        showLoginScreen();
+    });
+}
+
+function showLoginScreen() {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('admin-dashboard').style.display = 'none';
+    // Clear any password field
+    document.getElementById('admin-password').value = '';
+}
+
+function showAdminDashboard() {
+    console.log('🔄 Loading admin dashboard with all data...');
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('admin-dashboard').style.display = 'block';
+    
+    // Load all admin data
+    loadStats();
+    loadAddresses();
+    loadActiveSessions();
+    loadAccessCodes();
+    loadBlacklist();
+    loadDomainsForAdmin();
+    
+    // Start auto-refresh ONLY after successful login
+    startAutoRefresh();
+    
+    showNotification('✅ Admin dashboard loaded successfully', 'success');
+}
 
 function escapeHtml(text) {
     if (!text) return '';
