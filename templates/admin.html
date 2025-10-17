@@ -918,6 +918,7 @@ function formatTimeDetailed(timestamp) {
 }
 
 
+
 // Add this new function for access code creation times
 function formatAccessCodeTime(timestamp) {
     try {
@@ -2073,7 +2074,7 @@ function loadAccessCodes() {
             
             // Use future time for expiration, regular time for creation
             const timeRemaining = formatFutureTime(code.expires_at);
-            cconst createdTime = formatAccessCodeTime(code.created_at);
+            const createdTime = formatAccessCodeTime(code.created_at);
             
             const item = document.createElement('div');
             item.className = `p-4 rounded-lg border ${statusClass} transition-all hover:scale-[1.02] access-code-item`;
