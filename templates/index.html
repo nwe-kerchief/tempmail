@@ -2174,6 +2174,17 @@ function updateEmailTimes() {
     }
 }
 
+function showAccessModalResult(message, type) {
+    const resultDiv = document.getElementById('access-modal-result');
+    if (!resultDiv) return;
+    
+    const bgColor = type === 'success' ? 'bg-green-600' : 'bg-red-600';
+    
+    resultDiv.innerHTML = message;
+    resultDiv.className = `text-center mb-4 p-3 rounded-lg text-white font-medium ${bgColor}`;
+    resultDiv.classList.remove('hidden');
+}
+
 // Local Storage Management for Access Codes
 const ACCESS_CODES_STORAGE_KEY = 'tempMailAccessCodes';
 
@@ -2566,12 +2577,27 @@ function redeemAccessCodeFromModal() {
             errorMessage = 'This email address is currently in use by another session';
         }
         
+        // ✅ FIX: Use the restored function
         showAccessModalResult(`❌ ${errorMessage}`, 'error');
         confirmBtn.innerHTML = originalText;
         confirmBtn.disabled = false;
     });
 }
 
+function handleRevokedAccessCode(email) {
+    console.log(`🔐 Handling revoked access code for: ${email}`);
+    
+    // Remove from localStorage
+    removeAccessCodeFromLocalStorage(email);
+    
+    // Clear any active session
+    if (currentEmail === email) {
+        clearSession();
+    }
+    
+    // Show notification
+    showNotification('🔐 Access code has been revoked', 'error');
+}
 
 function activateAccessMode(data) {
     isAccessMode = true;
