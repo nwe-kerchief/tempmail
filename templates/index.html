@@ -1178,7 +1178,6 @@ function updateSessionTime() {
     updateTimer();
     setInterval(updateTimer, 60000); // Update every minute
 }
-
 function restoreSessionUI() {
     if (!currentEmail || !sessionToken) {
         console.error('❌ Cannot restore UI: missing email or token');
@@ -2162,7 +2161,6 @@ function viewEmail(email, itemEl) {
     }
 }
 
-// In both admin and main app JavaScript, update the email display:
 function displayEmailInIframe(email, prefix) {
     const iframe = document.getElementById(`${prefix}-iframe`);
     const fallback = document.getElementById(`${prefix}-fallback`);
@@ -2172,12 +2170,12 @@ function displayEmailInIframe(email, prefix) {
     document.getElementById(`${prefix}-from`).textContent = email.sender || 'Unknown';
     document.getElementById(`${prefix}-date`).textContent = formatTime(email.timestamp);
     
-    // ✅ USE FALLBACK DIV WITH ORIGINAL CONTENT
+    // ✅ ALWAYS USE FALLBACK DIV - NEVER USE IFRAME
     iframe.classList.add('hidden');
     fallback.classList.remove('hidden');
     
     // Use the raw body content directly
-    fallback.innerHTML = email.body || '<p class="text-gray-400">No content available</p>';
+    fallback.innerHTML = email.body || '<p class="text-gray-400 text-center py-8">No content available</p>';
     
     // Add click handlers for verification codes only
     setTimeout(() => {
@@ -2190,6 +2188,13 @@ function displayEmailInIframe(email, prefix) {
                     copyToClipboard(code);
                 });
             }
+        });
+        
+        // Make all links open in new tab
+        const links = fallback.querySelectorAll('a');
+        links.forEach(link => {
+            link.setAttribute('target', '_blank');
+            link.setAttribute('rel', 'noopener noreferrer');
         });
     }, 100);
 }
@@ -2367,15 +2372,19 @@ function redeemAccessCodeFromModal() {
     })
     .then(data => {
         if (data.success) {
-            // ✅ Save to localStorage for automatic future access
+            // ✅ Remove any expired session data for this email first
+            removeAccessCodeFromLocalStorage(data.email);
+            
+            // ✅ Save the new access code session
             saveAccessCodeToLocalStorage(data);
             
             showAccessModalResult(`✅ Success! Access granted to: ${data.email}`, 'success');
             activateAccessMode(data);
             
+            // ✅ Close modal after successful redemption
             setTimeout(() => {
                 closeAccessModal();
-            }, 2000);
+            }, 1500);
             
         } else {
             showAccessModalResult(`❌ ${data.error}`, 'error');
