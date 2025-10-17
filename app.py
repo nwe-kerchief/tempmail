@@ -1738,6 +1738,12 @@ def revoke_access_code(code):
             WHERE email_address = %s AND is_access_code = TRUE AND is_active = TRUE
         ''', (email_address,))
         
+        # ✅ FIX: Also remove from any active access code usage tracking
+        c.execute('''
+            DELETE FROM access_codes 
+            WHERE code = %s AND is_active = FALSE
+        ''', (code,))
+        
         conn.commit()
         conn.close()
         
