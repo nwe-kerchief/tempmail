@@ -918,6 +918,49 @@ function formatTimeDetailed(timestamp) {
 }
 
 
+// Add this new function for access code creation times
+function formatAccessCodeTime(timestamp) {
+    try {
+        let date;
+        
+        if (typeof timestamp === 'string') {
+            // Parse the timestamp directly without timezone manipulation
+            date = new Date(timestamp);
+        } else {
+            return 'recently';
+        }
+        
+        if (isNaN(date.getTime())) {
+            return 'recently';
+        }
+        
+        // Use server time directly without Myanmar conversion
+        const now = new Date();
+        const diff = now - date;
+        const seconds = Math.floor(diff / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+        
+        // Return relative time (same logic but no timezone conversion)
+        if (seconds < 60) return 'just now';
+        if (minutes < 60) return minutes + ' min ago';
+        if (hours < 24) return hours + ' hour' + (hours > 1 ? 's' : '') + ' ago';
+        if (days < 7) return days + ' day' + (days > 1 ? 's' : '') + ' ago';
+        
+        return date.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+    } catch (e) {
+        console.error('Error formatting access code time:', e);
+        return 'recently';
+    }
+}
+
 function addToBlacklist() {
     var usernameInput = document.getElementById('new-blacklist-username');
     var username = usernameInput.value.trim().toLowerCase();
@@ -932,6 +975,7 @@ function addToBlacklist() {
         return;
     }
     
+
     showModal(
         'Add to Blacklist',
         `Are you sure you want to blacklist the username "<strong>${escapeHtml(username)}</strong>"?<br><br>This will prevent all users from using this username.`,
@@ -2029,7 +2073,7 @@ function loadAccessCodes() {
             
             // Use future time for expiration, regular time for creation
             const timeRemaining = formatFutureTime(code.expires_at);
-            const createdTime = formatTime(code.created_at);
+            cconst createdTime = formatAccessCodeTime(code.created_at);
             
             const item = document.createElement('div');
             item.className = `p-4 rounded-lg border ${statusClass} transition-all hover:scale-[1.02] access-code-item`;
