@@ -904,11 +904,7 @@ function openAccessModal() {
     if (activeAccessSession && !isAccessMode) {
         console.log('🔐 Active access session found in localStorage, restoring...', activeAccessSession.email);
         
-        // Show loading state in access button
-        const accessBtn = document.getElementById('access-door-btn');
-        const originalHtml = accessBtn.innerHTML;
-        accessBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Checking...</span>';
-        accessBtn.disabled = true;
+       showNotification('Restoring session...', 'info');
         
         // Verify session is still valid with backend
         fetch(`${API_URL}/api/emails/${encodeURIComponent(activeAccessSession.email)}`, {
