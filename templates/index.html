@@ -929,11 +929,6 @@ function openAccessModal() {
             console.log('❌ Error verifying access session, showing code modal:', err);
             showAccessModal();
         })
-        .finally(() => {
-            // Restore button state
-            accessBtn.innerHTML = originalHtml;
-            accessBtn.disabled = false;
-        });
         
         return; // ✅ EXIT EARLY - don't proceed to show modal
     }
