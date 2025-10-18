@@ -11,6 +11,15 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100  100'><text y='.9em' font-size='90'>📧</text></svg>">
 <style>
+/* Access Mode Colors */
+.access-mode-active {
+    background: linear-gradient(135deg, #0f4c75 0%, #1e3a8a 100%) !important;
+}
+
+.access-mode-active .glass-effect {
+    background: rgba(15, 76, 117, 0.25) !important;
+    border: 1px solid rgba(100, 200, 255, 0.3) !important;
+}
 body {
 font-family: 'Inter', sans-serif;
 background: linear-gradient(135deg, #1e3a8a 0%, #7e22ce 100%);
@@ -387,25 +396,36 @@ max-height: 350px;
     box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
 }
 
-/* Mobile responsive adjustments */
+/* Fix Access button size on mobile */
+/* Fix Access button container on mobile */
 @media (max-width: 640px) {
-    .flex-col.sm\:flex-row {
-        flex-direction: column;
+    /* Make Access button container not flex */
+    #mail-creation-section .flex-col.sm\:flex-row > div:last-child {
+        flex: none !important;
+        width: auto !important;
     }
     
+    /* Make the buttons stay in same row */
+    #mail-creation-section .flex-col.sm\:flex-row {
+        flex-direction: row !important;
+        align-items: center;
+    }
+    
+    /* Random button takes available space */
+    #mail-creation-section .flex-col.sm\:flex-row > div:first-child {
+        flex: 1 !important;
+        margin-right: 8px;
+    }
+    
+    /* Fix Access button size */
     #access-door-btn {
-        min-height: 70px;
-        padding: 12px;
+        min-height: 45px !important;
+        min-width: 45px !important;
+        width: 45px !important;
+        height: 45px !important;
+        padding: 6px !important;
+        flex: none !important;
     }
-    
-    #big-random-btn {
-        margin-bottom: 8px;
-    }
-}
-
-/* Ensure buttons align properly */
-.flex-col.sm\:flex-row {
-    align-items: center;
 }
 
 #big-random-btn {
@@ -1252,12 +1272,8 @@ function restoreAccessCodeSession(accessCode) {
     // ✅ FORCE SHOW EMAIL LIST VIEW (not email content view)
     showEmailList();
 
-    document.body.style.background = 'linear-gradient(135deg, #1e3a8a 0%, #0f4c75 100%)';
-    document.querySelector('main').style.background = 'rgba(15, 76, 117, 0.15)';
-    
-    // ✅ ADD ACCESS MODE COLORS
-    document.body.classList.add('access-mode');
-    document.querySelector('main').classList.add('access-mode-bg');
+    // ✅ ADD ACCESS MODE COLOR
+    document.body.classList.add('access-mode-active');
     
     // Update UI for access mode
     document.getElementById('access-mode-display').classList.remove('hidden');
@@ -2311,6 +2327,9 @@ function leaveAccessMode() {
             
             // ✅ FORCE SHOW EMAIL LIST VIEW (not email content view)
             showEmailList();
+
+            // ✅ REMOVE ACCESS MODE COLOR  
+            document.body.classList.remove('access-mode-active');
             
             // Hide access mode UI, show normal mode UI
             document.getElementById('access-mode-display').classList.add('hidden');
