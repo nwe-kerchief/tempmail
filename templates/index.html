@@ -2257,15 +2257,14 @@ function generateDeviceId() {
 }
 
 function leaveAccessMode() {
-    console.log('🚪 Leaving access mode - frontend state only');
+    console.log('🚪 Leaving access mode - frontend UI only');
     
     showModal(
         'Leave Access Mode',
-        'Leave access code mode and return to normal interface?<br><br><strong>Note:</strong> Your access session will remain active and you can return using the Access button.',
+        'Switch to normal interface?<br><br><strong>Your access session will remain active in background.</strong>',
         function() {
-            // ✅ Only clear FRONTEND state, keep backend session active
+            // ✅ ONLY hide access mode UI
             isAccessMode = false;
-            accessStartTime = null;
             
             // Stop access mode timers (UI only)
             if (window.accessCodeTimer) {
@@ -2273,24 +2272,29 @@ function leaveAccessMode() {
                 window.accessCodeTimer = null;
             }
             
-            // Clear access mode UI - but DON'T end backend session
+            // Clear access mode UI
             document.getElementById('access-mode-display').classList.add('hidden');
             document.getElementById('mail-creation-section').classList.remove('hidden');
             document.getElementById('mail-controls-section').classList.remove('hidden');
             
-            // Clear the email display but keep session data
+            // ✅ HIDE the email display to prevent carry-over
             document.getElementById('email-display').classList.add('hidden');
+            document.getElementById('end-session-btn').classList.add('hidden');
             document.getElementById('current-email').textContent = '';
-            
-            // Reset inbox to empty state
             document.getElementById('email-count').textContent = '0 emails';
             document.getElementById('email-list').innerHTML = '';
             document.getElementById('no-emails-default').style.display = 'flex';
             
-            showNotification('✅ Switched to normal mode - Use Access button to return', 'success');
+            // Reset email view
+            document.getElementById('desktop-email-placeholder').style.display = 'flex';
+            document.getElementById('desktop-email-content-inner').classList.add('hidden');
             
-            // ✅ IMPORTANT: Don't clear session data from localStorage
-            // The access session remains active for quick return
+            // ✅ Stop auto-refresh for the access email
+            clearSessionIntervals();
+            
+            showNotification('✅ Switched to normal mode - Access session saved', 'success');
+            
+            console.log('✅ Access mode UI hidden, email display cleared');
         }
     );
 }
