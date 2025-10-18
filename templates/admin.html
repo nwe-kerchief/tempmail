@@ -2018,7 +2018,7 @@ function formatFutureTime(timestamp) {
         if (isNaN(date.getTime())) return 'invalid';
         
         // Add 6 hours to the display ONLY
-        const displayDate = new Date(date.getTime() + (6 * 60 * 60 * 1000));
+        const displayDate = new Date(date.getTime() + (6.5 * 60 * 60 * 1000));
         
         const now = new Date();
         const diff = displayDate - now;
