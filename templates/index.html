@@ -2257,27 +2257,35 @@ function generateDeviceId() {
 }
 
 function leaveAccessMode() {
-    console.log('🚪 Leaving access mode - frontend UI only');
+    console.log('🚪 Leaving access mode - switching to clean normal mode');
     
     showModal(
         'Leave Access Mode',
-        'Switch to normal interface?<br><br><strong>Your access session will remain active in background.</strong>',
+        'Switch to normal interface?<br><br><strong>Your access session will be saved.</strong> You can return anytime via the Access button.',
         function() {
-            // ✅ ONLY hide access mode UI
+            // ✅ Switch to normal mode but keep access session data
             isAccessMode = false;
             
-            // Stop access mode timers (UI only)
+            // Stop access mode timers
             if (window.accessCodeTimer) {
                 clearInterval(window.accessCodeTimer);
                 window.accessCodeTimer = null;
             }
             
-            // Clear access mode UI
+            // Stop email refresh for access mode
+            clearSessionIntervals();
+            
+            // Clear the current session from UI (but keep in localStorage)
+            currentEmail = '';
+            sessionToken = '';
+            sessionStartTime = null;
+            
+            // Hide access mode UI, show normal mode UI
             document.getElementById('access-mode-display').classList.add('hidden');
             document.getElementById('mail-creation-section').classList.remove('hidden');
             document.getElementById('mail-controls-section').classList.remove('hidden');
             
-            // ✅ HIDE the email display to prevent carry-over
+            // Reset email display to fresh state
             document.getElementById('email-display').classList.add('hidden');
             document.getElementById('end-session-btn').classList.add('hidden');
             document.getElementById('current-email').textContent = '';
@@ -2285,20 +2293,19 @@ function leaveAccessMode() {
             document.getElementById('email-list').innerHTML = '';
             document.getElementById('no-emails-default').style.display = 'flex';
             
-            // Reset email view
+            // Reset email content view
             document.getElementById('desktop-email-placeholder').style.display = 'flex';
             document.getElementById('desktop-email-content-inner').classList.add('hidden');
             
-            // ✅ Stop auto-refresh for the access email
-            clearSessionIntervals();
+            // Reset page title
+            document.title = 'TempMail - AMMZ';
             
-            showNotification('✅ Switched to normal mode - Access session saved', 'success');
+            showNotification('✅ Switched to normal mode - Ready for new email', 'success');
             
-            console.log('✅ Access mode UI hidden, email display cleared');
+            console.log('✅ Clean normal mode ready for new session');
         }
     );
 }
-
 
 
 function viewEmail(email, itemEl) {
