@@ -2453,7 +2453,7 @@ function setupAccessDoor() {
     const accessDoorBtn = document.getElementById('access-door-btn');
     if (accessDoorBtn) {
         accessDoorBtn.onclick = null; // Remove old onclick
-        accessDoorBtn.addEventListener('click', showAccessModal);
+        accessDoorBtn.addEventListener('click', openAccessModal);
     }
     
     // Access Modal Event Listeners
