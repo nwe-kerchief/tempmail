@@ -2010,16 +2010,18 @@ function formatTime(timestamp) {
     }
 }
 
-// Replace the formatFutureTime function in admin panel with this:
 function formatFutureTime(timestamp) {
-
     if (!timestamp) return 'never';
+    
     try {
         const date = new Date(timestamp);
-        const now = new Date();
+        if (isNaN(date.getTime())) return 'invalid';
         
-        // No timezone adjustment needed if backend stores Myanmar time
-        const diff = date - now;
+        // Add 6 hours to the display ONLY
+        const displayDate = new Date(date.getTime() + (6 * 60 * 60 * 1000));
+        
+        const now = new Date();
+        const diff = displayDate - now;
         
         if (diff <= 0) return 'Expired';
         
@@ -2035,6 +2037,7 @@ function formatFutureTime(timestamp) {
         return 'error';
     }
 }
+
 
 // Update the loadAccessCodes function to use proper time display:
 function loadAccessCodes() {
