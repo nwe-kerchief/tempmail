@@ -894,7 +894,7 @@ function openAccessModal() {
     
     // Look for active access code sessions for this device
     const activeAccessSession = savedAccessCodes.find(accessCode => {
-        return accessCode.device_id === currentDeviceId && 
+        return accessCode.device_id === currentDeviceId &&  // ✅ FIXED: device_id not deviceid
                new Date(accessCode.expires_at) > now;
     });
     
@@ -904,7 +904,7 @@ function openAccessModal() {
     if (activeAccessSession && !isAccessMode) {
         console.log('🔐 Active access session found in localStorage, restoring...', activeAccessSession.email);
         
-       showNotification('Restoring session...', 'info');
+        showNotification('Restoring session...', 'info');
         
         // Verify session is still valid with backend
         fetch(`${API_URL}/api/emails/${encodeURIComponent(activeAccessSession.email)}`, {
@@ -929,7 +929,7 @@ function openAccessModal() {
             console.log('❌ Error verifying access session, showing code modal:', err);
             showAccessModal();
         })
-        
+
         return; // ✅ EXIT EARLY - don't proceed to show modal
     }
     
@@ -939,7 +939,7 @@ function openAccessModal() {
         document.getElementById('access-mode-display').classList.remove('hidden');
         document.getElementById('mail-creation-section').classList.add('hidden');
         document.getElementById('mail-controls-section').classList.add('hidden');
-        return; // ✅ EXIT EARLY - don't show modal
+        return;
     }
     
     // ✅ No active access session - show code input modal
