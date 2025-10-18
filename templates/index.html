@@ -422,7 +422,7 @@ max-height: 350px;
         min-height: 45px !important;
         min-width: 45px !important;
         width: 45px !important;
-        height: 45px !important;
+        height: 55px !important;
         padding: 6px !important;
         flex: none !important;
     }
@@ -2217,6 +2217,34 @@ function updateEmailTimes() {
     if (emailDateElement && emailDateElement.getAttribute('data-timestamp')) {
         emailDateElement.textContent = formatTime(emailDateElement.getAttribute('data-timestamp'));
     }
+}
+
+function showAccessModal() {
+    console.log('📭 Showing access modal...');
+    
+    const modal = document.getElementById('access-modal');
+    if (!modal) {
+        console.error('❌ Access modal not found!');
+        return;
+    }
+    
+    // Reset modal state
+    const resultDiv = document.getElementById('access-modal-result');
+    const codeInput = document.getElementById('access-code-input-modal');
+    
+    if (resultDiv) {
+        resultDiv.classList.add('hidden');
+        resultDiv.innerHTML = '';
+    }
+    
+    if (codeInput) {
+        codeInput.value = '';
+        codeInput.focus();
+    }
+    
+    // Show modal
+    modal.classList.remove('hidden');
+    console.log('✅ Access modal opened');
 }
 
 function showAccessModalResult(message, type) {
