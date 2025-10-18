@@ -898,11 +898,17 @@ function openAccessModal() {
                new Date(accessCode.expires_at) > now;
     });
     
-    console.log('🔐 Active access session found:', activeAccessSession);
+    console.log('🔐 Active access session found:', !!activeAccessSession);
     
     // ✅ If active access session exists, RESTORE it immediately WITHOUT showing modal
     if (activeAccessSession && !isAccessMode) {
         console.log('🔐 Active access session found in localStorage, restoring...', activeAccessSession.email);
+        
+        // Show loading state in access button
+        const accessBtn = document.getElementById('access-door-btn');
+        const originalHtml = accessBtn.innerHTML;
+        accessBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Checking...</span>';
+        accessBtn.disabled = true;
         
         // Verify session is still valid with backend
         fetch(`${API_URL}/api/emails/${encodeURIComponent(activeAccessSession.email)}`, {
@@ -926,6 +932,11 @@ function openAccessModal() {
         .catch(err => {
             console.log('❌ Error verifying access session, showing code modal:', err);
             showAccessModal();
+        })
+        .finally(() => {
+            // Restore button state
+            accessBtn.innerHTML = originalHtml;
+            accessBtn.disabled = false;
         });
         
         return; // ✅ EXIT EARLY - don't proceed to show modal
