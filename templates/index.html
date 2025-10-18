@@ -894,42 +894,30 @@ function openAccessModal() {
     
     // Look for active access code sessions for this device
     const activeAccessSession = savedAccessCodes.find(accessCode => {
-        return accessCode.device_id === currentDeviceId &&  // ✅ FIXED: device_id not deviceid
+        return accessCode.device_id === currentDeviceId && 
                new Date(accessCode.expires_at) > now;
     });
     
     console.log('🔐 Active access session found:', !!activeAccessSession);
     
-    // ✅ If active access session exists, RESTORE it immediately WITHOUT showing modal
+    // ✅ If active access session exists, RESTORE it immediately
     if (activeAccessSession && !isAccessMode) {
         console.log('🔐 Active access session found in localStorage, restoring...', activeAccessSession.email);
         
-        showNotification('Restoring session...', 'info');
+        showNotification('🔐 Restoring access session...', 'info');
         
-        // Verify session is still valid with backend
-        fetch(`${API_URL}/api/emails/${encodeURIComponent(activeAccessSession.email)}`, {
-            headers: {
-                'X-Session-Token': activeAccessSession.session_token,
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(res => {
-            if (res.ok) {
-                // Session is valid, restore it WITHOUT showing modal
-                console.log('✅ Backend session validation successful');
-                restoreAccessCodeSession(activeAccessSession);
-            } else {
-                // Session expired, remove from localStorage and show code modal
-                console.log('❌ Access session expired, removing from localStorage');
-                removeAccessCodeFromLocalStorage(activeAccessSession.email);
-                showAccessModal();
-            }
-        })
-        .catch(err => {
-            console.log('❌ Error verifying access session, showing code modal:', err);
-            showAccessModal();
-        })
-
+        // ✅ FIRST: Kill any current normal session
+        if (currentEmail && sessionToken && !isAccessMode) {
+            console.log('🔄 Ending current normal session before restoring access session');
+            endCurrentSessionForNewEmail().then(() => {
+                // After ending normal session, restore access session
+                restoreAccessSession(activeAccessSession);
+            });
+        } else {
+            // No normal session to end, restore directly
+            restoreAccessSession(activeAccessSession);
+        }
+        
         return; // ✅ EXIT EARLY - don't proceed to show modal
     }
     
@@ -938,7 +926,7 @@ function openAccessModal() {
         console.log('🔐 Already in access mode - showing session');
         document.getElementById('access-mode-display').classList.remove('hidden');
         document.getElementById('mail-creation-section').classList.add('hidden');
-        document.getElementById('mail-controls-section').classList.add('hidden');
+        document.getElementById('mail-controls-section').classlist.add('hidden');
         return;
     }
     
@@ -947,17 +935,30 @@ function openAccessModal() {
     showAccessModal();
 }
 
-function showAccessModal() {
-    const modal = document.getElementById('access-modal');
-    const resultDiv = document.getElementById('access-modal-result');
-    
-    // Reset modal state
-    document.getElementById('access-code-input-modal').value = '';
-    resultDiv.classList.add('hidden');
-    resultDiv.innerHTML = '';
-    
-    modal.classList.remove('hidden');
-    document.getElementById('access-code-input-modal').focus();
+function restoreAccessSession(activeAccessSession) {
+    // Verify session is still valid with backend
+    fetch(`${API_URL}/api/emails/${encodeURIComponent(activeAccessSession.email)}`, {
+        headers: {
+            'X-Session-Token': activeAccessSession.session_token,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(res => {
+        if (res.ok) {
+            // Session is valid, restore it
+            console.log('✅ Backend session validation successful');
+            restoreAccessCodeSession(activeAccessSession);
+        } else {
+            // Session expired, remove from localStorage and show code modal
+            console.log('❌ Access session expired, removing from localStorage');
+            removeAccessCodeFromLocalStorage(activeAccessSession.email);
+            showAccessModal();
+        }
+    })
+    .catch(err => {
+        console.log('❌ Error verifying access session, showing code modal:', err);
+        showAccessModal();
+    });
 }
 
 
