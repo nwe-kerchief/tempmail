@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -899,7 +900,7 @@ function openAccessModal() {
     
     console.log('🔐 Active access session found:', activeAccessSession);
     
-    // ✅ If active access session exists, RESTORE it immediately
+    // ✅ If active access session exists, RESTORE it immediately WITHOUT showing modal
     if (activeAccessSession && !isAccessMode) {
         console.log('🔐 Active access session found in localStorage, restoring...', activeAccessSession.email);
         
@@ -912,7 +913,7 @@ function openAccessModal() {
         })
         .then(res => {
             if (res.ok) {
-                // Session is valid, restore it
+                // Session is valid, restore it WITHOUT showing modal
                 console.log('✅ Backend session validation successful');
                 restoreAccessCodeSession(activeAccessSession);
             } else {
@@ -927,7 +928,7 @@ function openAccessModal() {
             showAccessModal();
         });
         
-        return;
+        return; // ✅ EXIT EARLY - don't proceed to show modal
     }
     
     // ✅ If already IN access mode, just show the session (no modal)
@@ -936,7 +937,7 @@ function openAccessModal() {
         document.getElementById('access-mode-display').classList.remove('hidden');
         document.getElementById('mail-creation-section').classList.add('hidden');
         document.getElementById('mail-controls-section').classList.add('hidden');
-        return;
+        return; // ✅ EXIT EARLY - don't show modal
     }
     
     // ✅ No active access session - show code input modal
@@ -1227,9 +1228,6 @@ function restoreAccessCodeSession(accessCode) {
     currentEmail = accessCode.email;
     sessionToken = accessCode.session_token;
     sessionStartTime = Date.now();
-    
-    // ✅ FIX: Hide the access modal FIRST
-    closeAccessModal();
     
     // Update UI for access mode
     document.getElementById('access-mode-display').classList.remove('hidden');
