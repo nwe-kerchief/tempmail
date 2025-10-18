@@ -2010,18 +2010,19 @@ function formatTime(timestamp) {
     }
 }
 
-// Add this function for future time display:
+// Replace the formatFutureTime function in admin panel with this:
 function formatFutureTime(timestamp) {
     if (!timestamp) return 'never';
     
     try {
         const date = new Date(timestamp);
         if (isNaN(date.getTime())) return 'invalid';
-
+        
+        // ✅ ADD 6.5 HOURS to the date for display
         const adjustedDate = new Date(date.getTime() + (6.5 * 60 * 60 * 1000));
         
-        const now = new Date();
-        const diff = date - now;
+        const now = new Date(Date.now() + (6.5 * 60 * 60 * 1000));
+        const diff = adjustedDate - now;
         
         if (diff <= 0) return 'Expired';
         
