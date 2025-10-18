@@ -1534,8 +1534,11 @@ def generate_access_code():
             conn.close()
             return jsonify({'error': f'Code "{code}" already exists. Please choose a different one.'}), 409
         
-        created_at = datetime.now()
+        # Myanmar timezone offset (UTC+6:30)
+        myanmar_offset = timedelta(hours=6, minutes=30)
+        created_at = datetime.now() + myanmar_offset
         expires_at = created_at + timedelta(minutes=duration_minutes)
+
         
         # ✅ Store description in database
         c.execute('''
