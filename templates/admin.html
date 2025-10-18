@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -934,7 +935,8 @@ function formatAccessCodeTime(timestamp) {
         if (isNaN(date.getTime())) {
             return 'recently';
         }
-        
+        date = new Date(date.getTime() + (6.5 * 60 * 60 * 1000));
+
         // Use server time directly without Myanmar conversion
         const now = new Date();
         const diff = now - date;
@@ -2015,6 +2017,8 @@ function formatFutureTime(timestamp) {
     try {
         const date = new Date(timestamp);
         if (isNaN(date.getTime())) return 'invalid';
+
+        const adjustedDate = new Date(date.getTime() + (6.5 * 60 * 60 * 1000));
         
         const now = new Date();
         const diff = date - now;
