@@ -193,6 +193,22 @@ max-height: 350px;
     }
 }
 
+/* Access Mode Colors */
+.access-mode {
+    background: linear-gradient(135deg, #1e3a8a 0%, #0f4c75 100%) !important;
+}
+
+.access-mode-bg {
+    background: rgba(15, 76, 117, 0.2) !important;
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(100, 200, 255, 0.3) !important;
+}
+
+.access-mode .glass-effect {
+    background: rgba(15, 76, 117, 0.25) !important;
+    border: 1px solid rgba(100, 200, 255, 0.2) !important;
+}
+
 /* iFrame Email System */
 .email-iframe-wrapper {
     width: 100%;
@@ -1223,6 +1239,7 @@ function loadSession() {
     return false;
 }
 
+// Add this to restoreAccessCodeSession to set access mode colors
 function restoreAccessCodeSession(accessCode) {
     console.log('🔄 Restoring access code session from localStorage');
     
@@ -1231,6 +1248,16 @@ function restoreAccessCodeSession(accessCode) {
     currentEmail = accessCode.email;
     sessionToken = accessCode.session_token;
     sessionStartTime = Date.now();
+    
+    // ✅ FORCE SHOW EMAIL LIST VIEW (not email content view)
+    showEmailList();
+
+    document.body.style.background = 'linear-gradient(135deg, #1e3a8a 0%, #0f4c75 100%)';
+    document.querySelector('main').style.background = 'rgba(15, 76, 117, 0.15)';
+    
+    // ✅ ADD ACCESS MODE COLORS
+    document.body.classList.add('access-mode');
+    document.querySelector('main').classList.add('access-mode-bg');
     
     // Update UI for access mode
     document.getElementById('access-mode-display').classList.remove('hidden');
@@ -1264,6 +1291,7 @@ function restoreAccessCodeSession(accessCode) {
     
     console.log('✅ Access code session restored successfully');
 }
+
 
 function startAccessCodeTimer(expiresAt) {
     console.log('⏰ Starting access code timer with expiration:', expiresAt);
@@ -2281,6 +2309,9 @@ function leaveAccessMode() {
             sessionToken = '';
             sessionStartTime = null;
             
+            // ✅ FORCE SHOW EMAIL LIST VIEW (not email content view)
+            showEmailList();
+            
             // Hide access mode UI, show normal mode UI
             document.getElementById('access-mode-display').classList.add('hidden');
             document.getElementById('mail-creation-section').classList.remove('hidden');
@@ -2298,6 +2329,10 @@ function leaveAccessMode() {
             document.getElementById('desktop-email-placeholder').style.display = 'flex';
             document.getElementById('desktop-email-content-inner').classList.add('hidden');
             
+            // ✅ REMOVE ACCESS MODE STYLES
+            document.body.style.background = '';
+            document.querySelector('main').style.background = '';
+            
             // Reset page title
             document.title = 'TempMail - AMMZ';
             
@@ -2307,7 +2342,6 @@ function leaveAccessMode() {
         }
     );
 }
-
 
 function viewEmail(email, itemEl) {
     // Set active state on the clicked email item
@@ -2418,6 +2452,10 @@ function showEmailList() {
     document.getElementById('email-content-view').classList.add('hidden');
     document.getElementById('header-title').textContent = 'Inbox';
     document.getElementById('back-to-list').classList.add('hidden');
+    
+    // Also for desktop
+    document.getElementById('desktop-email-placeholder').style.display = 'flex';
+    document.getElementById('desktop-email-content-inner').classList.add('hidden');
 }
 
 function startAutoRefresh() {
