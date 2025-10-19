@@ -1953,15 +1953,55 @@ def generate_access_code():
         except psycopg2.IntegrityError as e:
             # ✅ FIX: Handle duplicate code constraint
             conn.rollback()
-            conn.close()
             
             if 'access_codes_code_key' in str(e):
-                logger.warning(f"⚠️ Custom code already exists: {code}")
-                return jsonify({
-                    'error': f'Custom code "{code}" is already in use. Please choose a different code.'
-                }), 409
-            else:
-                raise e
+            # Check if the existing code is expired/revoked and can be deleted
+                c.execute('''
+                    SELECT code, expires_at, is_revoked 
+                    FROM access_codes 
+                    WHERE code = %s
+                ''', (code,))
+                
+                existing = c.fetchone()
+                
+                if existing:
+                    # Check if it's expired or revoked
+                    is_expired = existing['expires_at'] < datetime.now()
+                    is_revoked = existing.get('is_revoked', False)
+                    
+                    if is_expired or is_revoked:
+                        # Delete the old code and create new one
+                        logger.info(f"♻️ Reusing expired/revoked code: {code}")
+                        c.execute('DELETE FROM access_codes WHERE code = %s', (code,))
+                        
+                        # Now insert the new one
+                        c.execute('''
+                            INSERT INTO access_codes (code, email_address, description, created_at, expires_at, max_uses)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                        ''', (code, email_address, description, created_at, expires_at, max_uses))
+                        
+                        conn.commit()
+                        conn.close()
+                        
+                        return jsonify({
+                            'success': True,
+                            'code': code,
+                            'email_address': email_address,
+                            'description': description,
+                            'expires_at': expires_at.isoformat(),
+                            'max_uses': max_uses,
+                            'duration_minutes': duration_minutes
+                        })
+            
+            # If still active, return error
+            conn.close()
+            logger.warning(f"⚠️ Custom code already exists and is active: {code}")
+            return jsonify({
+                'error': f'Custom code "{code}" is already in use and still active. Please choose a different code or wait for it to expire.'
+            }), 409
+        else:
+            conn.close()
+            raise e
         
     except Exception as e:
         logger.error(f"❌ Error generating access code: {e}")
