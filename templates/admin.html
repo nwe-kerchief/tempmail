@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -320,6 +321,140 @@ button:hover {
     border: 1px solid rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(20px);
 }
+
+/* Responsive fixes for admin panel sections */
+@media (max-width: 768px) {
+    /* Blacklist section */
+    #blacklist-list .bg-gray-800 {
+        padding: 12px !important;
+    }
+    
+    #blacklist-list .flex.justify-between {
+        flex-direction: column !important;
+        gap: 8px !important;
+    }
+    
+    #blacklist-list .flex.items-center {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 4px !important;
+    }
+    
+    /* Access code generation form */
+    .bg-gray-800.rounded-lg.p-4.mb-4 .grid {
+        grid-template-columns: 1fr !important;
+        gap: 8px !important;
+    }
+    
+    .bg-gray-800.rounded-lg.p-4.mb-4 .col-span-2 {
+        grid-column: 1 !important;
+    }
+    
+    /* Individual access code items */
+    .access-code-item .flex.justify-between {
+        flex-direction: column !important;
+        gap: 12px !important;
+    }
+    
+    .access-code-item .flex-1 {
+        width: 100% !important;
+    }
+    
+    .access-code-item .flex.flex-col.gap-2 {
+        flex-direction: row !important;
+        justify-content: space-between !important;
+        width: 100% !important;
+    }
+    
+    .access-code-item .grid.grid-cols-2 {
+        grid-template-columns: 1fr !important;
+        gap: 8px !important;
+    }
+    
+    /* Buttons in access code items */
+    .access-code-item button {
+        flex: 1 !important;
+        min-width: 120px !important;
+    }
+}
+
+/* Additional mobile fixes for very small screens */
+@media (max-width: 640px) {
+    /* Blacklist items */
+    .blacklisted-item {
+        padding: 10px !important;
+    }
+    
+    .blacklisted-item .flex.justify-between {
+        flex-direction: column !important;
+        gap: 8px !important;
+    }
+    
+    .blacklisted-item .flex.items-center {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 4px !important;
+    }
+    
+    /* Access code generation inputs */
+    .bg-gray-800.rounded-lg.p-4.mb-4 input,
+    .bg-gray-800.rounded-lg.p-4.mb-4 select {
+        font-size: 14px !important;
+        padding: 10px 12px !important;
+    }
+    
+    /* Access code display */
+    .access-code-item code {
+        font-size: 14px !important;
+        word-break: break-all !important;
+    }
+    
+    .access-code-item .text-sm {
+        font-size: 12px !important;
+    }
+    
+    /* Stats cards */
+    .grid.grid-cols-1.md\:grid-cols-3 {
+        gap: 12px !important;
+    }
+    
+    .glass-effect.rounded-xl.p-4 {
+        padding: 16px !important;
+    }
+}
+
+/* Ensure proper text wrapping */
+.access-code-item p {
+    word-break: break-word !important;
+}
+
+.blacklisted-item span {
+    word-break: break-word !important;
+}
+
+/* Fix button sizes on mobile */
+@media (max-width: 640px) {
+    button {
+        min-height: 44px !important; /* Better touch targets */
+    }
+    
+    .bg-gray-800.rounded-lg.p-4.mb-4 button {
+        padding: 12px 16px !important;
+        font-size: 14px !important;
+    }
+}
+
+/* Improve grid layout for access codes */
+#access-codes-list {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+}
+
+.access-code-item {
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
 </style>
 </head>
 <body class="text-gray-100 min-h-screen p-4">
@@ -531,26 +666,72 @@ button:hover {
             </div>
         </div>
 
-        <!-- Updated Access Code Generation Form -->
+        <!-- Device Management Section -->
+        <div class="glass-effect rounded-xl p-4 md:p-6 fade-in">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                <h2 class="text-lg md:text-xl font-bold text-white">
+                    <i class="fas fa-laptop mr-2"></i>Device Management
+                </h2>
+                <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                    <input type="text" id="ban-device-input" placeholder="Enter Device ID to ban" 
+                        class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-red-500 focus:outline-none w-full sm:w-64 text-sm">
+                    <input type="text" id="ban-reason-input" placeholder="Ban reason (optional)" 
+                        class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-red-500 focus:outline-none w-full sm:w-48 text-sm">
+                    <button onclick="banDevice()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105 whitespace-nowrap text-sm">
+                        <i class="fas fa-ban mr-1"></i> Ban Device
+                    </button>
+                </div>
+            </div>
+
+            <!-- Banned Devices List -->
+            <div class="mb-6">
+                <h3 class="text-md font-semibold text-white mb-3">Banned Devices</h3>
+                <div id="banned-devices-list" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+                    <p class="text-gray-400 text-center py-4">Loading banned devices...</p>
+                </div>
+            </div>
+
+            <!-- Device Sessions (Analytics) -->
+            <div>
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-md font-semibold text-white">Recent Device Sessions</h3>
+                    <button onclick="loadDeviceSessions()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition-colors">
+                        <i class="fas fa-sync-alt mr-1"></i> Refresh
+                    </button>
+                </div>
+                <div id="device-sessions-list" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+                    <p class="text-gray-400 text-center py-4">Loading device sessions...</p>
+                </div>
+            </div>
+        </div>
+
+       <!-- Updated Access Code Generation Form -->
         <div class="bg-gray-800 rounded-lg p-4 mb-4">
-            <h3 class="text-white font-semibold mb-3">Generate New Access Code</h3>
+            <h3 class="text-white font-semibold mb-3 text-lg">Generate New Access Code</h3>
+            <div id="availability-result" class="hidden mb-3 p-3 rounded-lg text-sm font-medium"></div>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 mb-3">
-                <input type="text" id="generate-code-email" placeholder="Username" 
-                    class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm">
+                <div class="relative">
+                    <input type="text" id="generate-code-username" placeholder="Username" 
+                        class="w-full bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm"
+                        oninput="checkUsernameAvailability()">
+                    <div id="username-loading" class="hidden absolute right-3 top-2">
+                        <i class="fas fa-spinner fa-spin text-blue-400"></i>
+                    </div>
+                </div>
                 
-                <select id="generate-code-domain" class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm">
+                <select id="generate-code-domain" class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm w-full">
                     <option value="">Select domain</option>
                 </select>
 
                 <input type="text" id="generate-code-custom" placeholder="Custom code (optional)" 
-                    class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm uppercase font-mono"
+                    class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm uppercase font-mono w-full"
                     maxlength="12">
                 
                 <input type="text" id="generate-code-description" placeholder="Description (optional)" 
-                    class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm col-span-2"
+                    class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm w-full md:col-span-2"
                     maxlength="100">
                 
-                <select id="generate-code-duration" class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm">
+                <select id="generate-code-duration" class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm w-full">
                     <option value="60">1 Hour</option>
                     <option value="1440" selected>24 Hours</option>
                     <option value="10080">7 Days</option>
@@ -558,11 +739,11 @@ button:hover {
                 </select>
                 
                 <input type="number" id="generate-code-uses" placeholder="Max uses" 
-                    class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm"
+                    class="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none text-sm w-full"
                     min="1" max="1000" value="1">
             </div>
-            <button onclick="generateAccessCode()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-all transform hover:scale-105 text-sm w-full">
-                <i class="fas fa-plus mr-1"></i> Generate Access Code
+            <button id="generate-code-btn" onclick="generateAccessCode()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg transition-all transform hover:scale-105 text-sm w-full font-semibold">
+                <i class="fas fa-plus mr-2"></i> Generate Access Code
             </button>
         </div>
         <div id="access-codes-list" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
@@ -703,6 +884,7 @@ function showAdminDashboard() {
     loadAccessCodes();
     loadBlacklist();
     loadDomainsForAdmin();
+    loadDeviceData(); 
     
     // Start auto-refresh and countdown
     startAutoRefresh();
@@ -710,6 +892,7 @@ function showAdminDashboard() {
     
     showNotification('✅ Admin dashboard loaded successfully', 'success');
 }
+
 function startAccessCodeCountdown() {
     setInterval(() => {
         // Update all active access code displays
@@ -1033,52 +1216,221 @@ function removeFromBlacklist(username) {
     );
 }
 
+// Device Management Functions
+function loadBannedDevices() {
+    fetch(`${API_URL}/api/admin/banned-devices`, {
+        credentials: 'include'
+    })
+    .then(res => res.json())
+    .then(data => {
+        const list = document.getElementById('banned-devices-list');
+        
+        if (!data || data.error || !data.banned_devices || data.banned_devices.length === 0) {
+            list.innerHTML = '<p class="text-gray-400 text-center py-4">No banned devices</p>';
+            return;
+        }
+        
+        list.innerHTML = '';
+        
+        data.banned_devices.forEach(device => {
+            const item = document.createElement('div');
+            item.className = 'bg-red-900/20 border border-red-500 rounded-lg p-3 flex justify-between items-center';
+            item.innerHTML = `
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-1">
+                        <i class="fas fa-laptop text-red-400"></i>
+                        <code class="text-white font-mono text-sm break-all">${device.device_id}</code>
+                        ${device.is_active ? 
+                            '<span class="bg-red-500 text-white px-2 py-1 rounded text-xs font-bold">Banned</span>' : 
+                            '<span class="bg-green-500 text-white px-2 py-1 rounded text-xs font-bold">Unbanned</span>'
+                        }
+                    </div>
+                    <div class="text-xs text-gray-400">
+                        <div>Banned by: ${device.banned_by} • ${formatTime(device.banned_at)}</div>
+                        ${device.reason ? `<div>Reason: ${escapeHtml(device.reason)}</div>` : ''}
+                    </div>
+                </div>
+                ${device.is_active ? `
+                    <button onclick="unbanDevice('${device.device_id}')" 
+                            class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition-colors ml-3 flex items-center"
+                            title="Unban Device">
+                        <i class="fas fa-unlock mr-1"></i> Unban
+                    </button>
+                ` : ''}
+            `;
+            list.appendChild(item);
+        });
+    })
+    .catch(err => {
+        console.error('Error loading banned devices:', err);
+        document.getElementById('banned-devices-list').innerHTML = 
+            '<p class="text-red-400 text-center py-4">Failed to load banned devices</p>';
+    });
+}
+
+function loadDeviceSessions() {
+    fetch(`${API_URL}/api/admin/device-sessions`, {
+        credentials: 'include'
+    })
+    .then(res => res.json())
+    .then(data => {
+        const list = document.getElementById('device-sessions-list');
+        
+        if (!data || data.error || !data.device_sessions || data.device_sessions.length === 0) {
+            list.innerHTML = '<p class="text-gray-400 text-center py-4">No device sessions found</p>';
+            return;
+        }
+        
+        list.innerHTML = '';
+        
+        data.device_sessions.forEach(session => {
+            const item = document.createElement('div');
+            item.className = 'bg-gray-800 border border-gray-700 rounded-lg p-3';
+            item.innerHTML = `
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                            <i class="fas fa-laptop text-blue-400"></i>
+                            <code class="text-white font-mono text-sm break-all">${session.device_id}</code>
+                        </div>
+                        <div class="text-xs text-gray-400">
+                            <div>Email: ${escapeHtml(session.email_address)}</div>
+                            <div>Time: ${formatTime(session.created_at)}</div>
+                            ${session.ip_address ? `<div>IP: ${session.ip_address}</div>` : ''}
+                        </div>
+                    </div>
+                    <button onclick="banDeviceById('${session.device_id}')" 
+                            class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm transition-colors ml-3 flex items-center"
+                            title="Ban This Device">
+                        <i class="fas fa-ban mr-1"></i> Ban
+                    </button>
+                </div>
+            `;
+            list.appendChild(item);
+        });
+    })
+    .catch(err => {
+        console.error('Error loading device sessions:', err);
+        document.getElementById('device-sessions-list').innerHTML = 
+            '<p class="text-red-400 text-center py-4">Failed to load device sessions</p>';
+    });
+}
+
+function banDevice() {
+    const deviceId = document.getElementById('ban-device-input').value.trim();
+    const reason = document.getElementById('ban-reason-input').value.trim();
+    
+    if (!deviceId) {
+        showNotification('❌ Please enter a Device ID', 'error');
+        return;
+    }
+    
+    fetch(`${API_URL}/api/admin/ban-device`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'include',
+        body: JSON.stringify({ device_id: deviceId, reason: reason })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(`✅ Device ${deviceId} banned successfully`, 'success');
+            document.getElementById('ban-device-input').value = '';
+            document.getElementById('ban-reason-input').value = '';
+            loadBannedDevices();
+            loadDeviceSessions();
+        } else {
+            showNotification(`❌ ${data.error}`, 'error');
+        }
+    })
+    .catch(err => {
+        console.error('Error banning device:', err);
+        showNotification('❌ Error banning device', 'error');
+    });
+}
+
+function banDeviceById(deviceId) {
+    document.getElementById('ban-device-input').value = deviceId;
+    document.getElementById('ban-reason-input').focus();
+}
+
+function unbanDevice(deviceId) {
+    showModal(
+        'Unban Device',
+        `Are you sure you want to unban device <strong>${deviceId}</strong>?`,
+        function() {
+            fetch(`${API_URL}/api/admin/unban-device/${encodeURIComponent(deviceId)}`, {
+                method: 'POST',
+                credentials: 'include'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(`✅ Device ${deviceId} unbanned successfully`, 'success');
+                    loadBannedDevices();
+                } else {
+                    showNotification(`❌ ${data.error}`, 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error unbanning device:', err);
+                showNotification('❌ Error unbanning device', 'error');
+            });
+        }
+    );
+}
+
+// Load device data when admin panel loads
+function loadDeviceData() {
+    loadBannedDevices();
+    loadDeviceSessions();
+}
+
+
 
 function generateAccessCode() {
-    const username = document.getElementById('generate-code-email').value.trim();
+    const usernameInput = document.getElementById('generate-code-username');
+    const username = usernameInput ? usernameInput.value.trim() : '';
     const domainSelect = document.getElementById('generate-code-domain');
-    const domain = domainSelect.value;
-    const customCode = document.getElementById('generate-code-custom').value.trim();
-    const description = document.getElementById('generate-code-description').value.trim();
+    const domain = domainSelect ? domainSelect.value : 'aungmyomyatzaw.online';
+    const customCodeInput = document.getElementById('generate-code-custom');
+    const customCode = customCodeInput ? customCodeInput.value.trim() : '';
+    const descriptionInput = document.getElementById('generate-code-description');
+    const description = descriptionInput ? descriptionInput.value.trim() : '';
     const durationSelect = document.getElementById('generate-code-duration');
-    const maxUses = parseInt(document.getElementById('generate-code-uses').value) || 1;
+    const durationMinutes = durationSelect ? parseInt(durationSelect.value) : 1440;
+    const usesInput = document.getElementById('generate-code-uses');
+    const maxUses = usesInput ? parseInt(usesInput.value) || 1 : 1;
+    
+    console.log('📝 Generating access code with:', {
+        username: username,
+        domain: domain,
+        customCode: customCode,
+        description: description,
+        durationMinutes: durationMinutes,
+        maxUses: maxUses
+    });
     
     if (!username) {
         showNotification('❌ Please enter a username', 'error');
         return;
     }
     
-    if (!domain) {
-        showNotification('❌ Please select a domain', 'error');
-        return;
+    const generateBtn = document.getElementById('generate-code-btn');
+    if (generateBtn) {
+        generateBtn.disabled = true;
+        generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Generating...';
     }
     
-    // Validate username format
-    if (!/^[a-zA-Z0-9-_]+$/.test(username)) {
-        showNotification('❌ Username can only contain letters, numbers, hyphens, and underscores', 'error');
-        return;
-    }
-    
-    const email = `${username}@${domain}`;
-    
-    // Rest of your existing generateAccessCode function remains the same...
-    let durationMinutes;
-    if (durationSelect.value === 'custom') {
-        durationMinutes = parseInt(customMinutes);
-        if (!durationMinutes || durationMinutes < 1) {
-            showNotification('❌ Please enter valid custom minutes', 'error');
-            return;
-        }
-    } else {
-        durationMinutes = parseInt(durationSelect.value);
-    }
-    
+    // ✅ FIX: Proper request data structure
     const requestData = {
-        email_address: email,
-        max_uses: maxUses,
-        duration_minutes: durationMinutes
+        username: username,
+        domain: domain,
+        duration_minutes: durationMinutes,
+        max_uses: maxUses
     };
     
+    // Only include if provided
     if (customCode) {
         requestData.custom_code = customCode;
     }
@@ -1087,35 +1439,70 @@ function generateAccessCode() {
         requestData.description = description;
     }
     
-    // Rest of your existing fetch code...
+    console.log('📤 Sending request data:', requestData);
+    
     fetch(`${API_URL}/api/admin/access-codes/generate`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+            'Content-Type': 'application/json'
+        },
         credentials: 'include',
         body: JSON.stringify(requestData)
     })
-    .then(res => res.json())
+    .then(res => {
+        console.log('📥 Response status:', res.status);
+        if (!res.ok) {
+            return res.json().then(errorData => {
+                console.log('📥 Error response:', errorData);
+                throw new Error(errorData.error || `HTTP ${res.status}`);
+            });
+        }
+        return res.json();
+    })
     .then(data => {
+        console.log('📥 Success response:', data);
         if (data.success) {
             showNotification(`✅ Access code generated: ${data.code} for ${data.email_address}`, 'success');
+            
             // Clear form
-            document.getElementById('generate-code-email').value = '';
-            document.getElementById('generate-code-custom').value = '';
-            document.getElementById('generate-code-description').value = '';
-            document.getElementById('generate-code-uses').value = '1';
-            durationSelect.value = '1440';
-            // Reload list
+            if (usernameInput) usernameInput.value = '';
+            if (customCodeInput) customCodeInput.value = '';
+            if (descriptionInput) descriptionInput.value = '';
+            
+            // Hide availability result
+            const availabilityResult = document.getElementById('availability-result');
+            if (availabilityResult) availabilityResult.classList.add('hidden');
+            
+            // Reload access codes list
             loadAccessCodes();
         } else {
             showNotification(`❌ ${data.error}`, 'error');
         }
     })
     .catch(err => {
-        console.error('Error generating access code:', err);
-        showNotification('❌ Error generating access code', 'error');
+        console.error('❌ Error generating access code:', err);
+        let errorMessage = err.message || 'Error generating access code';
+        
+        // Better error messages
+        if (err.message.includes('username is required')) {
+            errorMessage = 'Username is required';
+        } else if (err.message.includes('already exists')) {
+            errorMessage = 'This custom code is already in use. Please choose a different one.';
+        } else if (err.message.includes('blacklisted')) {
+            errorMessage = 'This username is blacklisted. Please choose a different one.';
+        } else if (err.message.includes('active session')) {
+            errorMessage = 'This username has an active session. Please choose a different one or wait for the session to expire.';
+        }
+        
+        showNotification(`❌ ${errorMessage}`, 'error');
+    })
+    .finally(() => {
+        if (generateBtn) {
+            generateBtn.disabled = false;
+            generateBtn.innerHTML = '<i class="fas fa-plus mr-2"></i> Generate Access Code';
+        }
     });
 }
-
 function revokeAccessCode(code) {
     if (!code) {
         showNotification('❌ No access code provided', 'error');
@@ -1504,6 +1891,16 @@ function renderAddressList(addresses) {
                 ? 'bg-red-900/20 border-red-500 hover:bg-red-800/30' 
                 : 'bg-gray-800 border-gray-700 hover:border-gray-600 hover:bg-gray-700'
         }`;
+
+        // Access code badges
+        const accessCodeBadges = [];
+        if (addr.has_active_access_code) {
+            accessCodeBadges.push('<span class="bg-blue-500 text-white px-2 py-1 rounded text-xs font-bold flex items-center"><i class="fas fa-key mr-1"></i>Active Access</span>');
+        }
+        if (addr.has_valid_access_code) {
+            accessCodeBadges.push('<span class="bg-green-500 text-white px-2 py-1 rounded text-xs font-bold flex items-center"><i class="fas fa-unlock mr-1"></i>Valid Code</span>');
+        }
+
         
         item.innerHTML = `
             <div class="flex justify-between items-start">
@@ -1518,6 +1915,7 @@ function renderAddressList(addresses) {
                                 '<span class="bg-red-500 text-white px-2 py-1 rounded text-xs font-bold flex-shrink-0 ml-2 flex items-center"><i class="fas fa-ban mr-1"></i>Blacklisted</span>' : 
                                 ''
                             }
+                            ${accessCodeBadges.join('')}
                         </div>
                     </div>
                     
@@ -1748,7 +2146,7 @@ function viewEmails(address) {
                     <div class="flex-1">
                         <p class="text-white font-semibold text-xs md:text-sm truncate">${escapeHtml(email.sender || 'Unknown')}</p>
                         <p class="text-gray-300 text-xs md:text-sm font-medium mt-1">${escapeHtml(email.subject || 'No subject')}</p>
-                        <p class="text-xs text-gray-400 mt-1">${formatTime(email.timestamp)}</p>
+                        <p class="text-xs text-gray-400 mt-1">${email.display_time}</p>
                     </div>
                     <button onclick="event.stopPropagation(); deleteEmail(${email.id})" 
                             class="text-red-400 hover:text-red-300 p-1 md:p-2 rounded transition-colors ml-2" 
@@ -1782,6 +2180,19 @@ function viewFullAdminEmail(email) {
     document.getElementById('admin-email-subject').textContent = email.subject || 'No subject';
     document.getElementById('admin-email-from').textContent = email.sender || 'Unknown';
     document.getElementById('admin-email-date').textContent = formatTime(email.timestamp);
+
+     // Add access code info if available
+    const emailHeader = document.querySelector('#admin-email-content-view .border-b');
+    if (email.is_access_code && email.access_code) {
+        const accessCodeInfo = document.createElement('div');
+        accessCodeInfo.className = 'flex items-center text-xs text-blue-400 mt-2';
+        accessCodeInfo.innerHTML = `
+            <i class="fas fa-key mr-1"></i>
+            <strong>Access Code:</strong> ${email.access_code}
+            ${email.access_code_description ? ` - ${email.access_code_description}` : ''}
+        `;
+        emailHeader.appendChild(accessCodeInfo);
+    }
     
     const iframe = document.getElementById('admin-email-iframe');
     const fallback = document.getElementById('admin-email-fallback');
@@ -2085,48 +2496,50 @@ function loadAccessCodes() {
             item.className = `p-4 rounded-lg border ${statusClass} transition-all hover:scale-[1.02] access-code-item`;
             
             item.innerHTML = `
-                <div class="flex justify-between items-start">
-                    <div class="flex-1">
-                        <div class="flex items-center gap-2 mb-2">
-                            <code class="text-white font-mono font-bold text-lg bg-black/30 px-2 py-1 rounded">${code.code}</code>
-                            ${isExpired ? '<span class="bg-red-500 text-white px-2 py-1 rounded text-xs font-bold">Expired</span>' : ''}
-                            ${isRevoked ? '<span class="bg-red-500 text-white px-2 py-1 rounded text-xs font-bold">Revoked</span>' : ''}
-                            ${isUsedUp ? '<span class="bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold">Used Up</span>' : ''}
-                            ${!isExpired && !isRevoked && !isUsedUp ? '<span class="bg-green-500 text-white px-2 py-1 rounded text-xs font-bold">Active</span>' : ''}
+                <div class="flex flex-col md:flex-row justify-between items-start gap-4">
+                    <div class="flex-1 min-w-0 w-full">
+                        <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
+                            <code class="text-white font-mono font-bold text-lg bg-black/30 px-3 py-2 rounded break-all w-full sm:w-auto">${code.code}</code>
+                            <div class="flex flex-wrap gap-2">
+                                ${isExpired ? '<span class="bg-red-500 text-white px-3 py-1 rounded text-xs font-bold whitespace-nowrap">Expired</span>' : ''}
+                                ${isRevoked ? '<span class="bg-red-500 text-white px-3 py-1 rounded text-xs font-bold whitespace-nowrap">Revoked</span>' : ''}
+                                ${isUsedUp ? '<span class="bg-orange-500 text-white px-3 py-1 rounded text-xs font-bold whitespace-nowrap">Used Up</span>' : ''}
+                                ${!isExpired && !isRevoked && !isUsedUp ? '<span class="bg-green-500 text-white px-3 py-1 rounded text-xs font-bold whitespace-nowrap">Active</span>' : ''}
+                            </div>
                         </div>
-                        <p class="text-white font-medium mb-1">${code.email_address}</p>
-                        ${code.description ? `<p class="text-gray-300 text-sm mb-2">${escapeHtml(code.description)}</p>` : ''}
-                        <div class="grid grid-cols-2 gap-4 text-sm text-gray-300">
-                            <div>
-                                <i class="fas fa-clock mr-1"></i>
-                                ${isExpired ? 'Expired' : `Expires: ${timeRemaining}`}
+                        <p class="text-white font-medium mb-1 break-words">${code.email_address}</p>
+                        ${code.description ? `<p class="text-gray-300 text-sm mb-2 break-words">${escapeHtml(code.description)}</p>` : ''}
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-300">
+                            <div class="flex items-center">
+                                <i class="fas fa-clock mr-2 text-xs"></i>
+                                <span>${isExpired ? 'Expired' : `Expires: ${timeRemaining}`}</span>
                             </div>
-                            <div>
-                                <i class="fas fa-chart-bar mr-1"></i>
-                                Uses: ${code.used_count || 0}/${code.max_uses}
+                            <div class="flex items-center">
+                                <i class="fas fa-chart-bar mr-2 text-xs"></i>
+                                <span>Uses: ${code.used_count || 0}/${code.max_uses}</span>
                             </div>
-                            <div>
-                                <i class="fas fa-calendar mr-1"></i>
-                                Created: ${createdTime}
+                            <div class="flex items-center">
+                                <i class="fas fa-calendar mr-2 text-xs"></i>
+                                <span>Created: ${createdTime}</span>
                             </div>
-                            <div>
-                                <i class="fas fa-bolt mr-1"></i>
-                                Status: ${isRevoked ? 'Revoked' : isExpired ? 'Expired' : isUsedUp ? 'Used Up' : 'Active'}
+                            <div class="flex items-center">
+                                <i class="fas fa-bolt mr-2 text-xs"></i>
+                                <span>Status: ${isRevoked ? 'Revoked' : isExpired ? 'Expired' : isUsedUp ? 'Used Up' : 'Active'}</span>
                             </div>
                         </div>
                     </div>
-                    <div class="flex flex-col gap-2 ml-4">
+                    <div class="flex flex-row md:flex-col gap-2 w-full md:w-auto">
                         ${!isRevoked && !isExpired ? `
                             <button onclick="revokeAccessCode('${code.code}')" 
-                                    class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm transition-colors flex items-center"
+                                    class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm transition-colors flex items-center justify-center flex-1 md:flex-none"
                                     title="Revoke Code">
-                                <i class="fas fa-ban mr-1"></i>Revoke
+                                <i class="fas fa-ban mr-2"></i>Revoke
                             </button>
                         ` : ''}
                         <button onclick="copyToClipboard('${code.code}')" 
-                                class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm transition-colors flex items-center"
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm transition-colors flex items-center justify-center flex-1 md:flex-none"
                                 title="Copy Code">
-                            <i class="fas fa-copy mr-1"></i>Copy
+                            <i class="fas fa-copy mr-2"></i>Copy
                         </button>
                     </div>
                 </div>
