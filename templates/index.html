@@ -1882,6 +1882,7 @@ function loadEmails() {
     .finally(() => {
         loader.style.display = 'none';
         window.emailFetchController = null;
+        window.emailLoadingInProgress = false;
     });
 }
 
