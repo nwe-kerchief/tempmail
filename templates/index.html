@@ -2513,6 +2513,8 @@ function leaveAccessMode() {
         function() {
             // ✅ Switch to normal mode but keep access session data
             isAccessMode = false;
+
+             window.accessModalOpening = false;
             
             // Stop access mode timers
             if (window.accessCodeTimer) {
