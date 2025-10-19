@@ -216,16 +216,6 @@ def init_db():
             )
         ''')
 
-                # Indexes
-        c.execute('CREATE INDEX IF NOT EXISTS idx_device_id ON device_sessions(device_id)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_banned_devices ON banned_devices(device_id, is_active)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_recipient ON emails(recipient)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_session ON emails(session_token)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_received_at ON emails(received_at)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_email_address ON sessions(email_address)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_is_active ON sessions(is_active)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_blacklist_username ON blacklist(username)')
-
         # Insert initial blacklist
         for username in INITIAL_BLACKLIST:
             try:
@@ -237,18 +227,40 @@ def init_db():
             except Exception as e:
                 logger.warning(f"Could not insert blacklist user {username}: {e}")
         
+        indexes = [
+            'CREATE INDEX IF NOT EXISTS idx_recipient ON emails(recipient)',
+            'CREATE INDEX IF NOT EXISTS idx_session ON emails(session_token)',
+            'CREATE INDEX IF NOT EXISTS idx_received_at ON emails(received_at)',
+            'CREATE INDEX IF NOT EXISTS idx_email_address ON sessions(email_address)',
+            'CREATE INDEX IF NOT EXISTS idx_is_active ON sessions(is_active)',
+            'CREATE INDEX IF NOT EXISTS idx_blacklist_username ON blacklist(username)',
+            'CREATE INDEX IF NOT EXISTS idx_device_id ON device_sessions(device_id)',
+            'CREATE INDEX IF NOT EXISTS idx_banned_devices ON banned_devices(device_id, is_active)'
+        ]
+        
         for index_sql in indexes:
             try:
                 c.execute(index_sql)
             except Exception as e:
                 logger.warning(f"Could not create index: {e}")
         
-        conn.close()
-        logger.info("✅ Database initialized successfully with all tables")
+        for username in INITIAL_BLACKLIST:
+            try:
+                c.execute('''
+                    INSERT INTO blacklist (username, added_at) 
+                    VALUES (%s, %s)
+                    ON CONFLICT (username) DO NOTHING
+                ''', (username, datetime.now()))
+            except Exception as e:
+                logger.warning(f"Could not insert blacklist user {username}: {e}")
 
+        conn.close()
+
+        migrate_existing_emails()
+
+        logger.info("✅ Database initialized successfully")
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
-
 
 # Admin required decorator
 def admin_required(f):
@@ -968,19 +980,6 @@ def get_banned_devices():
     try:
         conn = get_db()
         c = conn.cursor(cursor_factory=RealDictCursor)
-
-        # Check if table exists
-        c.execute("""
-            SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_name = 'banned_devices'
-            );
-        """)
-        table_exists = c.fetchone()['exists']
-        
-        if not table_exists:
-            conn.close()
-            return jsonify({'banned_devices': [], 'message': 'Banned devices table not created yet'})
         
         c.execute('''
             SELECT device_id, banned_at, banned_by, reason, is_active
@@ -1003,7 +1002,7 @@ def get_banned_devices():
         
     except Exception as e:
         logger.error(f"❌ Error getting banned devices: {e}")
-        return jsonify({'error': str(e), 'banned_devices': []}), 200
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/ban-device', methods=['POST'])
 @admin_required
@@ -1051,18 +1050,6 @@ def ban_device():
     except Exception as e:
         logger.error(f"❌ Error banning device: {e}")
         return jsonify({'error': str(e)}), 500
-    
-@app.route('/api/admin/init-db', methods=['POST'])
-@admin_required
-def admin_init_db():
-    """Force re-initialize database tables"""
-    try:
-        init_db()
-        return jsonify({'success': True, 'message': 'Database re-initialized successfully'})
-    except Exception as e:
-        logger.error(f"❌ Database re-initialization failed: {e}")
-        return jsonify({'error': str(e)}), 500
-    
 
 @app.route('/api/admin/unban-device/<device_id>', methods=['POST'])
 @admin_required
@@ -1102,19 +1089,6 @@ def get_device_sessions():
     try:
         conn = get_db()
         c = conn.cursor(cursor_factory=RealDictCursor)
-
-         # Check if table exists first
-        c.execute("""
-            SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_name = 'device_sessions'
-            );
-        """)
-        table_exists = c.fetchone()['exists']
-        
-        if not table_exists:
-            conn.close()
-            return jsonify({'device_sessions': [], 'message': 'Device sessions table not created yet'})
         
         c.execute('''
             SELECT device_id, email_address, created_at, user_agent, ip_address
@@ -1138,7 +1112,7 @@ def get_device_sessions():
         
     except Exception as e:
         logger.error(f"❌ Error getting device sessions: {e}")
-        return jsonify({'error': str(e), 'device_sessions': []}), 200
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/session/end', methods=['POST'])
 def end_session():
@@ -1768,10 +1742,17 @@ def admin_get_emails(email_address):
         c = conn.cursor(cursor_factory=RealDictCursor)
         
         c.execute('''
-            SELECT id, sender, subject, body, received_at, timestamp
-            FROM emails 
-            WHERE recipient = %s 
-            ORDER BY received_at DESC
+            SELECT 
+                e.id, e.sender, e.subject, e.body, e.received_at, e.timestamp,
+                COALESCE(s.is_access_code, FALSE) as is_access_code,
+                s.session_token,
+                ac.code as access_code,
+                ac.description as access_code_description
+            FROM emails e
+            LEFT JOIN sessions s ON e.session_token = s.session_token
+            LEFT JOIN access_codes ac ON s.session_token LIKE ac.code || '%'
+            WHERE e.recipient = %s 
+            ORDER BY e.received_at DESC
         ''', (email_address,))
         
         emails = []
@@ -2452,6 +2433,13 @@ def health():
         'domain': DOMAIN,
         'timestamp': datetime.utcnow().isoformat()
     })
+
+with app.app_context():
+    try:
+        init_db()
+        logger.info("✅ Database initialized successfully on startup")
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed on startup: {e}")
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
