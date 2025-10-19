@@ -932,11 +932,12 @@ def create_email():
         created_at = datetime.now()
         expires_at = created_at + timedelta(hours=1)
         
-        # Insert new session
+        is_admin = admin_mode if 'admin_mode' in locals() else False
+
         c.execute('''
-            INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity, is_active)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        ''', (session_token, email_address, created_at, expires_at, created_at, True))
+            INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity, is_active, is_admin_session)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ''', (session_token, email_address, created_at, expires_at, created_at, True, is_admin))
 
         if device_id:
             user_agent = request.headers.get('User-Agent', '')
@@ -1750,6 +1751,7 @@ def admin_get_emails(email_address):
                 e.received_at,
                 e.timestamp,
                 COALESCE(s.is_access_code, FALSE) AS is_access_code,
+                COALESCE(s.is_admin_session, FALSE) AS is_admin_session,
                 s.session_token,
                 ac.code AS access_code,
                 ac.description AS access_code_description
@@ -1803,6 +1805,7 @@ def admin_get_emails(email_address):
                 'timestamp': row.get('timestamp'),
                 'display_time': display_time,
                 'is_access_code': row.get('is_access_code', False),
+                'is_admin_session': row.get('is_admin_session', False),
                 'access_code': row.get('access_code'),
                 'access_code_description': row.get('access_code_description')
             }
