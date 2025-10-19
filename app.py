@@ -1,5 +1,6 @@
 
 
+
 from flask import Flask, request, jsonify, render_template, session
 from flask_cors import CORS
 import os
@@ -53,6 +54,37 @@ APP_PASSWORD = os.getenv('APP_PASSWORD', 'admin123')
 DOMAIN = os.getenv('DOMAIN', 'aungmyomyatzaw.online')
 DATABASE_URL = os.getenv('DATABASE_URL')
 
+def is_device_banned(device_id):
+    """Check if device is banned"""
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('''
+            SELECT device_id FROM banned_devices 
+            WHERE device_id = %s AND is_active = TRUE
+        ''', (device_id,))
+        result = c.fetchone()
+        conn.close()
+        return result is not None
+    except Exception as e:
+        logger.error(f"Error checking device ban: {e}")
+        return False
+
+def track_device_session(device_id, email_address, session_token, user_agent=None, ip_address=None):
+    """Track device session for analytics and banning"""
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO device_sessions (device_id, email_address, session_token, created_at, user_agent, ip_address)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        ''', (device_id, email_address, session_token, datetime.now(), user_agent, ip_address))
+        conn.commit()
+        conn.close()
+        logger.info(f"📱 Device session tracked: {device_id} -> {email_address}")
+    except Exception as e:
+        logger.error(f"Error tracking device session: {e}")
+
 # Enhanced database connection with retry logic
 def get_db():
     max_retries = 3
@@ -70,6 +102,38 @@ def get_db():
             else:
                 logger.error("All database connection attempts failed")
                 raise
+def migrate_existing_emails():
+    """Migrate existing emails to ensure all emails for same address are grouped"""
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Find emails with NULL session_token and try to associate them with sessions
+        c.execute('''
+            UPDATE emails e
+            SET session_token = (
+                SELECT s.session_token 
+                FROM sessions s 
+                WHERE s.email_address = e.recipient 
+                AND s.created_at <= e.received_at 
+                AND s.expires_at >= e.received_at
+                ORDER BY s.created_at DESC 
+                LIMIT 1
+            )
+            WHERE e.session_token IS NULL
+        ''')
+        
+        updated_count = c.rowcount
+        conn.commit()
+        conn.close()
+        
+        if updated_count > 0:
+            logger.info(f"✅ Migrated {updated_count} emails to proper session association")
+        
+    except Exception as e:
+        logger.warning(f"Migration note: {e}")
+
+
 
 def init_db():
     try:
@@ -129,6 +193,33 @@ def init_db():
             )
         ''')
 
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS banned_devices (
+                id SERIAL PRIMARY KEY,
+                device_id TEXT UNIQUE NOT NULL,
+                banned_at TIMESTAMP NOT NULL,
+                banned_by TEXT DEFAULT 'system',
+                reason TEXT DEFAULT '',
+                is_active BOOLEAN DEFAULT TRUE
+            )
+        ''')
+
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS device_sessions (
+                id SERIAL PRIMARY KEY,
+                device_id TEXT NOT NULL,
+                email_address TEXT NOT NULL,
+                session_token TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL,
+                user_agent TEXT,
+                ip_address TEXT
+            )
+        ''')
+
+        # Indexes
+        c.execute('CREATE INDEX IF NOT EXISTS idx_device_id ON device_sessions(device_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_banned_devices ON banned_devices(device_id, is_active)')
+
         # Insert initial blacklist
         for username in INITIAL_BLACKLIST:
             try:
@@ -173,21 +264,6 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-init_db()
-
-# Migration: Add description column to access_codes table if it doesn't exist
-try:
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("""
-        ALTER TABLE access_codes 
-        ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''
-    """)
-    conn.commit()
-    conn.close()
-    logger.info("✅ Migration: description column added to access_codes")
-except Exception as e:
-    logger.warning(f"Migration note: {e}")
 
 def is_username_blacklisted(username):
     """Check if username is blacklisted in database"""
@@ -741,6 +817,15 @@ def create_email():
         custom_name = data.get('name', '').strip()
         admin_mode = data.get('admin_mode', False)
         current_session_token = data.get('current_session_token')
+        device_id = data.get('device_id', '')
+        
+        # ✅ Check if device is banned
+        if device_id and is_device_banned(device_id):
+            logger.warning(f"🚫 Banned device attempted access: {device_id}")
+            return jsonify({
+                'error': 'ACCESS_DENIED_DEVICE_BANNED',
+                'message': 'Your device has been banned from using this service.'
+            }), 403
         
         # Validate security headers
         session_id = request.headers.get('X-Session-ID')
@@ -845,6 +930,12 @@ def create_email():
             INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity, is_active)
             VALUES (%s, %s, %s, %s, %s, %s)
         ''', (session_token, email_address, created_at, expires_at, created_at, True))
+
+        if device_id:
+            user_agent = request.headers.get('User-Agent', '')
+            ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+            track_device_session(device_id, email_address, session_token, user_agent, ip_address)
+            logger.info(f"📱 Device session tracked: {device_id} -> {email_address}")
         
         # If admin mode is enabled, automatically add to blacklist
         if admin_mode and custom_name:
@@ -867,12 +958,154 @@ def create_email():
             'email': email_address,
             'session_token': session_token,
             'expires_at': expires_at.isoformat(),
-            'existing_session': False
+            'existing_session': False,
+            'device_tracked': bool(device_id)  # ✅ Confirm device tracking
         })
         
     except Exception as e:
         logger.error(f"❌ Error creating email: {e}")
         return jsonify({'error': 'Failed to create session', 'code': 'SERVER_ERROR'}), 500
+    
+@app.route('/api/admin/banned-devices', methods=['GET'])
+@admin_required
+def get_banned_devices():
+    """Get all banned devices"""
+    try:
+        conn = get_db()
+        c = conn.cursor(cursor_factory=RealDictCursor)
+        
+        c.execute('''
+            SELECT device_id, banned_at, banned_by, reason, is_active
+            FROM banned_devices
+            ORDER BY banned_at DESC
+        ''')
+        
+        devices = []
+        for row in c.fetchall():
+            devices.append({
+                'device_id': row['device_id'],
+                'banned_at': row['banned_at'].isoformat(),
+                'banned_by': row['banned_by'],
+                'reason': row['reason'],
+                'is_active': row['is_active']
+            })
+        
+        conn.close()
+        return jsonify({'banned_devices': devices})
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting banned devices: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/ban-device', methods=['POST'])
+@admin_required
+def ban_device():
+    """Ban a device"""
+    try:
+        data = request.get_json() or {}
+        device_id = data.get('device_id', '').strip()
+        reason = data.get('reason', '').strip()
+        
+        if not device_id:
+            return jsonify({'error': 'Device ID is required'}), 400
+        
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Check if already banned
+        c.execute('SELECT device_id FROM banned_devices WHERE device_id = %s', (device_id,))
+        if c.fetchone():
+            conn.close()
+            return jsonify({'error': 'Device is already banned'}), 409
+        
+        # Ban the device
+        c.execute('''
+            INSERT INTO banned_devices (device_id, banned_at, banned_by, reason)
+            VALUES (%s, %s, %s, %s)
+        ''', (device_id, datetime.now(), 'admin', reason))
+        
+        # End all active sessions for this device
+        c.execute('''
+            UPDATE sessions 
+            SET is_active = FALSE 
+            WHERE session_token IN (
+                SELECT session_token FROM device_sessions 
+                WHERE device_id = %s
+            )
+        ''', (device_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"✅ Device banned: {device_id} - Reason: {reason}")
+        return jsonify({'success': True, 'message': f'Device {device_id} banned successfully'})
+        
+    except Exception as e:
+        logger.error(f"❌ Error banning device: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/unban-device/<device_id>', methods=['POST'])
+@admin_required
+def unban_device(device_id):
+    """Unban a device"""
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Check if device exists
+        c.execute('SELECT device_id FROM banned_devices WHERE device_id = %s', (device_id,))
+        if not c.fetchone():
+            conn.close()
+            return jsonify({'error': 'Device not found in ban list'}), 404
+        
+        # Unban the device
+        c.execute('''
+            UPDATE banned_devices 
+            SET is_active = FALSE 
+            WHERE device_id = %s
+        ''', (device_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"✅ Device unbanned: {device_id}")
+        return jsonify({'success': True, 'message': f'Device {device_id} unbanned successfully'})
+        
+    except Exception as e:
+        logger.error(f"❌ Error unbanning device: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/device-sessions', methods=['GET'])
+@admin_required
+def get_device_sessions():
+    """Get all device sessions for analytics"""
+    try:
+        conn = get_db()
+        c = conn.cursor(cursor_factory=RealDictCursor)
+        
+        c.execute('''
+            SELECT device_id, email_address, created_at, user_agent, ip_address
+            FROM device_sessions
+            ORDER BY created_at DESC
+            LIMIT 100
+        ''')
+        
+        sessions = []
+        for row in c.fetchall():
+            sessions.append({
+                'device_id': row['device_id'],
+                'email_address': row['email_address'],
+                'created_at': row['created_at'].isoformat(),
+                'user_agent': row['user_agent'],
+                'ip_address': row['ip_address']
+            })
+        
+        conn.close()
+        return jsonify({'device_sessions': sessions})
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting device sessions: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/session/end', methods=['POST'])
 def end_session():
@@ -1423,21 +1656,58 @@ def admin_addresses():
         conn = get_db()
         c = conn.cursor(cursor_factory=RealDictCursor)
         
-        # ✅ FIX: Get ALL addresses with ALL emails (not just session-based)
+        # ✅ FIX: Get ALL addresses with access code information
         c.execute('''
             SELECT 
-                recipient as address, 
+                e.recipient as address, 
                 COUNT(*) as count, 
-                MAX(received_at) as last_email_time
-            FROM emails
-            GROUP BY recipient
-            ORDER BY MAX(received_at) DESC
+                MAX(e.received_at) as last_email_time,
+                EXISTS(
+                    SELECT 1 FROM sessions s 
+                    WHERE s.email_address = e.recipient 
+                    AND s.is_access_code = TRUE
+                    AND s.is_active = TRUE
+                    AND s.expires_at > NOW()
+                ) as has_active_access_code,
+                EXISTS(
+                    SELECT 1 FROM access_codes ac 
+                    WHERE ac.email_address = e.recipient 
+                    AND ac.is_active = TRUE
+                    AND ac.expires_at > NOW()
+                    AND ac.used_count < ac.max_uses
+                ) as has_valid_access_code
+            FROM emails e
+            GROUP BY e.recipient
+            ORDER BY MAX(e.received_at) DESC
         ''')
         
         addresses = []
         for row in c.fetchall():
             if row['last_email_time']:
-                last_email_str = format_time(row['last_email_time'])
+                last_email_time_utc = row['last_email_time']
+                myanmar_offset = timedelta(hours=6, minutes=30)
+                last_email_time_myanmar = last_email_time_utc + myanmar_offset
+                
+                now_utc = datetime.utcnow()
+                now_myanmar = now_utc + myanmar_offset
+                
+                diff = now_myanmar - last_email_time_myanmar
+                
+                seconds = diff.total_seconds()
+                minutes = seconds // 60
+                hours = minutes // 60
+                days = hours // 24
+                
+                if seconds < 60:
+                    last_email_str = 'just now'
+                elif minutes < 60:
+                    last_email_str = f'{int(minutes)}m ago'
+                elif hours < 24:
+                    last_email_str = f'{int(hours)}h ago'
+                elif days < 7:
+                    last_email_str = f'{int(days)}d ago'
+                else:
+                    last_email_str = last_email_time_myanmar.strftime('%b %d, %H:%M')
             else:
                 last_email_str = 'never'
                 
@@ -1445,7 +1715,9 @@ def admin_addresses():
                 'address': row['address'],
                 'count': row['count'],
                 'last_email': last_email_str,
-                'last_email_time': row['last_email_time'].isoformat() if row['last_email_time'] else None
+                'last_email_time': row['last_email_time'].isoformat() if row['last_email_time'] else None,
+                'has_active_access_code': row['has_active_access_code'],
+                'has_valid_access_code': row['has_valid_access_code']
             })
         
         conn.close()
@@ -1462,24 +1734,63 @@ def admin_get_emails(email_address):
         conn = get_db()
         c = conn.cursor(cursor_factory=RealDictCursor)
         
-        # ✅ FIX: Get ALL emails for this address (not just session-based)
         c.execute('''
-            SELECT id, sender, subject, body, received_at, timestamp 
-            FROM emails 
-            WHERE recipient = %s 
-            ORDER BY received_at DESC
+            SELECT 
+                e.id, e.sender, e.subject, e.body, e.received_at, e.timestamp,
+                s.is_access_code,
+                s.session_token,
+                ac.code as access_code,
+                ac.description as access_code_description
+            FROM emails e
+            LEFT JOIN sessions s ON e.session_token = s.session_token
+            LEFT JOIN access_codes ac ON s.session_token LIKE ac.code || '%'
+            WHERE e.recipient = %s 
+            ORDER BY e.received_at DESC
         ''', (email_address,))
         
         emails = []
+        myanmar_offset = timedelta(hours=6, minutes=30)
+        
         for row in c.fetchall():
-            emails.append({
+            # Convert received_at to Myanmar time for display
+            if row['received_at']:
+                received_at_myanmar = row['received_at'] + myanmar_offset
+                now_utc = datetime.utcnow()
+                now_myanmar = now_utc + myanmar_offset
+                
+                diff = now_myanmar - received_at_myanmar
+                
+                seconds = diff.total_seconds()
+                minutes = seconds // 60
+                hours = minutes // 60
+                days = hours // 24
+                
+                if seconds < 60:
+                    display_time = 'just now'
+                elif minutes < 60:
+                    display_time = f'{int(minutes)}m ago'
+                elif hours < 24:
+                    display_time = f'{int(hours)}h ago'
+                elif days < 7:
+                    display_time = f'{int(days)}d ago'
+                else:
+                    display_time = received_at_myanmar.strftime('%b %d, %H:%M')
+            else:
+                display_time = 'unknown'
+            
+            email_data = {
                 'id': row['id'],
                 'sender': row['sender'],
                 'subject': row['subject'],
                 'body': row['body'],
                 'received_at': row['received_at'].isoformat() if row['received_at'] else None,
-                'timestamp': row['timestamp']
-            })
+                'timestamp': row['timestamp'],
+                'display_time': display_time,  # Add this field for frontend
+                'is_access_code': row['is_access_code'] or False,
+                'access_code': row['access_code'],
+                'access_code_description': row['access_code_description']
+            }
+            emails.append(email_data)
         
         conn.close()
         return jsonify({'emails': emails})
@@ -1509,59 +1820,129 @@ def admin_delete_email(email_id):
 def generate_access_code():
     try:
         data = request.get_json() or {}
-        email_address = data.get('email_address', '').strip()
+        username = data.get('username', '').strip().lower()
+        domain = data.get('domain', DOMAIN).strip()
         custom_code = data.get('custom_code', '').strip().upper()
         duration_minutes = data.get('duration_minutes', 1440)
         max_uses = data.get('max_uses', 1)
         description = data.get('description', '').strip()
         
-        if not email_address:
-            return jsonify({'error': 'Email address is required'}), 400
+        if not username:
+            return jsonify({'error': 'Username is required'}), 400
         
-        # Validate email format
-        if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email_address):
-            return jsonify({'error': 'Invalid email address format'}), 400
+        # Clean username
+        username = ''.join(c for c in username if c.isalnum() or c in '-_')
+        if not username:
+            return jsonify({'error': 'Invalid username format'}), 400
         
-        # Validate custom code or generate random
-        if custom_code:
-            if not re.match(r'^[A-Z0-9]{4,12}$', custom_code):
-                return jsonify({'error': 'Custom code must be 4-12 uppercase letters and numbers only'}), 400
-            code = custom_code
-        else:
-            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+        email_address = f"{username}@{domain}"
         
         conn = get_db()
         c = conn.cursor()
         
-        # Check if code already exists
-        c.execute('SELECT code FROM access_codes WHERE code = %s', (code,))
-        if c.fetchone():
-            conn.close()
-            return jsonify({'error': f'Code "{code}" already exists. Please choose a different one.'}), 409
+        # Check for ACTIVE sessions only
+        c.execute('''
+            SELECT session_token, is_access_code, expires_at
+            FROM sessions 
+            WHERE email_address = %s AND is_active = TRUE AND expires_at > NOW()
+            ORDER BY created_at DESC 
+            LIMIT 1
+        ''', (email_address,))
+        
+        active_session = c.fetchone()
+        
+        if active_session:
+            session_token, is_access_code, expires_at = active_session
+            
+            if is_access_code:
+                # Check if the access code is still valid
+                c.execute('''
+                    SELECT ac.expires_at, ac.used_count, ac.max_uses, ac.is_active
+                    FROM access_codes ac
+                    WHERE ac.email_address = %s 
+                    AND ac.code IN (
+                        SELECT SUBSTRING(s.session_token FROM 1 FOR 8) 
+                        FROM sessions s 
+                        WHERE s.session_token = %s AND s.is_access_code = TRUE
+                    )
+                ''', (email_address, session_token))
+                
+                access_code_data = c.fetchone()
+                
+                if access_code_data:
+                    code_expires_at, used_count, max_uses_old, is_active_code = access_code_data
+                    current_time = datetime.now()
+                    
+                    # Only block if access code is ACTIVE and VALID
+                    if is_active_code and current_time <= code_expires_at and used_count < max_uses_old:
+                        conn.close()
+                        return jsonify({
+                            'error': f'Username {username} has an active access code session (expires in {format_future_time(code_expires_at)})'
+                        }), 409
+                    else:
+                        # Access code is expired/used/revoked - end the session
+                        c.execute('''
+                            UPDATE sessions 
+                            SET is_active = FALSE 
+                            WHERE session_token = %s
+                        ''', (session_token,))
+                        logger.info(f"✅ Ended expired access code session for {email_address}")
+                else:
+                    # No access code found but session exists - block
+                    conn.close()
+                    return jsonify({'error': f'Username {username} has an active session'}), 409
+            else:
+                # Regular session (not access code) - block
+                conn.close()
+                return jsonify({'error': f'Username {username} has an active regular session'}), 409
+        
+        # Handle custom code or generate random
+        if custom_code:
+            if not re.match(r'^[A-Z0-9]{4,12}$', custom_code):
+                conn.close()
+                return jsonify({'error': 'Custom code must be 4-12 uppercase letters and numbers only'}), 400
+            code = custom_code
+        else:
+            # Generate random code
+            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
         
         created_at = datetime.now()
         expires_at = created_at + timedelta(minutes=duration_minutes)
         
-        # ✅ Store description in database
-        c.execute('''
-            INSERT INTO access_codes (code, email_address, description, created_at, expires_at, max_uses)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        ''', (code, email_address, description, created_at, expires_at, max_uses))
-        
-        conn.commit()
-        conn.close()
-        
-        logger.info(f"✅ Access code generated: {code} for {email_address} - {description}")
-        
-        return jsonify({
-            'success': True,
-            'code': code,
-            'email_address': email_address,
-            'description': description,
-            'expires_at': expires_at.isoformat(),
-            'max_uses': max_uses,
-            'duration_minutes': duration_minutes
-        })
+        try:
+            # ✅ FIX: Try to insert, handle duplicate constraint
+            c.execute('''
+                INSERT INTO access_codes (code, email_address, description, created_at, expires_at, max_uses)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            ''', (code, email_address, description, created_at, expires_at, max_uses))
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"✅ Access code generated: {code} for {email_address} - {description}")
+            
+            return jsonify({
+                'success': True,
+                'code': code,
+                'email_address': email_address,
+                'description': description,
+                'expires_at': expires_at.isoformat(),
+                'max_uses': max_uses,
+                'duration_minutes': duration_minutes
+            })
+            
+        except psycopg2.IntegrityError as e:
+            # ✅ FIX: Handle duplicate code constraint
+            conn.rollback()
+            conn.close()
+            
+            if 'access_codes_code_key' in str(e):
+                logger.warning(f"⚠️ Custom code already exists: {code}")
+                return jsonify({
+                    'error': f'Custom code "{code}" is already in use. Please choose a different code.'
+                }), 409
+            else:
+                raise e
         
     except Exception as e:
         logger.error(f"❌ Error generating access code: {e}")
@@ -1577,6 +1958,13 @@ def redeem_access_code():
         
         if not code:
             return jsonify({'error': 'Access code is required'}), 400
+        
+        if device_id and is_device_banned(device_id):
+            logger.warning(f"🚫 Banned device attempted access: {device_id}")
+            return jsonify({
+                'error': 'ACCESS_DENIED_DEVICE_BANNED',
+                'message': 'Your device has been banned from using this service.'
+            }), 403
         
         conn = get_db()
         c = conn.cursor(cursor_factory=RealDictCursor)
@@ -1641,6 +2029,12 @@ def redeem_access_code():
             INSERT INTO sessions (session_token, email_address, created_at, expires_at, last_activity, is_active, is_access_code)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
         ''', (session_token, email_address, current_time, expires_at, current_time, True, True))
+
+        if device_id:
+            user_agent = request.headers.get('User-Agent', '')
+            ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+            track_device_session(device_id, email_address, session_token, user_agent, ip_address)
+            logger.info(f"📱 Access code device session tracked: {device_id} -> {email_address}")
         
         # Update access code usage count
         c.execute('''
@@ -1661,7 +2055,8 @@ def redeem_access_code():
             'access_start_time': current_time.isoformat(),
             'expires_at': expires_at.isoformat(),
             'description': access_code['description'],
-            'code': code
+            'code': code,
+            'device_tracked': bool(device_id)
         })
         
     except Exception as e:
