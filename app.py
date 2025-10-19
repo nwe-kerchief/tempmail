@@ -1769,7 +1769,7 @@ def admin_get_emails(email_address):
                 continue
             
             # Convert received_at to Myanmar time for display
-            if row['received_at']:
+            if row.get('received_at'):
                 received_at_myanmar = row['received_at'] + myanmar_offset
                 now_utc = datetime.utcnow()
                 now_myanmar = now_utc + myanmar_offset
@@ -1795,13 +1795,13 @@ def admin_get_emails(email_address):
                 display_time = 'unknown'
             
             email_data = {
-                'id': row['id'],
-                'sender': row['sender'],
-                'subject': row['subject'],
-                'body': row['body'],
-                'received_at': row['received_at'].isoformat() if row['received_at'] else None,
-                'timestamp': row['timestamp'],
-                'display_time': format_time(row['received_at']) if row['received_at'] else 'unknown',
+                'id': row.get('id'),
+                'sender': row.get('sender', ''),
+                'subject': row.get('subject', ''),
+                'body': row.get('body', ''),
+                'received_at': row['received_at'].isoformat() if row.get('received_at') else None,
+                'timestamp': row.get('timestamp'),
+                'display_time': display_time,
                 'is_access_code': row.get('is_access_code', False),
                 'access_code': row.get('access_code'),
                 'access_code_description': row.get('access_code_description')
@@ -1813,7 +1813,10 @@ def admin_get_emails(email_address):
         
     except Exception as e:
         logger.error(f"❌ Admin get emails error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())  # ✅ Added for better debugging
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/admin/delete/<int:email_id>', methods=['DELETE'])
 @admin_required
