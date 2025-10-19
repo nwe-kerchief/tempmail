@@ -157,9 +157,12 @@ def init_db():
                 logger.warning(f"Could not create index: {e}")
         
         conn.close()
-        logger.info("âœ… Database initialized successfully")
+
+        migrate_existing_emails()
+
+        logger.info("✅ Database initialized successfully")
     except Exception as e:
-        logger.error(f"âŒ Database initialization failed: {e}")
+        logger.error(f"❌ Database initialization failed: {e}")
 
 # Admin required decorator
 def admin_required(f):
@@ -1198,7 +1201,7 @@ def webhook_inbound():
         
         session_token = None
         
-        # Check if is_active column exists
+        # ✅ FIX: Always try to find an active session, but store email regardless
         try:
             c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='sessions' AND column_name='is_active'")
             has_is_active = c.fetchone() is not None
@@ -1235,9 +1238,9 @@ def webhook_inbound():
             session_token = session_data[0]
             logger.info(f"  ✅ Found active session for {recipient}")
         else:
-            logger.info(f"  ℹ️ No active session found for {recipient}, storing email without session")
+            logger.info(f"  ℹ️ No active session found for {recipient}, storing email anyway")
         
-        # ✅ FIXED: Store email with session_token (can be NULL)
+        # ✅ FIXED: Store email ALWAYS, with or without session_token
         c.execute('''
             INSERT INTO emails (recipient, sender, subject, body, timestamp, received_at, session_token)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -1420,7 +1423,7 @@ def admin_addresses():
         conn = get_db()
         c = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Get addresses sorted by newest email received
+        # ✅ FIX: Get ALL addresses with ALL emails (not just session-based)
         c.execute('''
             SELECT 
                 recipient as address, 
@@ -1459,6 +1462,7 @@ def admin_get_emails(email_address):
         conn = get_db()
         c = conn.cursor(cursor_factory=RealDictCursor)
         
+        # ✅ FIX: Get ALL emails for this address (not just session-based)
         c.execute('''
             SELECT id, sender, subject, body, received_at, timestamp 
             FROM emails 
@@ -1481,7 +1485,7 @@ def admin_get_emails(email_address):
         return jsonify({'emails': emails})
         
     except Exception as e:
-        logger.error(f"âŒ Admin get emails error: {e}")
+        logger.error(f"❌ Admin get emails error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/delete/<int:email_id>', methods=['DELETE'])
@@ -1966,6 +1970,39 @@ def admin_clear_sessions():
     except Exception as e:
         logger.error(f"âŒ Error clearing admin sessions: {e}")
         return jsonify({'error': str(e)}), 500
+
+def migrate_existing_emails():
+    """Migrate existing emails to ensure all emails for same address are grouped"""
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Find emails with NULL session_token and try to associate them with sessions
+        c.execute('''
+            UPDATE emails e
+            SET session_token = (
+                SELECT s.session_token 
+                FROM sessions s 
+                WHERE s.email_address = e.recipient 
+                AND s.created_at <= e.received_at 
+                AND s.expires_at >= e.received_at
+                ORDER BY s.created_at DESC 
+                LIMIT 1
+            )
+            WHERE e.session_token IS NULL
+        ''')
+        
+        updated_count = c.rowcount
+        conn.commit()
+        conn.close()
+        
+        if updated_count > 0:
+            logger.info(f"✅ Migrated {updated_count} emails to proper session association")
+        
+    except Exception as e:
+        logger.warning(f"Migration note: {e}")
+
+
 
 # Fix admin session configuration
 @app.before_request
