@@ -1755,7 +1755,7 @@ def admin_get_emails(email_address):
                 ac.description AS access_code_description
             FROM emails e
             LEFT JOIN sessions s ON e.session_token = s.session_token
-            LEFT JOIN access_codes ac ON s.session_token LIKE CONCAT(ac.code, '%')
+            LEFT JOIN access_codes ac ON s.session_token LIKE CONCAT(ac.code, '%%')
             WHERE e.recipient = %s
             ORDER BY e.received_at DESC
         ''', (email_address,))
