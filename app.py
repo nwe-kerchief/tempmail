@@ -1743,20 +1743,20 @@ def admin_get_emails(email_address):
         
         c.execute('''
             SELECT 
-                e.id, 
-                e.sender, 
-                e.subject, 
-                e.body, 
-                e.received_at, 
+                e.id,
+                e.sender,
+                e.subject,
+                e.body,
+                e.received_at,
                 e.timestamp,
-                COALESCE(s.is_access_code, FALSE) as is_access_code,
+                COALESCE(s.is_access_code, FALSE) AS is_access_code,
                 s.session_token,
-                ac.code as access_code,
-                ac.description as access_code_description
+                ac.code AS access_code,
+                ac.description AS access_code_description
             FROM emails e
             LEFT JOIN sessions s ON e.session_token = s.session_token
-            LEFT JOIN access_codes ac ON s.session_token LIKE ac.code || '%'
-            WHERE e.recipient = %s 
+            LEFT JOIN access_codes ac ON s.session_token LIKE CONCAT(ac.code, '%')
+            WHERE e.recipient = %s
             ORDER BY e.received_at DESC
         ''', (email_address,))
         
@@ -1764,6 +1764,10 @@ def admin_get_emails(email_address):
         myanmar_offset = timedelta(hours=6, minutes=30)
         
         for row in c.fetchall():
+            if not isinstance(row, dict):
+                logger.error(f"Unexpected row format: {row}")
+                continue
+            
             # Convert received_at to Myanmar time for display
             if row['received_at']:
                 received_at_myanmar = row['received_at'] + myanmar_offset
