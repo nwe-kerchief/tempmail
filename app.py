@@ -1743,7 +1743,12 @@ def admin_get_emails(email_address):
         
         c.execute('''
             SELECT 
-                e.id, e.sender, e.subject, e.body, e.received_at, e.timestamp,
+                e.id, 
+                e.sender, 
+                e.subject, 
+                e.body, 
+                e.received_at, 
+                e.timestamp,
                 COALESCE(s.is_access_code, FALSE) as is_access_code,
                 s.session_token,
                 ac.code as access_code,
@@ -1792,10 +1797,10 @@ def admin_get_emails(email_address):
                 'body': row['body'],
                 'received_at': row['received_at'].isoformat() if row['received_at'] else None,
                 'timestamp': row['timestamp'],
-                'display_time': display_time,  # Add this field for frontend
-                'is_access_code': row['is_access_code'] or False,
-                'access_code': row['access_code'],
-                'access_code_description': row['access_code_description']
+                'display_time': format_time(row['received_at']) if row['received_at'] else 'unknown',
+                'is_access_code': row.get('is_access_code', False),
+                'access_code': row.get('access_code'),
+                'access_code_description': row.get('access_code_description')
             }
             emails.append(email_data)
         
@@ -2433,6 +2438,8 @@ def health():
         'domain': DOMAIN,
         'timestamp': datetime.utcnow().isoformat()
     })
+
+
 
 with app.app_context():
     try:
