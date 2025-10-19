@@ -3307,21 +3307,6 @@ function initApp() {
     function displayDeviceIdForDebug() {
     const deviceId = getOrCreateDeviceId();
     console.log('🔍 Current Device ID:', deviceId);
-    
-    // Optional: Show in UI for debugging
-    const debugElement = document.createElement('div');
-    debugElement.style.position = 'fixed';
-    debugElement.style.bottom = '10px';
-    debugElement.style.right = '10px';
-    debugElement.style.background = 'rgba(0,0,0,0.8)';
-    debugElement.style.color = 'white';
-    debugElement.style.padding = '5px';
-    debugElement.style.fontSize = '10px';
-    debugElement.style.zIndex = '9999';
-    debugElement.style.borderRadius = '5px';
-    debugElement.textContent = `Device: ${deviceId.substring(0, 10)}...`;
-    debugElement.title = deviceId;
-    document.body.appendChild(debugElement);
 }
     
     console.log('🚀 Initializing app...');
