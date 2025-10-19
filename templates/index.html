@@ -2401,6 +2401,8 @@ function showAccessModal() {
         return;
     }
     
+    window.accessModalOpening = false;
+
     // Reset modal state
     const resultDiv = document.getElementById('access-modal-result');
     const codeInput = document.getElementById('access-code-input-modal');
@@ -2747,6 +2749,8 @@ function closeAccessModal() {
     const modal = document.getElementById('access-modal');
     const resultDiv = document.getElementById('access-modal-result');
     
+    window.accessModalOpening = false;
+
     if (modal) {
         modal.classList.add('hidden');
     }
