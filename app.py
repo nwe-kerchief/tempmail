@@ -87,7 +87,7 @@ def track_device_session(device_id, email_address, session_token, user_agent=Non
 
 # Enhanced database connection with retry logic
 def get_db():
-    max_retries = 3
+    max_retries = 1
     retry_delay = 1
     
     for attempt in range(max_retries):
@@ -819,12 +819,16 @@ def get_domains():
 # Enhanced email creation with better conflict handling
 @app.route('/api/create', methods=['POST'])
 def create_email():
+    conn = None
     try:
         data = request.get_json() or {}
         custom_name = data.get('name', '').strip()
         admin_mode = data.get('admin_mode', False)
         current_session_token = data.get('current_session_token')
         device_id = data.get('device_id', '')
+    
+        conn = get_db()
+        c = conn.cursor()
         
         # ✅ Check if device is banned
         if device_id and is_device_banned(device_id):
@@ -880,9 +884,7 @@ def create_email():
             username = f"{male_name}{female_name}{three_digits}"
         
         email_address = f"{username}@{DOMAIN}"
-        
-        conn = get_db()
-        c = conn.cursor()
+
         
         # Check if email is currently in use by an ACTIVE session
         c.execute('''
@@ -2497,6 +2499,27 @@ with app.app_context():
         logger.info("✅ Database initialized successfully on startup")
     except Exception as e:
         logger.error(f"❌ Database initialization failed on startup: {e}")
+
+# Create indexes on first run
+def create_indexes_if_needed():
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Add indexes (IF NOT EXISTS = safe to run multiple times)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_sessions_lookup ON sessions(email_address, expires_at, is_active)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_emails_recipient ON emails(recipient, received_at DESC)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_access_codes_code ON access_codes(code)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_blacklist_username ON blacklist(username)")
+        
+        conn.commit()
+        conn.close()
+        logger.info("✅ Database indexes ready")
+    except Exception as e:
+        logger.error(f"⚠️ Index creation: {e}")
+
+# Run on startup
+create_indexes_if_needed()
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
