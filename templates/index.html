@@ -1,5 +1,6 @@
 
 
+
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -3456,9 +3457,7 @@ function setupEventListeners() {
                 const randomUsername = generateRandomUsername();
                 document.getElementById('username-input').value = randomUsername;
                 
-                setTimeout(() => {
-                    createEmail(randomUsername);
-                }, 500);
+                createEmail(randomUsername);
                 
             }).catch(err => {
                 console.error('❌ Error ending session:', err);
@@ -3466,9 +3465,8 @@ function setupEventListeners() {
                 const randomUsername = generateRandomUsername();
                 document.getElementById('username-input').value = randomUsername;
                 
-                setTimeout(() => {
-                    createEmail(randomUsername);
-                }, 500);
+                createEmail(randomUsername);
+
             });
             
         } else {
